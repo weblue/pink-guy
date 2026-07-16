@@ -1,0 +1,105 @@
+{
+  "schema_version": "1.0.0",
+  "test_id": "P0-BASELINE",
+  "candidate": "neutral",
+  "evidence_kind": "runtime",
+  "status": "pass",
+  "source_versions": {
+    "node": "25.9.0",
+    "fixture": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "container_runtime": "Docker Desktop 27.3.1"
+  },
+  "sanitized_command": "node phase0/scripts/probe-baseline.mjs",
+  "exit_code": 0,
+  "started_at": "2026-07-16T22:56:50Z",
+  "ended_at": "2026-07-16T22:56:51Z",
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+  "assertions": [
+    {
+      "name": "fixture sources match the checked-in checksum manifest",
+      "passed": true,
+      "observed": {
+        "source_files": 9,
+        "checksum_mismatches": 0
+      }
+    },
+    {
+      "name": "two clean fixture generations produce the pinned commit",
+      "passed": true,
+      "observed": {
+        "regenerations": 2,
+        "commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4"
+      }
+    },
+    {
+      "name": "shared command runner records timing, exit state, environment names, and checksummed output without environment values",
+      "passed": true,
+      "observed": {
+        "exit_code": 0,
+        "environment_values_recorded": false,
+        "stdout_sha256": "ff2364c94eb5899f1dabdc3895cc5d56d36f1ce7a3a998132c7eb23156779fe1"
+      }
+    },
+    {
+      "name": "source and tool versions are explicitly pinned",
+      "passed": true,
+      "observed": {
+        "sources": 5,
+        "tools": 7,
+        "host_architecture": "arm64"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "phase0/baseline/source-manifest.json",
+      "sha256": "61ad593c4873fce694b34edd7b240a4c63d89b1ff7d4098379e62fb8a346bae3",
+      "media_type": "application/json",
+      "tracked": true
+    },
+    {
+      "path": "phase0/baseline/artifact-policy.md",
+      "sha256": "8a2e0486608f995206def6f112891d1c41424e06de44e54130a02de6bd94b410",
+      "media_type": "text/markdown",
+      "tracked": true
+    },
+    {
+      "path": "phase0/fixtures/fixture-checksums.sha256",
+      "sha256": "1157bfc58e52db3d0205871e9a0080771d5347b718e25c416e6c9a11c1b71423",
+      "media_type": "text/plain",
+      "tracked": true
+    },
+    {
+      "path": "phase0/scripts/run-evidence-command.mjs",
+      "sha256": "b13c5b1915a11b2daaf5a3be5aeca4c416d91c43ce201b889d8f8ac1db3e555e",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/scripts/probe-baseline.mjs",
+      "sha256": "d8008a0f27acc09d1da04b04c49f16a6b5c87181794e6f8b25d1c8f81d8b4687",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "untracked:phase0/baseline/command.stdout",
+      "sha256": "ff2364c94eb5899f1dabdc3895cc5d56d36f1ce7a3a998132c7eb23156779fe1",
+      "media_type": "text/plain",
+      "tracked": false
+    }
+  ],
+  "redactions": [],
+  "mappings": {
+    "product_requirements": ["PRODUCT 7.6", "PRODUCT 10.2", "PRODUCT 13.1", "PRODUCT 14.10"],
+    "technical_risks": ["TECH risk 1", "TECH risk 5", "TECH risk 9"],
+    "hard_gates": []
+  },
+  "limitations": [
+    "The captured host report describes the current development Mac; another ARM64 host must install the pinned tools before executing every probe.",
+    "The generic runner preserves raw stdout and stderr outside Git. Probe-specific redaction and admission checks remain mandatory before durable evidence is published."
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0.0",
+  "image": "boss-man-phase0:pi-0.80.9-rtk-0.42.3",
+  "base_image": "node:24-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176fde6fe7d08ab13b7f50573",
+  "platform": "linux/arm64",
+  "user": "65532:65532",
+  "read_only_root": true,
+  "network": "none",
+  "cap_drop": ["ALL"],
+  "security_options": ["no-new-privileges:true"],
+  "memory": "512m",
+  "cpus": "1.0",
+  "pids_limit": 128,
+  "tmpfs": ["/tmp:rw,nosuid,nodev,noexec,size=32m"],
+  "allowed_mounts": [
+    { "container_path": "/workspace", "mode": "rw", "purpose": "assigned worktree files" },
+    { "container_path": "/artifacts", "mode": "rw", "purpose": "run artifacts" },
+    { "container_path": "/run/secrets/pi-auth.json", "mode": "ro", "purpose": "synthetic per-run credential" }
+  ],
+  "forbidden_mounts": ["docker_socket", "host_home", "ssh_material", "global_pi_home", "shared_git_common_directory"]
+}

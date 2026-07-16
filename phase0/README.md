@@ -65,3 +65,73 @@ The child-context probe uses upstream Pi's `SessionManager` without a model. It 
 ```sh
 node ./phase0/scripts/probe-pi-child-context.mjs /absolute/path/to/disposable/task-repo
 ```
+
+## Run the reproducibility baseline
+
+The baseline verifies tracked fixture checksums, generates the fixture twice, and checks that the evidence command runner records environment-variable names without persisting values:
+
+```sh
+node ./phase0/scripts/probe-baseline.mjs
+```
+
+P0-00 is complete on this development Mac only. Its cross-host exit criterion remains open until a second clean ARM64 environment reproduces the same fixture commit and checksums.
+
+## Run the direct foundation slice
+
+The direct candidate runs one daemon-owned SQLite store, task API and minimal board, direct Pi RPC session, persistent workspace shell, structured event stream, custody ingestion, and restart reconciliation. It uses a deterministic local provider and makes no network request:
+
+```sh
+node ./phase0/scripts/probe-direct-foundation.mjs /absolute/path/to/disposable/task-repo
+```
+
+## Run the task policy contract
+
+```sh
+node ./phase0/scripts/probe-task-policy.mjs
+```
+
+This proves assignment scope, independent fixed-revision review, change requests, owner-only protected decisions, and completion/merge-request gating. The contract is not yet transactionally wired into the direct candidate store.
+
+## Build and probe the task runtime
+
+The task image is pinned to ARM64 Node, Pi 0.80.9, and checksum-verified RTK 0.42.3:
+
+```sh
+docker build --platform linux/arm64 \
+  --tag boss-man-phase0:pi-0.80.9-rtk-0.42.3 \
+  ./phase0/runtime
+node ./phase0/scripts/probe-runtime-git-rtk.mjs \
+  /absolute/path/to/disposable/task-repo
+```
+
+The probe verifies the container policy, denies access to shared Git metadata, creates a host-owned checkpoint with provenance, isolates two concurrent synthetic credentials, and preserves redacted RTK raw evidence with a receipt.
+
+## Run the remote-edge contract
+
+```sh
+node ./phase0/scripts/probe-remote-edge.mjs
+```
+
+This uses a disposable local HTTP/WebSocket origin and proxy. It does not change SWAG, DNS, router state, or the production Mac. The proposed inert SWAG snippet and operator test live under `edge/`.
+
+## Run the governed FTS benchmark
+
+```sh
+node ./phase0/scripts/probe-memory-fts.mjs \
+  /absolute/path/to/disposable/task-repo
+```
+
+The benchmark uses canonical SQLite records and an FTS5 projection with network/model/vector access absent. It validates scope filters, provenance receipts, supersession, deletion/rebuild, exact constraints, stale records, injection text, secret canaries, and cross-project decoys.
+
+## Inspect the pinned AoE candidate
+
+```sh
+node ./phase0/scripts/probe-aoe-foundation.mjs \
+  /absolute/path/to/agent-of-empires-at-90855a59360f46652786a49f54a56df002d8ef98
+```
+
+This is a reproducible source-level stop-rule probe, not an AoE runtime pass. It records the competing durable lifecycle writers, writable shared Git mounts, and missing supported plugin authority that make the required product layer a core fork.
+
+## Why there is no Phase 0 Compose file
+
+No stable multi-service deployment boundary has emerged. The direct candidate is one process with embedded SQLite and managed subprocesses; task containers are daemon-created per run; the edge probe is disposable. A Compose file would imply services and lifecycle ownership that Phase 0 has not selected. Add one when a fixed control-plane, broker, or proxy service boundary is proven.

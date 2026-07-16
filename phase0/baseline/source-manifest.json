@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "captured_at": "2026-07-16T22:56:50Z",
+  "sources": {
+    "weblue/boss-man": "59f8282654f9b4cea90f2ba830aa6d56106e25b4",
+    "weblue/inspector-gadget": "3df39382ceb147aa411f9c578ef4131fc91912f2",
+    "agent-of-empires/agent-of-empires": "90855a59360f46652786a49f54a56df002d8ef98",
+    "svkozak/pi-acp": "49d6ec804d40b52317d873360654054c5d2387a3",
+    "earendil-works/pi": "2d16f92973230a7e095aa984f150ba8702784f50"
+  },
+  "tools": {
+    "pi": "0.80.9",
+    "pi_acp": "0.0.31",
+    "node": "25.9.0",
+    "rtk": "0.42.3",
+    "docker_client": "27.3.1",
+    "docker_server": "27.3.1",
+    "sqlite_cli": "3.43.2"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "docker_architecture": "arm64",
+    "docker_memory_bytes": 8217968640
+  },
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4"
+}

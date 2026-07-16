@@ -89,6 +89,12 @@ Every result records exact versions, lockfiles, image digests, host architecture
 7. A networkless in-process provider exercised real v0.80.9 RPC prompt, streaming notification, state, model selection, abort, new-session, and exact restart behavior. Aborted output persisted with `stopReason: aborted`, no tool execution occurred, parent provenance survived `new_session`, and restart did not replay the completed response.
 8. Pinned upstream `pi-acp` v0.0.31 passed all 88 upstream tests, typecheck, and build. A real ACP v1 probe then streamed six deterministic turns, changed models, cancelled safely, reached the blocking custody hook through `/compact`, persisted native Pi state, and replayed retained history after a fresh adapter process loaded the session. It did not forward the extension's startup notification because subscription occurs after the Pi spawn handshake; active-turn notifications were forwarded. Npm reported three moderate and four high dependency audit findings in the pinned lockfile, which remain maintenance evidence rather than being auto-fixed during the comparison.
 9. Model-less child-context probes passed all three provenance modes: fresh contains only explicit instructions and artifact receipts, bundle contains a checksum-bound deterministic context receipt without eager source-transcript injection, and full fork preserves every selected native entry plus parent-session provenance.
+10. The direct candidate now has an executable daemon-owned SQLite task/session/run store, minimal board/API, direct Pi RPC process, persistent workspace shell, structured event stream, custody-manifest ingestion, and restart reconciliation. A deliberate unclean stop is reported as `orphaned`; it is not silently presented as healthy. Container, Git, policy, memory, and production authentication remain integration work rather than claimed candidate-level passes.
+11. A pinned ARM64 task image now builds from a digest-pinned Node base with Pi 0.80.9 and checksum-verified RTK 0.42.3. The runtime probe demonstrated a non-root, read-only, networkless task container; denied access to shared Git metadata; a host-owned provenance checkpoint; two isolated synthetic credentials; and redacted RTK raw output with a receipt. RTK 0.42.3 requires `max_files` and `max_file_size` in its tee configuration even though the upstream abbreviated example omits them.
+12. The disposable remote-edge contract passed Host, Origin, forwarding-header, outer and inner authentication, cookie, CSRF, WebSocket reconnect, streaming, bounded artifact, and revocation cases without touching real SWAG or router state.
+13. The governed SQLite FTS5 baseline achieved recall@5 of 1.0, strict five-slot precision@5 of 0.314, returned-result precision of 0.478, complete provenance, and zero stale, scope, secret, injection, or cross-project violations. Index deletion/rebuild and canonical export/import were deterministic without a model, vector index, or network.
+14. The exact AoE Phase 0 pin retains durable session mutation paths in both CLI and daemon code and mounts main repository Git metadata read-write into task containers. Its supported plugin surface has session metadata read/write but no task, Git, worktree, or session-lifecycle authority. Meeting Boss Man's invariants therefore crosses storage, server, sandbox, and top-level navigation seams and triggers the bounded-fork stop rule.
+15. No Phase 0 Compose file is justified. The direct slice uses embedded SQLite and supervised subprocesses, task containers are per-run daemon resources, and the edge is disposable. Compose becomes appropriate only after a fixed separately operated service boundary is selected.
 
 ## Current development-host baseline
 
@@ -361,14 +367,14 @@ P0-04 through P0-06 may overlap only after the fixture and evidence schemas are 
 
 | Work package | Status | Current note |
 |---|---|---|
-| P0-00 Baseline | In progress | Deterministic failing fixture `cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4` and evidence-result schema validated |
+| P0-00 Baseline | Host pass | Fixture, checksums, artifact policy, and sanitized command runner pass on this Mac; second clean ARM64 reproduction remains the exit blocker |
 | P0-01 Pi custody | Completed | Direct v0.80.9 custody/lifecycle/resume/import/child-mode probes and pinned `pi-acp` translation/custody probe pass without an external provider; the missed ACP startup notification and dependency audit findings are recorded limitations |
-| P0-02 Direct Pi | Next | Implement the minimal daemon-owned direct-Pi candidate against the common fixture; capture its downstream services in `compose.phase0.yml` only as service boundaries become proven |
-| P0-03 AoE | Not started | Depends on P0-01 and common fixture |
-| P0-04 Runtime/Git/RTK | In progress | Docker ARM64/isolation smoke passes; task-image, mount, Git metadata, credential, and RTK cases remain |
-| P0-05 Remote edge | Not started | Disposable local proxy only |
-| P0-06 Memory/retrieval | Not started | FTS5 baseline precedes optional vector experiment |
-| P0-07 ADR | Not started | Human-owned final decision |
+| P0-02 Direct Pi | Component pass | Minimal daemon/store/board/Pi RPC/shell/events/custody/restart slice passes; production auth, active-side-effect recovery, and contract integration remain |
+| P0-03 AoE | Stopped | Exact pinned-source probe fails the bounded-product-layer test at lifecycle authority and Git custody seams; a meaningful fork would be broad |
+| P0-04 Runtime/Git/RTK | Shared contract pass | Pinned ARM64 image, restricted mounts, host checkpoint, concurrent synthetic credentials, and RTK raw/redacted evidence pass; selected-daemon integration remains |
+| P0-05 Remote edge | Contract pass | Disposable HTTP/WebSocket origin and proxy pass; no real infrastructure changed |
+| P0-06 Memory/retrieval | Baseline pass | Model-less SQLite FTS5 benchmark, governance, receipts, scope, deletion/rebuild, and canonical export/import pass |
+| P0-07 ADR | Owner checkpoint | Results and proposed direct-Pi ADR are ready; numeric scoring is prohibited because direct integration gates remain partial |
 
 ## Phase 0 exit
 

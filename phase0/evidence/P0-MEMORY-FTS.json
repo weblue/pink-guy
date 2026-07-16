@@ -1,0 +1,193 @@
+{
+  "schema_version": "1.0.0",
+  "test_id": "P0-MEMORY-FTS",
+  "candidate": "neutral",
+  "evidence_kind": "measurement",
+  "status": "pass",
+  "source_versions": {
+    "node": "25.9.0",
+    "sqlite": "3.51.3 with FTS5 through node:sqlite",
+    "retrieval_index": "boss-man-memory-fts-v1",
+    "fixture": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "container_runtime": null
+  },
+  "sanitized_command": "node phase0/scripts/probe-memory-fts.mjs <generated-fixture>",
+  "exit_code": 0,
+  "started_at": "2026-07-16T22:56:47.901Z",
+  "ended_at": "2026-07-16T22:56:47.999Z",
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+  "assertions": [
+    {
+      "name": "authoritative task answers remain canonical SQL state rather than retrieval output",
+      "passed": true,
+      "observed": {
+        "state": "in_progress",
+        "dependency_satisfied": true,
+        "assignment": "worker-phase0",
+        "reviewer": "reviewer-phase0",
+        "decision_gate": "decision_required",
+        "merge_eligible": false,
+        "unchanged_after_retrieval_and_import": true
+      }
+    },
+    {
+      "name": "typed memory lifecycle and tombstone policy are enforced through append-only events",
+      "passed": true,
+      "observed": {
+        "candidate_created": true,
+        "promoted": true,
+        "contested": true,
+        "superseded": true,
+        "tombstoned": true,
+        "deleted_content_recreation_blocked": true,
+        "underlying_evidence_deleted": false
+      }
+    },
+    {
+      "name": "scope capabilities, trust policy, prompt-injection rejection, and secret scanning precede context selection",
+      "passed": true,
+      "observed": {
+        "unauthorized_global_write_blocked": true,
+        "repository_prompt_injection_promotion_blocked": true,
+        "secret_candidate_rejected_before_persistence": true,
+        "filter_stage": "eligible_source_cte_before_ranked_selection"
+      }
+    },
+    {
+      "name": "FTS5 and BM25 retrieve exact terms, renamed concepts, prior failures, superseded decisions, recovery guidance, and unrelated lexical overlap",
+      "passed": true,
+      "observed": {
+        "query_count": 7,
+        "recall_at_5": 1,
+        "precision_at_5": 0.3142857142857143,
+        "returned_result_precision": 0.4782608695652174,
+        "mandatory_exact_constraint_recall": 1,
+        "relevant_hits": 11,
+        "expected_relevant": 11
+      }
+    },
+    {
+      "name": "every injected record has a deterministic checksum-bound provenance receipt",
+      "passed": true,
+      "observed": {
+        "context_receipts": 7,
+        "provenance_completeness": 1,
+        "receipt_sha256": "63ab03973d3258564b4981c57851f5cbe190632d356edd1e81b476719080cdf5"
+      }
+    },
+    {
+      "name": "derived index deletion/rebuild and canonical export/import reproduce lexical results",
+      "passed": true,
+      "observed": {
+        "initial_index_rows": 16,
+        "rebuilt_index_rows": 16,
+        "result_ids_revisions_scores_equal": true,
+        "canonical_export_import_equal": true,
+        "canonical_export_sha256": "a38cb89b41d028ca9a3d094f857b9de6fbb992a23f5a08cecb618384dada3cfd"
+      }
+    },
+    {
+      "name": "retrieval excludes stale, superseded, contested, deleted, prompt-injection, secret-canary, and cross-project decoy content",
+      "passed": true,
+      "observed": {
+        "stale_result_rate": 0,
+        "scope_violation_rate": 0,
+        "secret_canary_violations": 0,
+        "cross_project_decoy_violations": 0,
+        "prompt_injection_violations": 0
+      }
+    },
+    {
+      "name": "the FTS baseline is fully model-less and precedes every vector experiment",
+      "passed": true,
+      "observed": {
+        "external_network_requests": 0,
+        "model_requests": 0,
+        "embedding_requests": 0,
+        "vector_indexes_created": 0
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "phase0/scripts/probe-memory-fts.mjs",
+      "sha256": "e089f5b28636972ec80365391bc3d52cf113beadbd236548be4a8b6d30c7cfd5",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/memory/schema.sql",
+      "sha256": "40ddc9fdfd5fd53fd7f90f27ad4ba01c38b81f2e17d599ea232c1b88c279ea8f",
+      "media_type": "application/sql",
+      "tracked": true
+    },
+    {
+      "path": "phase0/memory/benchmark-fixture.json",
+      "sha256": "c1d3cf34daedd4fffb559250895ed0ce9cc8dc319c5b4077567520463dcfe6d0",
+      "media_type": "application/json",
+      "tracked": true
+    },
+    {
+      "path": "phase0/memory/pi-persistent-intelligence-assessment.md",
+      "sha256": "44c2065c8fdc9f24cabeb803252f27708229f230dc590a45b5b93e4a2d729ad1",
+      "media_type": "text/markdown",
+      "tracked": true
+    },
+    {
+      "path": "untracked:phase0/memory/canonical-export.json",
+      "sha256": "a38cb89b41d028ca9a3d094f857b9de6fbb992a23f5a08cecb618384dada3cfd",
+      "media_type": "application/json",
+      "tracked": false
+    },
+    {
+      "path": "untracked:phase0/memory/context-receipts.json",
+      "sha256": "63ab03973d3258564b4981c57851f5cbe190632d356edd1e81b476719080cdf5",
+      "media_type": "application/json",
+      "tracked": false
+    },
+    {
+      "path": "untracked:phase0/memory/memory.sqlite3",
+      "sha256": "6727c1e96443dcc301172d10113fdc2bd300446c8122c17035df4abcd95536e9",
+      "media_type": "application/vnd.sqlite3",
+      "tracked": false
+    }
+  ],
+  "redactions": [
+    {
+      "class": "synthetic_secret_canary",
+      "count": 2
+    }
+  ],
+  "mappings": {
+    "product_requirements": [
+      "PRODUCT 5.8",
+      "PRODUCT 5.9",
+      "PRODUCT 5.10",
+      "PRODUCT 5.11",
+      "PRODUCT 5.12",
+      "PRODUCT 5.13",
+      "PRODUCT 5.14",
+      "PRODUCT 5.15",
+      "PRODUCT 5.16",
+      "PRODUCT 5.17",
+      "PRODUCT 5.18",
+      "PRODUCT 14.9"
+    ],
+    "technical_risks": [
+      "TECH risk 14",
+      "TECH risk 15",
+      "TECH risk 16"
+    ],
+    "hard_gates": ["G-08", "G-09"]
+  },
+  "limitations": [
+    "This benchmark measures deterministic lexical retrieval on a deliberately small Phase 0 corpus; production ranking and token budgets still require workload calibration.",
+    "The pi-persistent-intelligence comparison is a boundary inspection based on the pinned research record, not an installed-package conformance run.",
+    "No vector or semantic experiment was run because P0-06 requires the FTS5 baseline to be recorded first.",
+    "SQLite BM25 scores are reproducible for the pinned corpus and SQLite version; cross-version score stability is not assumed."
+  ]
+}

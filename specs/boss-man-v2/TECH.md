@@ -11,7 +11,7 @@ This design is based on the following upstream revisions:
 - [`weblue/boss-man@59f8282`](https://github.com/weblue/boss-man/tree/59f8282654f9b4cea90f2ba830aa6d56106e25b4)
 - [`weblue/inspector-gadget@3df3938`](https://github.com/weblue/inspector-gadget/tree/3df39382ceb147aa411f9c578ef4131fc91912f2)
 - [`earendil-works/pi@v0.80.9`](https://github.com/earendil-works/pi/tree/2d16f92973230a7e095aa984f150ba8702784f50)
-- [`agent-of-empires@7803b25`](https://github.com/agent-of-empires/agent-of-empires/tree/7803b25451bc836ad40ad9ad9d5efad11de83764)
+- [`agent-of-empires@90855a5`](https://github.com/agent-of-empires/agent-of-empires/tree/90855a59360f46652786a49f54a56df002d8ef98)
 - [`svkozak/pi-acp@49d6ec8`](https://github.com/svkozak/pi-acp/tree/49d6ec804d40b52317d873360654054c5d2387a3)
 
 The current Boss Man already has a useful SQLite task graph and event history, an SSE-backed web UI, Docker/Sandcastle execution, and worktree-based runs. Its continuation mechanism starts a fresh harness process from a prompt assembled from a rolling LLM summary, recent turns, tasks, and memories. The raw events remain available, but they are not treated as a portable, versioned session artifact.
@@ -30,7 +30,7 @@ The Pi ecosystem now also contains several local memory extensions. [`pi-persist
 
 Build a Pi-native control plane that reuses the proven product concepts from Boss Man, but replace the execution, UI, task-authorization, and context seams instead of incrementally wrapping Sandcastle.
 
-Phase 0 compares two equal candidates: (A) a bounded Agent of Empires core fork running Pi through `pi-acp`, and (B) a direct Pi RPC control plane using SQLite, React, xterm.js, the Docker Engine API, and a host-owned Git service. `FOUNDATION.md` records the requirement-by-requirement assessment and the exact fork surface. Neither candidate is the default before the spike.
+Phase 0 compared two equal candidates: (A) a bounded Agent of Empires core fork running Pi through `pi-acp`, and (B) a direct Pi RPC control plane using SQLite, a task-first web cockpit, the Docker Engine API, and a host-owned Git service. `PHASE0-RESULTS.md` records the evidence and `ADR-FOUNDATION.md` proposes the direct foundation for owner approval. Until the owner accepts that ADR, the diagrams and implementation sections describe the proposed target rather than an authorized production build.
 
 Boss Man must have one lifecycle authority. An unchanged Agent of Empires daemon beside an independent Boss Man service is rejected because it duplicates session, worker, worktree, container, authentication, and Git state. AoE is selected only if its reusable runtime and cockpit value exceeds the demonstrated long-term cost of maintaining the necessary core fork; Pi JSONL remains authoritative session evidence in either path.
 
@@ -130,7 +130,7 @@ For every intercepted command, record:
 - RTK version/filter and reported savings;
 - whether filtering was bypassed or failed.
 
-Use `tee.mode = "always"` for managed runs because complete-session retention and auditability outweigh the disk savings of failure-only teeing. The artifact quota system handles growth. The UI provides the filtered result by default and one-click raw access. `rtk proxy` is the explicit diagnostic escape hatch.
+Use `tee.mode = "always"` for managed runs because complete-session retention and auditability outweigh the disk savings of failure-only teeing. RTK 0.42.3 also requires explicit `max_files` and `max_file_size` fields during configuration deserialization, so the pinned image supplies those fields rather than relying on the abbreviated upstream example. The artifact quota system handles growth. The UI provides the filtered result by default and one-click raw access. `rtk proxy` is the explicit diagnostic escape hatch.
 
 Do not route control-plane-owned Git mutations through RTK. Tests and build commands may be filtered for agent context, but merge/review policy consumes their exit status plus raw evidence, not the summary alone.
 
@@ -558,4 +558,4 @@ The main integration agent owns schema definitions, migrations, shared generated
 
 ## Implementation gate
 
-Do not begin the main implementation until the owner decisions in `DECISIONS.md` are resolved and the equal-candidate Phase 0 exit criteria in `FOUNDATION.md` are agreed. Phase 0 may produce evidence and ADR alternatives, but the human owner makes the foundation/fork decision. The recommended decisions are intentionally recorded so review can be concrete rather than an open-ended design interview.
+Do not begin the main implementation until the owner resolves the proposed foundation ADR in `ADR-FOUNDATION.md` and records any changed conditions in `DECISIONS.md`. The direct candidate is recommended, but its task-policy, runtime/Git/credential, active-recovery, memory, and real-auth contracts still require candidate-level integration evidence before production use. Phase 0 evidence is summarized in `PHASE0-RESULTS.md`; the human owner makes the foundation/fork decision.
