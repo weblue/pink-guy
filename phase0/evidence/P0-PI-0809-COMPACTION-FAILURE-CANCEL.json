@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0.0",
+  "test_id": "P0-PI-0809-COMPACTION-FAILURE-CANCEL",
+  "candidate": "neutral",
+  "evidence_kind": "runtime",
+  "status": "pass",
+  "source_versions": {
+    "pi": "@earendil-works/pi-coding-agent@0.80.9 (2d16f92973230a7e095aa984f150ba8702784f50)",
+    "fixture": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "container_runtime": null
+  },
+  "sanitized_command": "node phase0/scripts/probe-pi-custody.mjs <generated-fixture> --force-failure",
+  "exit_code": 0,
+  "started_at": "2026-07-16T21:07:24Z",
+  "ended_at": "2026-07-16T21:07:26Z",
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+  "assertions": [
+    {
+      "name": "forced exporter failure cancels compaction",
+      "passed": true,
+      "observed": {
+        "compaction_cancelled": true,
+        "committed_snapshot_count": 0
+      }
+    },
+    {
+      "name": "failed path performs no provider request",
+      "passed": true,
+      "observed": {
+        "isolated_auth_home": true,
+        "provider_request_marker": false,
+        "offline_mode": true
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "phase0/pi/custody-probe.ts",
+      "sha256": "c7420a9c24127cf07c907b49d9bc94e834bfbe02dd1c6d97b935bf76551279d6",
+      "media_type": "text/typescript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/scripts/probe-pi-custody.mjs",
+      "sha256": "6d2cf11d28fbb90b507eb93faa2f456798ae066c7166ec853081378f88845bc8",
+      "media_type": "text/javascript",
+      "tracked": true
+    }
+  ],
+  "redactions": [],
+  "mappings": {
+    "product_requirements": ["PRODUCT 5.3"],
+    "technical_risks": ["TECH risk 1"],
+    "hard_gates": ["G-03"]
+  },
+  "limitations": [
+    "This is a controlled exporter exception, not a filesystem crash or process-kill injection.",
+    "The failure path proves cancellation before a committed manifest, not cleanup of every possible unreferenced content-addressed temporary artifact."
+  ]
+}

@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.0.0",
+  "test_id": "P0-PI-ACP-0031-CONTRACT",
+  "candidate": "aoe",
+  "evidence_kind": "runtime",
+  "status": "pass",
+  "source_versions": {
+    "pi": "@earendil-works/pi-coding-agent@0.80.9 (2d16f92973230a7e095aa984f150ba8702784f50)",
+    "pi-acp": "pi-acp@0.0.31 (49d6ec804d40b52317d873360654054c5d2387a3)",
+    "fixture": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "container_runtime": null
+  },
+  "sanitized_command": "node phase0/scripts/probe-pi-acp.mjs <generated-fixture> <pinned-pi-acp-checkout>",
+  "exit_code": 0,
+  "started_at": "2026-07-16T21:56:11Z",
+  "ended_at": "2026-07-16T21:56:16Z",
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+  "assertions": [
+    {
+      "name": "pinned upstream pi-acp remains internally healthy",
+      "passed": true,
+      "observed": {
+        "upstream_tests_passed": 88,
+        "upstream_tests_failed": 0,
+        "typecheck_passed": true,
+        "build_passed": true
+      }
+    },
+    {
+      "name": "ACP v1 streams Pi output and translates active-turn notifications",
+      "passed": true,
+      "observed": {
+        "protocol_version": 1,
+        "completed_turns": 6,
+        "completion_marker_occurrences_per_turn": 1,
+        "active_turn_notification_forwarded": true,
+        "startup_notification_forwarded": false
+      }
+    },
+    {
+      "name": "ACP model selection and cancellation preserve native Pi semantics",
+      "passed": true,
+      "observed": {
+        "selected_model": "boss-man-phase0/slow",
+        "cancel_stop_reason": "cancelled",
+        "native_model_change": true,
+        "native_aborted_assistant": true
+      }
+    },
+    {
+      "name": "pi-acp reaches the blocking Pi custody extension",
+      "passed": true,
+      "observed": {
+        "compact_via_acp": true,
+        "manifest_committed": true,
+        "native_sha256": "cb53a1ac0233102154f43166b16849fb6178dbe927b398d5499bc6eb17e34321",
+        "bundle_sha256": "3198264eeb26c4fc182eef4e3a550af987cd1c6299c5cff7475b93bcfb60be93"
+      }
+    },
+    {
+      "name": "fresh pi-acp process loads retained native session without history mutation",
+      "passed": true,
+      "observed": {
+        "session_load_replay_updates": 7,
+        "completed_native_response_count": 6,
+        "session_mapping_persisted": true
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "phase0/scripts/probe-pi-acp.mjs",
+      "sha256": "21f33f18b2deace77af1aaa873fa780919203c53c7bb6500e723e8ffc4259abd",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/pi/lifecycle-probe.ts",
+      "sha256": "d49e9ef91d3652ac00307772a6941026baf6b73ab68cc721b73208e8d333712c",
+      "media_type": "text/typescript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/pi/custody-probe.ts",
+      "sha256": "c7420a9c24127cf07c907b49d9bc94e834bfbe02dd1c6d97b935bf76551279d6",
+      "media_type": "text/typescript",
+      "tracked": true
+    },
+    {
+      "path": "untracked:pi-acp/package-lock.json",
+      "sha256": "6befa90e1054d3a88eec6fe1cd6f16668dbe51f8eb17f28410ab90f9ac59ee90",
+      "media_type": "application/json",
+      "tracked": false
+    },
+    {
+      "path": "untracked:pi-acp/dist/index.js",
+      "sha256": "f3532b5688fc39530c91b1a665ffceaba59a88270457b9ed31e55b91a00d5915",
+      "media_type": "text/javascript",
+      "tracked": false
+    },
+    {
+      "path": "untracked:phase0/pi-acp/custody-manifest.json",
+      "sha256": "d41ab8d6b38bbf26c573cbd73c792ef3385d94a5b229e5537a6f802baf34a053",
+      "media_type": "application/json",
+      "tracked": false
+    },
+    {
+      "path": "untracked:phase0/pi-acp/session.jsonl",
+      "sha256": "542dcff3196655633bad01495d14d4a0d5e83fad1125cbe6024ee918b3b58dfa",
+      "media_type": "application/x-ndjson",
+      "tracked": false
+    }
+  ],
+  "redactions": [],
+  "mappings": {
+    "product_requirements": ["PRODUCT 4.2", "PRODUCT 5.3", "PRODUCT 6.1", "PRODUCT 6.3", "PRODUCT 6.5"],
+    "technical_risks": ["TECH risk 1", "TECH risk 3", "TECH risk 11"],
+    "hard_gates": ["G-02", "G-03", "G-04", "G-09"]
+  },
+  "limitations": [
+    "pi-acp subscribes after the Pi spawn handshake and did not forward the extension's session_start notification; active-turn notifications were forwarded.",
+    "pi-acp does not expose Pi extension slash commands, although Boss Man's required agent capabilities are intended to be tools/API actions rather than slash commands.",
+    "The adapter keeps a derived session-map.json in addition to native Pi JSONL; Boss Man must treat that mapping as rebuildable routing metadata, not a second session authority.",
+    "The pinned npm install reported three moderate and four high dependency audit findings. They were not auto-fixed because changing the lockfile would invalidate the pinned-candidate comparison.",
+    "The deterministic provider and ACP transport were local and networkless; remote ACP clients and real provider authentication were not exercised."
+  ]
+}

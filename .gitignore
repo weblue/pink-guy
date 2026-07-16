@@ -1,0 +1,19 @@
+.DS_Store
+
+# Dependencies and generated build/test output
+node_modules/
+dist/
+coverage/
+*.log
+
+# Local runtime state and retained artifacts
+data/
+artifacts/
+tmp/
+
+# Deployment-owned secrets; redacted examples may be committed explicitly
+.env
+.env.*
+!.env.example
+*.key
+*.pem

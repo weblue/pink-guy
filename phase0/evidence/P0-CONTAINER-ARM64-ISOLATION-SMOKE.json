@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0.0",
+  "test_id": "P0-CONTAINER-ARM64-ISOLATION-SMOKE",
+  "candidate": "neutral",
+  "evidence_kind": "runtime",
+  "status": "pass",
+  "source_versions": {
+    "docker": "Docker Desktop client/server 27.3.1",
+    "image": "alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc",
+    "fixture": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "container_runtime": "Docker Desktop 27.3.1, Linux aarch64"
+  },
+  "sanitized_command": "docker run --rm --platform linux/arm64 --network none --read-only --tmpfs <bounded-options> alpine@<digest> <isolation-assertions>",
+  "exit_code": 0,
+  "started_at": "2026-07-16T21:10:12Z",
+  "ended_at": "2026-07-16T21:10:16Z",
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+  "assertions": [
+    {
+      "name": "container executes natively on ARM64",
+      "passed": true,
+      "observed": {
+        "server_architecture": "aarch64",
+        "container_uname_machine": "aarch64"
+      }
+    },
+    {
+      "name": "baseline container isolation controls are active",
+      "passed": true,
+      "observed": {
+        "network": "none",
+        "root_filesystem": "read-only",
+        "bounded_tmpfs_writable": true,
+        "docker_socket_present": false,
+        "host_home_present": false,
+        "ssh_material_present": false
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "docker:image-manifest/alpine-3.20-arm64",
+      "sha256": "d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc",
+      "media_type": "application/vnd.oci.image.index.v1+json",
+      "tracked": false
+    }
+  ],
+  "redactions": [],
+  "mappings": {
+    "product_requirements": ["PRODUCT 5.4", "PRODUCT 5.7"],
+    "technical_risks": ["TECH risk 4", "TECH risk 6"],
+    "hard_gates": ["G-05", "G-06"]
+  },
+  "limitations": [
+    "This is a minimal runtime-control smoke test, not a Boss Man task image or Pi-in-container test.",
+    "No worktree, Git common directory, credential broker, artifact mount, resource limit, seccomp profile, or non-root user was exercised.",
+    "Docker Desktop currently exposes about 8.2 GB to its Linux VM, which is not evidence for the intended multi-session concurrency target."
+  ]
+}

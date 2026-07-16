@@ -1,0 +1,109 @@
+{
+  "schema_version": "1.0.0",
+  "test_id": "P0-PI-0809-CHILD-CONTEXT",
+  "candidate": "neutral",
+  "evidence_kind": "runtime",
+  "status": "pass",
+  "source_versions": {
+    "pi": "@earendil-works/pi-coding-agent@0.80.9 (2d16f92973230a7e095aa984f150ba8702784f50)",
+    "fixture": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "container_runtime": null
+  },
+  "sanitized_command": "node phase0/scripts/probe-pi-child-context.mjs <generated-fixture>",
+  "exit_code": 0,
+  "started_at": "2026-07-16T21:58:09Z",
+  "ended_at": "2026-07-16T21:58:11Z",
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+  "assertions": [
+    {
+      "name": "fresh child receives only explicit instructions and selected artifact receipts",
+      "passed": true,
+      "observed": {
+        "context_roles": ["custom"],
+        "source_tool_result_in_context": false,
+        "artifact_checksum_present": true
+      }
+    },
+    {
+      "name": "bundle child receives deterministic checksum-bound context without eager transcript injection",
+      "passed": true,
+      "observed": {
+        "context_roles": ["custom"],
+        "bundle_checksum_present": true,
+        "artifact_checksum_present": true,
+        "source_tool_result_in_context": false
+      }
+    },
+    {
+      "name": "full fork preserves selected native history and parent provenance",
+      "passed": true,
+      "observed": {
+        "context_roles": ["user", "assistant", "toolResult"],
+        "source_entries_byte_equivalent": true,
+        "new_session_identity": "phase0-full-fork",
+        "parent_session_recorded": true
+      }
+    },
+    {
+      "name": "all child modes are constructed without a provider request",
+      "passed": true,
+      "observed": {
+        "provider_requests": 0,
+        "session_manager_only": true
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "phase0/scripts/probe-pi-child-context.mjs",
+      "sha256": "0b3b5f4406ade04d8962897e6ccb70f1ced1b53ffd75bc85d04da5d6fb23bef5",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "untracked:phase0/pi-child/source.jsonl",
+      "sha256": "b75ca136a2dc38130dd45bc15c5aac845e9e84840daf40028c735f644052988c",
+      "media_type": "application/x-ndjson",
+      "tracked": false
+    },
+    {
+      "path": "untracked:phase0/pi-child/bundle.json",
+      "sha256": "89cf19afb1bc8d1fb89bc393cfa6ad6bf58cb042d73517a015059090827bb0b8",
+      "media_type": "application/json",
+      "tracked": false
+    },
+    {
+      "path": "untracked:phase0/pi-child/fresh.jsonl",
+      "sha256": "c663f75b8c3e991447b7dab0a368152e302bfa05b66827e6e6d317fedc6b5f03",
+      "media_type": "application/x-ndjson",
+      "tracked": false
+    },
+    {
+      "path": "untracked:phase0/pi-child/bundle-child.jsonl",
+      "sha256": "e037cd4760c40fdede8f2fc179e6ccda7452a2c0232136df6b0618ebd8b49989",
+      "media_type": "application/x-ndjson",
+      "tracked": false
+    },
+    {
+      "path": "untracked:phase0/pi-child/full-fork.jsonl",
+      "sha256": "5893afce17e9274ce26e86f391b0ba8b83b0269a5a11ef025883e00941720255",
+      "media_type": "application/x-ndjson",
+      "tracked": false
+    }
+  ],
+  "redactions": [],
+  "mappings": {
+    "product_requirements": ["PRODUCT 4.5", "PRODUCT 5.2", "PRODUCT 6.2"],
+    "technical_risks": ["TECH risk 1", "TECH risk 11"],
+    "hard_gates": ["G-02", "G-09"]
+  },
+  "limitations": [
+    "Fresh and bundle child files are explicitly serialized from unflushed upstream SessionManager state, matching the early-session custody path; the first assistant response would normally cause Pi to flush them.",
+    "The Phase 0 bundle is intentionally narrow and synthetic; task, decision, memory, Git, and artifact indexes are expanded in the foundation candidate.",
+    "This proves context shape and provenance, not UI selection or token-budget policy for child creation."
+  ]
+}

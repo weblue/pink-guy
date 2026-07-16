@@ -1,0 +1,116 @@
+{
+  "schema_version": "1.0.0",
+  "test_id": "P0-PI-0809-LIFECYCLE",
+  "candidate": "neutral",
+  "evidence_kind": "runtime",
+  "status": "pass",
+  "source_versions": {
+    "pi": "@earendil-works/pi-coding-agent@0.80.9 (2d16f92973230a7e095aa984f150ba8702784f50)",
+    "fixture": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "container_runtime": null
+  },
+  "sanitized_command": "node phase0/scripts/probe-pi-lifecycle.mjs <generated-fixture>",
+  "exit_code": 0,
+  "started_at": "2026-07-16T21:55:16Z",
+  "ended_at": "2026-07-16T21:55:20Z",
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+  "assertions": [
+    {
+      "name": "unflushed pre-conversation and user-only states serialize and reopen through upstream Pi",
+      "passed": true,
+      "observed": {
+        "native_file_existed_at_snapshot": false,
+        "pre_conversation_message_count": 0,
+        "user_only_message_roles": ["user"],
+        "reopened_by_session_manager": true
+      }
+    },
+    {
+      "name": "RPC prompt and notification lifecycle is complete",
+      "passed": true,
+      "observed": {
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start",
+          "message_update",
+          "message_end",
+          "turn_end",
+          "agent_end",
+          "agent_settled"
+        ],
+        "extension_notifications_received": true
+      }
+    },
+    {
+      "name": "model selection and abort preserve safe native state",
+      "passed": true,
+      "observed": {
+        "model_change_persisted": true,
+        "aborted_assistant_persisted": true,
+        "tool_execution_events_after_abort": 0,
+        "streaming_after_abort": false
+      }
+    },
+    {
+      "name": "new-session provenance and exact restart do not replay completion",
+      "passed": true,
+      "observed": {
+        "parent_session_recorded": true,
+        "new_session_initially_unflushed": true,
+        "completed_response_occurrences_after_restart": 1
+      }
+    },
+    {
+      "name": "only the in-process deterministic provider runs",
+      "passed": true,
+      "observed": {
+        "external_network_requests": 0,
+        "local_provider_invocations": 3,
+        "isolated_auth_home": true
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "phase0/pi/lifecycle-probe.ts",
+      "sha256": "d49e9ef91d3652ac00307772a6941026baf6b73ab68cc721b73208e8d333712c",
+      "media_type": "text/typescript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/scripts/probe-pi-lifecycle.mjs",
+      "sha256": "232cd9ea30c04a338332fc1476461647bec6b261749ebaa4855ac4db68362e5a",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "untracked:phase0/pi-lifecycle/pre-conversation.jsonl",
+      "sha256": "97fefcb4a24ea2204078d5b6d6a7cae6ed817cffec3f2dbab0d5c1c725b6a353",
+      "media_type": "application/x-ndjson",
+      "tracked": false
+    },
+    {
+      "path": "untracked:phase0/pi-lifecycle/user-only.jsonl",
+      "sha256": "b0290668ddb3f33a9760f351699c7132e183a35e1b9ba077c76f7c8a2bf4e61d",
+      "media_type": "application/x-ndjson",
+      "tracked": false
+    }
+  ],
+  "redactions": [],
+  "mappings": {
+    "product_requirements": ["PRODUCT 4.2", "PRODUCT 5.4", "PRODUCT 6.1", "PRODUCT 6.3", "PRODUCT 6.5", "PRODUCT 13.3"],
+    "technical_risks": ["TECH risk 1", "TECH risk 3"],
+    "hard_gates": ["G-02", "G-07", "G-09"]
+  },
+  "limitations": [
+    "The deterministic provider runs in process and exercises Pi's real streaming machinery, but it is not evidence for a remote provider transport or authentication failure.",
+    "Pi's pre-conversation SessionManager already contains model_change and thinking_level_change entries; header-only means no conversation message, not literally zero non-header entries.",
+    "The context hook is the first tested extension boundary where the submitted user message is present in SessionManager; before_agent_start and turn_start are too early.",
+    "Abort occurred before any tool call; ambiguous cancellation during an already-running external side effect remains a control-plane reconciliation test."
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "schema_version": "1.0.0",
+  "test_id": "P0-PI-0809-COMPACTION-SUCCESS",
+  "candidate": "neutral",
+  "evidence_kind": "runtime",
+  "status": "pass",
+  "source_versions": {
+    "pi": "@earendil-works/pi-coding-agent@0.80.9 (2d16f92973230a7e095aa984f150ba8702784f50)",
+    "fixture": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "container_runtime": null
+  },
+  "sanitized_command": "node phase0/scripts/probe-pi-custody.mjs <generated-fixture>",
+  "exit_code": 0,
+  "started_at": "2026-07-16T21:07:24Z",
+  "ended_at": "2026-07-16T21:07:26Z",
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+  "assertions": [
+    {
+      "name": "snapshot manifest commits before compaction entry",
+      "passed": true,
+      "observed": {
+        "manifest_committed": true,
+        "native_precedes_compaction": true
+      }
+    },
+    {
+      "name": "native and normalized artifacts match manifest checksums",
+      "passed": true,
+      "observed": {
+        "native_sha256": "a6fbcc92414b3ad247dd2c85606df44d78c72d06bb2fbc675f89a5bae23d29b6",
+        "bundle_sha256": "7d3a8094680ca1ac760103265b8e8f51341c7234f2d44f5de4143b21b02aad08"
+      }
+    },
+    {
+      "name": "probe performs no provider request",
+      "passed": true,
+      "observed": {
+        "isolated_auth_home": true,
+        "provider_request_marker": false,
+        "offline_mode": true
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "phase0/pi/custody-probe.ts",
+      "sha256": "c7420a9c24127cf07c907b49d9bc94e834bfbe02dd1c6d97b935bf76551279d6",
+      "media_type": "text/typescript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/scripts/probe-pi-custody.mjs",
+      "sha256": "6d2cf11d28fbb90b507eb93faa2f456798ae066c7166ec853081378f88845bc8",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "untracked:phase0/pi-custody-0809/success/native.jsonl",
+      "sha256": "a6fbcc92414b3ad247dd2c85606df44d78c72d06bb2fbc675f89a5bae23d29b6",
+      "media_type": "application/x-ndjson",
+      "tracked": false
+    },
+    {
+      "path": "untracked:phase0/pi-custody-0809/success/bundle.json",
+      "sha256": "7d3a8094680ca1ac760103265b8e8f51341c7234f2d44f5de4143b21b02aad08",
+      "media_type": "application/json",
+      "tracked": false
+    }
+  ],
+  "redactions": [],
+  "mappings": {
+    "product_requirements": ["PRODUCT 5.3", "PRODUCT 5.6"],
+    "technical_risks": ["TECH risk 1", "TECH risk 11"],
+    "hard_gates": ["G-02", "G-03", "G-09"]
+  },
+  "limitations": [
+    "The session used synthetic provider-free assistant records; live-provider turn capture remains untested.",
+    "The manifest is the atomic commit marker; a crash before its rename may leave unreferenced content-addressed files for later garbage collection.",
+    "Header-only and user-only early lifecycle snapshots remain a separate edge case because Pi may not have flushed a JSONL file yet."
+  ]
+}
