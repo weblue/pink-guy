@@ -2,7 +2,7 @@
 
 Status: Direct-Pi foundation approved; Phase 0 closure
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 ## Context and evidence
 
@@ -218,6 +218,7 @@ SQLite is appropriate for one always-on host if all writes pass through one cont
 
 Core projections:
 
+- `topics`
 - `projects`
 - `tasks`
 - `task_dependencies`
@@ -229,9 +230,15 @@ Core projections:
 - `model_policies`
 - `artifacts`
 - `attention_items`
+- `orchestrator_conversations`
+- `source_attachments`
+- `source_snapshots`
+- `task_origins`
 
 Core append-only records:
 
+- `topic_events`
+- `conversation_events`
 - `task_events`
 - `run_events`
 - `session_events`

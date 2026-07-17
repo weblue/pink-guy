@@ -32,6 +32,9 @@ The design is organized under [`specs/boss-man-v2`](specs/boss-man-v2):
   verifies the first Phase 1 product slice.
 - [`phase1-local-task-controls`](specs/phase1-local-task-controls) defines and
   verifies the local create/claim/schedule slice.
+- [`phase1-orchestrator-conversations`](specs/phase1-orchestrator-conversations)
+  drafts the next conversation-first topic, repository, and work-item intake
+  slice.
 
 The upstream source reviewed for this baseline was:
 

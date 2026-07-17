@@ -2,13 +2,13 @@
 
 Status: Draft for owner review
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 ## Summary
 
 Boss Man v2 is a single-owner control plane for planning, running, observing, handing off, and resuming software-development work performed by Pi agents on an always-on Mac. Implementation is local-first; authenticated remote access is a later delivery phase.
 
-The product is harness-specific and model-provider agnostic: Pi is the only supported agent harness, while each session may use any model provider supported by the configured Pi installation. The web dashboard is the primary interface. Chat remains available inside tasks and sessions, but is not the application's organizing metaphor.
+The product is harness-specific and model-provider agnostic: Pi is the only supported agent harness, while each session may use any model provider supported by the configured Pi installation. The web dashboard is the primary interface. A scoped orchestrator conversation is the primary way to turn intent into structured work, while the board, task workspace, evidence, and attention state—not a conversation list—remain the application's organizing metaphor.
 
 The defining capability is lossless session custody. Boss Man preserves the complete Pi session and its artifacts without calling an LLM, including immediately before compaction. A user can resume the same session, fork a subagent with explicit context, or continue with another model after a limit or provider failure.
 
@@ -56,9 +56,10 @@ Figma: none provided; design exploration pending.
 
 The primary objects are:
 
+- **Topic:** top-level intent and its orchestrator conversation, which may exist before repository binding.
 - **Project:** a repository and its policies.
 - **Task:** a unit of desired work with status, dependencies, ownership, and acceptance criteria.
-- **Session:** a durable Pi conversation and context tree.
+- **Session:** a durable Pi conversation and context tree, including orchestrator and task-agent roles.
 - **Run:** one period in which a session is actively executing.
 - **Workspace:** the isolated filesystem and Git worktree assigned to work.
 - **Artifact:** an exported file, context bundle, log, patch, screenshot, or other durable output.
@@ -76,7 +77,7 @@ A task can have multiple sequential runs and sessions. A session may be attached
 
 1.2 A user can move from the dashboard to a project board, task detail, session detail, run timeline, provider health, or artifact without navigating through a chat transcript.
 
-1.3 Chat is presented as one interaction surface within a task or session, alongside status, context, artifacts, Git changes, tests, review evidence, terminal access, and run events. No primary route opens into chat by default.
+1.3 A scoped orchestrator conversation is the primary intake surface for creating and refining topics, projects, and tasks. It is presented beside the structured work it changes. The global dashboard and task workspaces do not default to a blank chat or require reading transcripts to understand state.
 
 1.4 A task workspace provides direct access to Overview, Changes, Tests, Review, Artifacts, Timeline, Conversation, and Terminal surfaces. The default surface is Overview or the last non-conversation surface used for that task.
 
@@ -109,6 +110,18 @@ A task can have multiple sequential runs and sessions. A session may be attached
 2.7 The system may proceed with explicit, reversible, low-risk assumptions. A high-risk or hard-to-reverse uncertainty creates a typed `Decision Required` attention item and blocks the affected transition rather than allowing an agent to choose silently.
 
 2.8 An agent may propose an ADR with alternatives, evidence, costs, and a recommendation. The human owner selects or rejects decisions that change the foundation, public contract, security boundary, durable data model, production infrastructure, or other protected category.
+
+2.9 A user can start a top-level topic for a new project or prototype before a repository exists. The topic retains its orchestrator conversation and may later bind to an existing project or become a new repository-backed project.
+
+2.10 A user can start from an existing repository URL or registered local repository, optionally provide a project description, and attach external work-item references such as a private Jira ticket.
+
+2.11 The orchestrator reads supplied descriptions, source snapshots, applicable memory, and relevant repository evidence before asking questions. It asks only about remaining material ambiguity and may create sufficiently clear tasks without an interview.
+
+2.12 Orchestrator-created and updated tasks retain links to the exact topic, conversation turn, assumptions, and external-source revisions that produced them.
+
+2.13 External work items are retained as immutable, provenance-linked snapshots. Refresh creates a visible revision rather than silently replacing source evidence. External systems are read-only unless a separately approved write-back feature is enabled.
+
+2.14 Repository and work-item credentials remain host-owned. The user is never instructed to paste a private key, token, or password into an orchestrator conversation.
 
 ### 3. Task board and task authority
 
@@ -336,7 +349,7 @@ The selected mode is visible before the child starts and remains part of its pro
 
 ### 14. First usable release boundary
 
-14.1 One owner can register a repository and create a sufficiently clear task from the local web UI.
+14.1 One owner can start a new topic or attach an existing repository and external work item, converse with its orchestrator until only material ambiguity is resolved, and observe the resulting audited tasks on the local board.
 
 14.2 The owner can start a Pi session in an isolated worktree and container and use both structured session controls and an interactive workspace terminal.
 

@@ -1,6 +1,6 @@
 # Boss Man v2 current state
 
-Status: Phase 1 in progress — local control loop and task scheduling implemented
+Status: Phase 1 in progress — orchestrator conversation requirements drafted
 
 Last updated: 2026-07-17
 
@@ -19,6 +19,15 @@ command state without becoming chat-first. The owner can now create a
 revision-bound task with acceptance criteria and atomically assign/schedule
 one explicit agent phase from the board.
 
+The next product direction is now explicit: a durable scoped orchestrator
+conversation should be the primary way to create and refine work. It must
+support a pre-repository top-level topic, existing private repository intake,
+optional owner description, and immutable external work-item snapshots such
+as Jira. The board remains authoritative and direct task controls remain a
+fast path. The first-class topic and intake-orchestrator lifecycle are drafted
+but intentionally not implemented until the owner approves their durable
+identity/scope decisions.
+
 ## Capability map
 
 | Area | Current capability | Remaining boundary |
@@ -34,6 +43,7 @@ one explicit agent phase from the board.
 | Restart recovery | SQLite records immutable intent/completion/reconciliation receipts. Startup checks container identity/liveness, pauses verified idle runs, holds uncertain response/tool effects without replay, recovers checksum-valid snapshots, and recovers parent/provenance-valid Git commits without duplication. | The prototype conservatively stops the old container; true Pi RPC reattachment and host/Docker power-cycle coverage remain production work. |
 | Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
 | Developer cockpit | Product behavior and a task-first information architecture are specified. The loopback Phase 1 shell shows projects, orchestrator leases, the multi-project board, sessions, recent durable commands, context status, and terminal/attach positioning without a chat-first layout. It creates revision-bound tasks and schedules implementation/test/review agents from ready/backlog cards. | Task detail editing/dependencies/reconciliation, PTY/reconnect, diffs/tests/review/context inspectors, and optional trusted-LAN access without application auth remain. |
+| Orchestrator interaction | Product and technical drafts define top-level topics, project conversations, structured conversation-to-task deltas, repository import, immutable source snapshots, and model-less conversation custody. | No orchestrator Pi planning session, topic/source schema, repository URL import, or Jira adapter is implemented. First-class topic identity and the system-intake lease require owner approval. |
 
 ## Artifact and data layout
 
@@ -50,6 +60,9 @@ specs/phase1-local-control-loop/
 
 specs/phase1-local-task-controls/
   PRODUCT.md, TECH.md, RESULTS.md  local create/assign/schedule behavior and proof
+
+specs/phase1-orchestrator-conversations/
+  PRODUCT.md, TECH.md              proposed conversation-first intake contract
 
 phase0/
   baseline/                        artifact retention policy and source manifest
@@ -80,13 +93,21 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 
 ## Next steps
 
-1. **Phase 1 — task detail and reconciliation.** Add description/acceptance
+1. **Owner decision — conversation scope.** Approve or revise first-class
+   pre-project topics and the single system-intake orchestrator lease described
+   by D-039/D-040.
+2. **Phase 1 — orchestrator conversation substrate.** Add durable topic/project
+   conversations, structured task deltas, and model-less custody before
+   repository/source adapters.
+3. **Phase 1 — repository and source intake.** Add host-owned repository URL
+   import plus immutable manual/Jira snapshots with no write-back.
+4. **Phase 1 — task detail and reconciliation.** Add description/acceptance
    editing, dependencies, activity, command failure detail, and explicit owner
    reconciliation actions.
-2. **Phase 1 — terminal and workspace surfaces.** Add a persistent
+5. **Phase 1 — terminal and workspace surfaces.** Add a persistent
    PTY/reconnect path, then diff/test/review/context/artifact inspectors.
-3. **Phase 2 — autonomy, recovery, and portability.** Add merge/rebase/push, recovery UX, retention/backup, resource limits, and second-host reproduction.
-4. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally configured password verifier or API-key hash after the local product is mature.
+6. **Phase 2 — autonomy, recovery, and portability.** Add merge/rebase/push, recovery UX, retention/backup, resource limits, and second-host reproduction.
+7. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally configured password verifier or API-key hash after the local product is mature.
 
 ## Questions exposed by implementation
 
@@ -118,5 +139,11 @@ Still open, but assigned to explicit gates rather than blocking current work:
   lease-loss policy are implemented. Per-project task concurrency, scheduling
   priority, stop/reconcile commands, and global host-pressure limits remain to
   be specified and measured.
+- **Topic/orchestrator scope:** whether to approve the recommended first-class
+  pre-project topic and one system-intake orchestrator lease before project
+  binding. Automatically creating scratch repositories and making projects
+  repository-optional are documented alternatives, not silent assumptions.
+- **External source lifecycle:** the recommendation is immutable, explicit
+  read-only refresh with Jira write-back, webhooks, and polling deferred.
 - **Trusted LAN:** the selected private interface/CIDR configuration and host-firewall enforcement need a Phase 1 design before binding beyond loopback.
 - **Remote credential UX:** Phase 3 must choose password-session mode, API-key mode, or both. Browser `localStorage` persistence remains an explicit convenience/security decision, not the default.
