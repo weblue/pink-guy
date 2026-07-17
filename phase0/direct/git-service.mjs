@@ -47,10 +47,11 @@ function cleanMessage(value, fallback) {
 }
 
 export class HostGitService {
-  constructor({ store, repositoryPath, workspaceRoot }) {
+  constructor({ store, repositoryPath, workspaceRoot, faultInjector = async () => undefined }) {
     this.store = store;
     this.repositoryPath = repositoryPath;
     this.workspaceRoot = workspaceRoot;
+    this.faultInjector = faultInjector;
   }
 
   async createWorkspace({ taskId, runId }) {
@@ -112,9 +113,34 @@ export class HostGitService {
     const status = await this.status(workspace);
     if (!status.dirty) throw Object.assign(new Error("workspace has no changes to checkpoint"), { code: "git_no_changes" });
     const priorRevision = await this.revision(workspace);
+    const subject = cleanMessage(message, kind === "checkpoint" ? "chore: Boss Man checkpoint" : "chore: Boss Man commit");
+    const journal = this.store.beginSideEffect({
+      runId: workspace.run_id,
+      kind: "git",
+      idempotencyKey,
+      intent: {
+        workspaceId: workspace.id,
+        taskId: workspace.task_id,
+        capabilityId: capability.id,
+        operationKind: kind,
+        requestSha256,
+        priorRevision,
+        subject,
+        evidence,
+      },
+    });
+    if (journal.replayed) {
+      if (journal.effect.state === "completed") {
+        const operation = this.store.findGitOperation(idempotencyKey) ?? journal.effect.result?.operation;
+        if (operation) return { replayed: true, operation };
+      }
+      throw Object.assign(new Error("prior Git side effect requires reconciliation before retry"), {
+        code: "reconciliation_required",
+        sideEffectId: journal.effect.id,
+      });
+    }
     const staged = await runGit(workspace.workspace_path, ["add", "--all", "--", "."]);
     if (staged.code !== 0) throw gitError("stage workspace", staged);
-    const subject = cleanMessage(message, kind === "checkpoint" ? "chore: Boss Man checkpoint" : "chore: Boss Man commit");
     const trailers = [
       `Boss-Man-Task: ${workspace.task_id}`,
       `Boss-Man-Run: ${workspace.run_id}`,
@@ -127,11 +153,72 @@ export class HostGitService {
     ]);
     if (committed.code !== 0) throw gitError("commit workspace checkpoint", committed);
     const newRevision = await this.revision(workspace);
+    await this.faultInjector("git_after_commit", {
+      sideEffectId: journal.effect.id,
+      runId: workspace.run_id,
+      workspaceId: workspace.id,
+      priorRevision,
+      newRevision,
+    });
     const operation = this.store.recordGitOperation({
       id: randomUUID(), workspaceId: workspace.id, taskId: workspace.task_id, runId: workspace.run_id,
       capabilityId: capability.id, kind, idempotencyKey, requestSha256, priorRevision, newRevision,
       metadata: { message: subject, evidence, changed: status.output },
     });
+    this.store.completeSideEffect(journal.effect.id, { operation });
     return { replayed: false, operation };
+  }
+
+  async reconcileSideEffect(effect, workspace) {
+    if (effect.kind !== "git") throw new Error(`cannot reconcile non-Git side effect: ${effect.kind}`);
+    const intent = effect.intent;
+    const priorOperation = this.store.findGitOperation(effect.idempotency_key);
+    if (priorOperation) {
+      this.store.completeSideEffect(effect.id, { operation: priorOperation }, { reconciled: true });
+      return { state: "completed", operation: priorOperation, source: "git_operation" };
+    }
+    await this.assertWorkspace(workspace);
+    const currentRevision = await this.revision(workspace);
+    if (currentRevision === intent.priorRevision) {
+      this.store.requireSideEffectReconciliation(effect.id, "git_commit_not_observed", {
+        currentRevision,
+        priorRevision: intent.priorRevision,
+      });
+      return { state: "reconciliation_required", reason: "git_commit_not_observed" };
+    }
+    const parent = await runGit(workspace.workspace_path, ["rev-parse", `${currentRevision}^`]);
+    const message = await runGit(workspace.workspace_path, ["show", "-s", "--format=%B", currentRevision]);
+    const provenance = message.code === 0
+      && message.stdout.includes(`Boss-Man-Task: ${workspace.task_id}`)
+      && message.stdout.includes(`Boss-Man-Run: ${workspace.run_id}`)
+      && message.stdout.includes(`Boss-Man-Workspace: ${workspace.id}`);
+    if (parent.code !== 0 || parent.stdout.trim() !== intent.priorRevision || !provenance) {
+      this.store.requireSideEffectReconciliation(effect.id, "git_revision_identity_ambiguous", {
+        currentRevision,
+        expectedParent: intent.priorRevision,
+        parentRevision: parent.stdout.trim() || null,
+        provenance,
+      });
+      return { state: "reconciliation_required", reason: "git_revision_identity_ambiguous" };
+    }
+    const operation = this.store.recordGitOperation({
+      id: randomUUID(),
+      workspaceId: workspace.id,
+      taskId: workspace.task_id,
+      runId: workspace.run_id,
+      capabilityId: intent.capabilityId,
+      kind: intent.operationKind,
+      idempotencyKey: effect.idempotency_key,
+      requestSha256: intent.requestSha256,
+      priorRevision: intent.priorRevision,
+      newRevision: currentRevision,
+      metadata: {
+        message: intent.subject,
+        evidence: intent.evidence,
+        recoveredAfterRestart: true,
+      },
+    });
+    this.store.completeSideEffect(effect.id, { operation }, { reconciled: true });
+    return { state: "completed", operation, source: "git_provenance" };
   }
 }

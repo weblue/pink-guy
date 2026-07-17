@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { access, chmod, copyFile, mkdir, readFile, readdir, rm } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { RtkArtifactIngestor } from "./artifacts.mjs";
@@ -63,6 +63,7 @@ export class DirectControlPlane {
     runtimeImage = "boss-man-phase0:pi-0.80.9-rtk-0.42.3",
     dockerCommand = "docker", credentialProfile = null,
     runtimeProvider = "boss-man-phase0", runtimeModel = "complete", runtimeOffline = true,
+    faultInjector = async () => undefined,
   }) {
     this.store = new Phase0Store(databasePath);
     this.stateRoot = stateRoot;
@@ -73,11 +74,19 @@ export class DirectControlPlane {
     this.runtimeProvider = runtimeProvider;
     this.runtimeModel = runtimeModel;
     this.runtimeOffline = runtimeOffline;
+    this.faultInjector = faultInjector;
     this.credentialVault = new RunCredentialVault({ stateRoot, profile: credentialProfile });
-    this.git = new HostGitService({ store: this.store, repositoryPath: fixturePath, workspaceRoot: join(stateRoot, "workspaces") });
+    this.git = new HostGitService({
+      store: this.store,
+      repositoryPath: fixturePath,
+      workspaceRoot: join(stateRoot, "workspaces"),
+      faultInjector,
+    });
     this.sessions = new Map();
     this.server = null;
-    this.reconciledRunIds = this.store.reconcileRunningRuns();
+    this.reconciledRunIds = [];
+    this.recoveryResults = [];
+    this.recoveryChecked = false;
   }
 
   seed() {
@@ -137,12 +146,25 @@ export class DirectControlPlane {
       ...(this.runtimeOffline ? { PI_OFFLINE: "1" } : {}),
     };
     let runtime = null;
+    let containerEffect = null;
     try {
       runtime = new DockerTaskRuntime({ image: this.runtimeImage, dockerCommand: this.dockerCommand });
+      containerEffect = this.store.beginSideEffect({
+        runId,
+        kind: "container_start",
+        idempotencyKey: `container-start:${runId}`,
+        intent: { taskId, image: this.runtimeImage, workspaceId: workspace.id },
+      }).effect;
       const runtimeState = await runtime.start({
         runId, workspacePath: workspace.workspace_path, artifactPath: artifactDirectory,
         homePath: home, configPath: config, sessionPath: sessionDirectory,
         extensionPath: extensionDirectory, credentialPath: credential.path, environment: containerEnvironment,
+      });
+      this.store.completeSideEffect(containerEffect.id, {
+        containerId: runtimeState.containerId,
+        imageId: runtimeState.imageId,
+        name: runtimeState.name,
+        network: runtimeState.network,
       });
       const credentialCopy = await runtime.exec("sh", ["-lc", "umask 077; cp /run/secrets/pi-auth.json /config/auth.json"]);
       if (credentialCopy.code !== 0) throw new Error(`failed to initialize private Pi auth: ${credentialCopy.stderr}`);
@@ -218,15 +240,34 @@ export class DirectControlPlane {
   async prompt(sessionId, message) {
     const managed = this.sessions.get(sessionId);
     if (!managed) throw new Error(`session is not active: ${sessionId}`);
+    const operationId = randomUUID();
+    const journal = this.store.beginSideEffect({
+      runId: managed.run.id,
+      kind: "provider_response",
+      idempotencyKey: `provider-response:${operationId}`,
+      intent: {
+        sessionId,
+        provider: managed.state.model?.provider ?? this.runtimeProvider,
+        model: managed.state.model?.id ?? this.runtimeModel,
+        promptSha256: sha256(message),
+      },
+    }).effect;
     const from = managed.rpc.messages.length;
     await managed.rpc.command({ type: "prompt", message });
     await managed.rpc.waitFor((event) => event.type === "agent_settled", "agent settlement", from);
+    await this.faultInjector("provider_after_settled", { sideEffectId: journal.id, runId: managed.run.id, sessionId });
     await this.ingestSnapshots(managed);
     const rtkReceipts = await managed.artifacts.ingestPiArtifacts();
     for (const receipt of rtkReceipts) {
       managed.active.sequence += 1;
       this.store.appendRunEvent(managed.run.id, managed.active.sequence, "rtk_artifact_ingested", managed.sanitize(receipt));
     }
+    const nativeContent = await readFile(this.store.getSession(sessionId).native_path);
+    this.store.completeSideEffect(journal.id, {
+      eventCount: this.store.runEvents(managed.run.id).length,
+      nativeSessionSha256: sha256(nativeContent),
+      rtkReceiptCount: rtkReceipts.length,
+    });
     return { run: this.store.getRun(managed.run.id), events: this.store.runEvents(managed.run.id) };
   }
 
@@ -236,6 +277,18 @@ export class DirectControlPlane {
     if (rtkFilter !== null && rtkFilter !== "log") {
       throw Object.assign(new Error("unsupported RTK filter"), { code: "invalid_request" });
     }
+    const operationId = randomUUID();
+    const journal = this.store.beginSideEffect({
+      runId: managed.run.id,
+      kind: "tool",
+      idempotencyKey: `workspace-shell:${operationId}`,
+      intent: {
+        sessionId,
+        tool: "workspace_shell",
+        commandSha256: sha256(command),
+        rtkFilter,
+      },
+    }).effect;
     let effectiveCommand = command;
     if (rtkFilter) {
       const rawPath = `/artifacts/rtk-tee/supervisor-${randomUUID()}.log`;
@@ -251,6 +304,12 @@ export class DirectControlPlane {
     const startedAt = Date.now();
     const result = await managed.shell.exec(effectiveCommand);
     const durationMs = Date.now() - startedAt;
+    await this.faultInjector("tool_after_execute", {
+      sideEffectId: journal.id,
+      runId: managed.run.id,
+      sessionId,
+      status: result.status,
+    });
     const safeResult = managed.sanitize(result);
     const receipt = await managed.artifacts.ingestCommand({
       command, output: result.output, status: result.status, durationMs, filter: rtkFilter,
@@ -263,6 +322,11 @@ export class DirectControlPlane {
       rtkReceipt: receipt.receipt_path,
       rtkFilter,
     });
+    this.store.completeSideEffect(journal.id, {
+      status: result.status,
+      durationMs,
+      rtkReceipt: receipt.receipt_path,
+    });
     return { ...safeResult, rtkReceipt: receipt };
   }
 
@@ -272,13 +336,33 @@ export class DirectControlPlane {
       const path = join(managed.snapshotDirectory, name);
       const content = await readFile(path);
       const manifest = JSON.parse(content);
+      const contentSha256 = sha256(content);
+      const journal = this.store.beginSideEffect({
+        runId: managed.run.id,
+        kind: "snapshot",
+        idempotencyKey: `snapshot:${contentSha256}`,
+        intent: {
+          sessionId: managed.state.sessionId,
+          path,
+          sha256: contentSha256,
+          metadata: { trigger: manifest.trigger, native: manifest.native },
+        },
+      });
+      if (journal.effect.state === "completed") continue;
       this.store.recordArtifact({
         sessionId: managed.state.sessionId,
         kind: "context_manifest",
         path,
-        sha256: sha256(content),
+        sha256: contentSha256,
         metadata: { trigger: manifest.trigger, native: manifest.native },
       });
+      await this.faultInjector("snapshot_after_record", {
+        sideEffectId: journal.effect.id,
+        runId: managed.run.id,
+        sessionId: managed.state.sessionId,
+        path,
+      });
+      this.store.completeSideEffect(journal.effect.id, { path, sha256: contentSha256 });
     }
   }
 
@@ -286,7 +370,14 @@ export class DirectControlPlane {
     const managed = this.sessions.get(sessionId);
     if (!managed) return;
     await Promise.all([managed.rpc.terminate(), managed.shell.terminate()]);
+    const journal = this.store.beginSideEffect({
+      runId: managed.run.id,
+      kind: "container_stop",
+      idempotencyKey: `container-stop:${managed.run.id}`,
+      intent: { containerId: managed.run.container_id, imageId: managed.run.image_id },
+    }).effect;
     await managed.runtime.stop();
+    this.store.completeSideEffect(journal.id, { containerRemoved: true });
     const canonicalUnchanged = await this.credentialVault.verifySourceUnchanged(managed.credential);
     this.store.verifyCredentialRun(managed.run.id, canonicalUnchanged);
     await rm(join(managed.configDirectory, "auth.json"), { force: true });
@@ -301,7 +392,143 @@ export class DirectControlPlane {
     this.store.close();
   }
 
+  async crashForProbe() {
+    await Promise.all([...this.sessions.values()].flatMap((managed) => [
+      managed.rpc.terminate(),
+      managed.shell.terminate(),
+    ]));
+    this.sessions.clear();
+    if (this.server) await new Promise((resolvePromise) => this.server.close(resolvePromise));
+    this.server = null;
+    this.store.close();
+  }
+
+  async reconcileAfterRestart() {
+    if (this.recoveryChecked) return [];
+    const results = [];
+    for (const run of this.store.runningRuns()) {
+      const runtime = new DockerTaskRuntime({
+        image: this.runtimeImage,
+        dockerCommand: this.dockerCommand,
+        containerId: run.container_id,
+      });
+      let inspection = null;
+      let inspectionError = null;
+      try {
+        inspection = await runtime.inspect();
+      } catch (error) {
+        inspectionError = error;
+      }
+      const containerIdentityProven = Boolean(
+        inspection?.running
+        && inspection.id === run.container_id
+        && inspection.imageId === run.image_id
+        && inspection.labels?.["boss-man.run"] === run.id,
+      );
+      const effects = this.store.sideEffectsForRun(run.id);
+      const stoppedContainerProven = !inspection && !inspectionError
+        && effects.some((effect) => effect.kind === "container_stop");
+      const reconciledEffects = [];
+      let ambiguous = !(containerIdentityProven || stoppedContainerProven);
+      for (const effect of effects) {
+        if (effect.state === "completed") continue;
+        if (effect.state === "reconciliation_required") {
+          ambiguous = true;
+          reconciledEffects.push({ id: effect.id, kind: effect.kind, state: effect.state });
+          continue;
+        }
+        if (effect.kind === "container_start" && containerIdentityProven) {
+          this.store.completeSideEffect(effect.id, {
+            containerId: inspection.id,
+            imageId: inspection.imageId,
+            recoveredIdentity: true,
+          }, { reconciled: true });
+          reconciledEffects.push({ id: effect.id, kind: effect.kind, state: "completed" });
+        } else if (effect.kind === "container_stop" && !inspection) {
+          this.store.completeSideEffect(effect.id, { containerRemoved: true }, { reconciled: true });
+          reconciledEffects.push({ id: effect.id, kind: effect.kind, state: "completed" });
+        } else if (effect.kind === "snapshot") {
+          const snapshot = await this.reconcileSnapshot(effect);
+          if (snapshot.state !== "completed") ambiguous = true;
+          reconciledEffects.push({ id: effect.id, kind: effect.kind, ...snapshot });
+        } else if (effect.kind === "git") {
+          const workspace = this.store.getWorkspace(effect.intent.workspaceId);
+          const git = workspace
+            ? await this.git.reconcileSideEffect(effect, workspace)
+            : { state: "reconciliation_required", reason: "workspace_missing" };
+          if (!workspace) this.store.requireSideEffectReconciliation(effect.id, git.reason);
+          if (git.state !== "completed") ambiguous = true;
+          reconciledEffects.push({ id: effect.id, kind: effect.kind, state: git.state, reason: git.reason });
+        } else {
+          this.store.requireSideEffectReconciliation(effect.id, "completion_uncertain_after_restart", {
+            kind: effect.kind,
+            automaticReplay: false,
+          });
+          ambiguous = true;
+          reconciledEffects.push({ id: effect.id, kind: effect.kind, state: "reconciliation_required" });
+        }
+      }
+
+      if (containerIdentityProven) await runtime.stop();
+      await rm(join(this.stateRoot, "runs", run.id, "pi-config", "auth.json"), { force: true });
+      await this.credentialVault.release(run.id);
+      const state = ambiguous ? "reconciliation_required" : "paused";
+      const containerRemoved = containerIdentityProven || stoppedContainerProven;
+      this.store.appendRunEvent(run.id, this.store.nextRunEventSequence(run.id), state === "paused"
+        ? "run_reconciled_paused" : "run_reconciliation_required", {
+        priorState: "running",
+        reason: "control_plane_restart",
+        containerIdentityProven,
+        containerInspectionAvailable: !inspectionError,
+        containerRemoved,
+        automaticReplay: false,
+        sideEffects: reconciledEffects,
+      });
+      this.store.finishRun(run.id, state);
+      this.reconciledRunIds.push(run.id);
+      results.push({
+        runId: run.id,
+        state,
+        containerIdentityProven,
+        containerInspectionAvailable: !inspectionError,
+        containerRemoved,
+        sideEffects: reconciledEffects,
+      });
+    }
+    this.recoveryResults = results;
+    this.recoveryChecked = true;
+    return results;
+  }
+
+  async reconcileSnapshot(effect) {
+    const root = `${resolve(this.stateRoot)}${sep}`;
+    const path = resolve(effect.intent.path);
+    if (!path.startsWith(root) || !(await exists(path))) {
+      this.store.requireSideEffectReconciliation(effect.id, "snapshot_missing_or_outside_state_root", { path });
+      return { state: "reconciliation_required", reason: "snapshot_missing_or_outside_state_root" };
+    }
+    const content = await readFile(path);
+    const observedSha256 = sha256(content);
+    if (observedSha256 !== effect.intent.sha256) {
+      this.store.requireSideEffectReconciliation(effect.id, "snapshot_checksum_mismatch", {
+        expectedSha256: effect.intent.sha256,
+        observedSha256,
+      });
+      return { state: "reconciliation_required", reason: "snapshot_checksum_mismatch" };
+    }
+    this.store.recordArtifact({
+      sessionId: effect.intent.sessionId,
+      kind: "context_manifest",
+      path,
+      sha256: observedSha256,
+      metadata: { ...effect.intent.metadata, recoveredAfterRestart: true },
+    });
+    this.store.completeSideEffect(effect.id, { path, sha256: observedSha256 }, { reconciled: true });
+    return { state: "completed", source: "artifact_checksum" };
+  }
+
   async listen(port = 0, host = "127.0.0.1") {
+    await this.reconcileAfterRestart();
     this.server = createServer((request, response) => this.route(request, response));
     await new Promise((resolvePromise, rejectPromise) => {
       this.server.once("error", rejectPromise);

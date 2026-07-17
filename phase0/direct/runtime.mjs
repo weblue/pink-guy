@@ -25,6 +25,7 @@ export class DockerTaskRuntime {
     dockerCommand = "docker",
     network = "bridge",
     policy = {},
+    containerId = null,
   } = {}) {
     this.image = image;
     this.dockerCommand = dockerCommand;
@@ -37,7 +38,7 @@ export class DockerTaskRuntime {
       tmpfs: "/tmp:rw,nosuid,nodev,noexec,size=32m",
       ...policy,
     };
-    this.containerId = null;
+    this.containerId = containerId;
     this.imageId = null;
   }
 
@@ -117,7 +118,10 @@ export class DockerTaskRuntime {
   async inspect() {
     if (!this.containerId) return null;
     const result = await runFile(this.dockerCommand, ["inspect", this.containerId]);
-    if (result.code !== 0) throw dockerError("docker inspect", result);
+    if (result.code !== 0) {
+      if (/No such (object|container)/i.test(`${result.stderr}\n${result.stdout}`)) return null;
+      throw dockerError("docker inspect", result);
+    }
     const [container] = JSON.parse(result.stdout);
     return {
       id: container.Id,
@@ -126,6 +130,7 @@ export class DockerTaskRuntime {
       pid: container.State?.Pid ?? null,
       network: container.HostConfig?.NetworkMode ?? null,
       mounts: (container.Mounts ?? []).map((item) => ({ destination: item.Destination, readWrite: item.RW })),
+      labels: container.Config?.Labels ?? {},
     };
   }
 

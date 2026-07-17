@@ -66,10 +66,10 @@
   ],
   "artifacts": [
     {
-      "path": "phase0/direct/control-plane.mjs",
+      "path": "git:bbc95b6:phase0/direct/control-plane.mjs",
       "sha256": "7458b8ff7a5fcf77e1716f81282b0d0321e21dc0e102b0027b451aa713f4c75b",
       "media_type": "text/javascript",
-      "tracked": true
+      "tracked": false
     },
     {
       "path": "phase0/direct/credentials.mjs",
@@ -78,10 +78,10 @@
       "tracked": true
     },
     {
-      "path": "phase0/direct/runtime.mjs",
+      "path": "git:bbc95b6:phase0/direct/runtime.mjs",
       "sha256": "b5786c942b59783156ce2b3911d452a669af5b1226a01a1ec86689aa285686fa",
       "media_type": "text/javascript",
-      "tracked": true
+      "tracked": false
     },
     {
       "path": "phase0/direct/artifacts.mjs",
@@ -109,6 +109,7 @@
     "hard_gates": ["G-01", "G-04", "G-06"]
   },
   "limitations": [
+    "The changed control-plane and runtime source artifacts are pinned to commit bbc95b6 because this bounded live-provider request was not repeated for C0-03; deterministic candidate regressions cover the later recovery changes.",
     "This was one owner-authorized subscription-backed turn, not a concurrency, refresh, rate-limit, credit-exhaustion, or provider-fallback test.",
     "Private OAuth refresh mutations are discarded; parallel OAuth-backed runs remain disabled until locked reconciliation or a host broker is approved.",
     "The task container had bridge networking for the provider and control-plane paths; production egress policy remains open.",

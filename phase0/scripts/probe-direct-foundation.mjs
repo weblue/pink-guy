@@ -122,13 +122,15 @@ const nativeBeforeRestart = await readFile(session.native_path);
 assert(nativeBeforeRestart.includes(Buffer.from("phase0-deterministic-completion")), "native session lacks deterministic assistant output");
 const nativeHash = sha256(nativeBeforeRestart);
 
-await authority.close({ record: false });
+await authority.crashForProbe();
 authority = new DirectControlPlane({ databasePath, stateRoot, fixturePath: fixture });
+const recovery = await authority.reconcileAfterRestart();
 assert(authority.reconciledRunIds.includes(run.id), "restart did not reconcile the ambiguous active run");
 const reconciled = authority.store.getRun(run.id);
-assert(reconciled.state === "orphaned", "ambiguous run was reported healthy after restart");
+assert(reconciled.state === "paused", "verified idle run did not pause safely after restart");
 const reconciledEvents = authority.store.runEvents(run.id);
-assert(reconciledEvents.at(-1).type === "run_reconciliation_required", "restart reconciliation event is missing");
+assert(reconciledEvents.at(-1).type === "run_reconciled_paused", "restart pause event is missing");
+assert(recovery[0].containerIdentityProven && recovery[0].containerRemoved, "recorded container was not safely reconciled");
 assert(sha256(await readFile(session.native_path)) === nativeHash, "restart mutated the retained native session");
 
 const result = {
@@ -147,6 +149,7 @@ const result = {
   persistent_workspace_shell: true,
   custody_manifest_count: artifacts.length,
   restart_reconciliation: reconciled.state,
+  restart_container_identity_proven: recovery[0].containerIdentityProven,
   native_session_sha256: nativeHash,
   database_sha256: sha256(await readFile(databasePath)),
   isolated_root: root,

@@ -80,7 +80,7 @@ P0-00 is complete on this development Mac only. Its cross-host exit criterion re
 
 ## Run the direct foundation slice
 
-The direct candidate runs one daemon-owned SQLite store, task API and minimal board, direct Pi RPC session, persistent workspace shell, structured event stream, custody ingestion, and restart reconciliation. It uses a deterministic local provider and makes no network request:
+The direct candidate runs one daemon-owned SQLite store, task API and minimal board, direct Pi RPC session, persistent workspace shell, structured event stream, custody ingestion, and verified-idle restart pause. It uses a deterministic local provider and makes no network request:
 
 ```sh
 node ./phase0/scripts/probe-direct-foundation.mjs /absolute/path/to/disposable/task-repo
@@ -143,6 +143,15 @@ node ./phase0/scripts/probe-direct-live-provider.mjs \
 ```
 
 The probe never prints or checks in the auth contents. It verifies a real provider response inside the daemon-owned container, one Pi Bash tool call through the managed RTK extension, redacted raw/filtered/receipt ingestion, canonical credential immutability, post-run credential-copy deletion, and container removal.
+
+## Run restart and side-effect reconciliation
+
+```sh
+node ./phase0/scripts/probe-direct-restart-reconciliation.mjs \
+  /absolute/path/to/disposable/task-repo
+```
+
+This C0-03 probe injects daemon loss after a provider response, workspace tool execution, snapshot index write, and host Git commit but before their completion receipts. It proves that idle state pauses only after container identity/liveness checks, uncertain provider and tool work is never replayed, checksum-valid snapshots and provenance-valid Git commits are recovered, native Pi bytes remain unchanged, and no completed side effect is duplicated. The selected conservative policy does not claim in-flight Pi RPC reattachment.
 
 ## Run the remote-edge contract
 

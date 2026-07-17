@@ -16,8 +16,8 @@
   },
   "sanitized_command": "node phase0/scripts/probe-direct-foundation.mjs <generated-fixture>",
   "exit_code": 0,
-  "started_at": "2026-07-17T13:19:42Z",
-  "ended_at": "2026-07-17T13:19:45Z",
+  "started_at": "2026-07-17T13:58:22Z",
+  "ended_at": "2026-07-17T13:58:27Z",
   "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
   "assertions": [
     {
@@ -82,7 +82,7 @@
       "passed": true,
       "observed": {
         "custody_manifest_count": 7,
-        "native_session_sha256": "2c3e9129a011110df058cd7c380a5b1e2b14a4db31811751a9de1400e012ea12",
+        "native_session_sha256": "47c7f22335338df2aba38fd16f7fdccf11da325333f0e1e9c51bd242e67ec2ef",
         "native_session_changed_during_restart": false
       }
     },
@@ -91,15 +91,17 @@
       "passed": true,
       "observed": {
         "prior_state": "running",
-        "reconciled_state": "orphaned",
-        "reconciliation_event": "run_reconciliation_required"
+        "reconciled_state": "paused",
+        "container_identity_proven": true,
+        "container_removed": true,
+        "reconciliation_event": "run_reconciled_paused"
       }
     }
   ],
   "artifacts": [
     {
       "path": "phase0/direct/store.mjs",
-      "sha256": "e7f367ba4cc59fb5964a7f5c36e576dd8c7781179bd7012be6386dc9bcc3936f",
+      "sha256": "bed6102c9a300f4232111d5cc6b21dc386f56b2eb83f70a9585365798691f253",
       "media_type": "text/javascript",
       "tracked": true
     },
@@ -111,13 +113,13 @@
     },
     {
       "path": "phase0/direct/control-plane.mjs",
-      "sha256": "7458b8ff7a5fcf77e1716f81282b0d0321e21dc0e102b0027b451aa713f4c75b",
+      "sha256": "c9816e667386057991810eab51964e173d57f9715403fc75438e6e2152d8b325",
       "media_type": "text/javascript",
       "tracked": true
     },
     {
       "path": "phase0/scripts/probe-direct-foundation.mjs",
-      "sha256": "689ec7d02ebab4694166b1b61b015e8e7fe3c26e5b7c664344aefbf4eb38e6ac",
+      "sha256": "0eda135d7ac1253bd9bb986293afb5f245d76ecd248ae6abb8a5bc4d38a4126c",
       "media_type": "text/javascript",
       "tracked": true
     },
@@ -129,7 +131,7 @@
     },
     {
       "path": "phase0/direct/runtime.mjs",
-      "sha256": "b5786c942b59783156ce2b3911d452a669af5b1226a01a1ec86689aa285686fa",
+      "sha256": "a4cdd25a07f2e9b4fe2db810478b78f67ce8638bf4e5f483ba9533933800dc61",
       "media_type": "text/javascript",
       "tracked": true
     },
@@ -141,13 +143,13 @@
     },
     {
       "path": "untracked:phase0/direct/native.pi-session.jsonl",
-      "sha256": "2c3e9129a011110df058cd7c380a5b1e2b14a4db31811751a9de1400e012ea12",
+      "sha256": "47c7f22335338df2aba38fd16f7fdccf11da325333f0e1e9c51bd242e67ec2ef",
       "media_type": "application/x-ndjson",
       "tracked": false
     },
     {
       "path": "untracked:phase0/direct/boss-man.sqlite",
-      "sha256": "7daf7ecc017a47e3cb7eef4627e85940cd0e3f47be415a42ab016920964e8026",
+      "sha256": "f8f548fa465b6c081ecea7573fc0eef92ba8c431428c0fa592d3cdc6556d9ae4",
       "media_type": "application/vnd.sqlite3",
       "tracked": false
     }
@@ -161,7 +163,7 @@
   "limitations": [
     "This is a deliberately minimal Phase 0 route and API, not the production cockpit or owner authentication system.",
     "The deterministic in-process provider runs inside the task container and makes no network request; an owner-operated real-provider smoke is separate evidence.",
-    "Restart reconciliation conservatively marks an ambiguous run orphaned. Reattaching a demonstrably live process is not implemented in this prototype.",
+    "Restart reconciliation proves the idle container identity and pauses the run before cleanup. In-flight Pi RPC process reattachment is not implemented in this prototype.",
     "The deterministic in-process provider exercises real Pi RPC without network or credentials; remote provider transport is outside this result.",
     "The prototype uses Node's built-in node:sqlite API, which is still marked experimental in Node 25.9.0. A selected production foundation must choose and pin its supported SQLite binding."
   ]

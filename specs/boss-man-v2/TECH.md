@@ -411,6 +411,14 @@ If provider completion is ambiguous or a tool call was in flight, the last two s
 - Server timestamps are authoritative; source timestamps are preserved separately.
 - Schema migrations are transactional and backed up before application.
 
+### Restart and side-effect ledger
+
+C0-03 adds an authoritative SQLite side-effect ledger beside the ordered run events. Container lifecycle, provider responses, tools, snapshot publication, and Git mutations receive a stable run/kind/idempotency identity, a request checksum, an intent record before execution, and an immutable completion or reconciliation receipt afterward. A repeated identity with different intent is rejected.
+
+On restart, the daemon does not infer health from a surviving parent container. It verifies the recorded container ID, image, run label, and liveness, then conservatively stops the prior container after classification. A run with no uncertain work becomes `paused`; a lost provider response or tool completion becomes `reconciliation_required` and is never replayed automatically. A snapshot may be completed from its durable path and expected checksum. A Git checkpoint may be completed from the recorded parent revision plus Boss Man task/run/workspace provenance trailers. Missing or conflicting evidence remains unresolved.
+
+This closes the Phase 0 restart gate without claiming in-flight Pi RPC process reattachment. Production resume starts from the retained native session at a safe boundary unless a future process manager can prove both worker identity and live stream ownership. The recovery UI must expose the uncertain effect and require an explicit resolution before continuation.
+
 ## Security model
 
 The first release assumes one trusted human owner but a public HTTPS subdomain. It treats internet requests, model output, repository content, tools, and downloaded dependencies as untrusted.

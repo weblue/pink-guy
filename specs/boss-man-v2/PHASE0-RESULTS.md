@@ -19,12 +19,13 @@ This checkpoint does not claim that every direct-Pi hard gate is closed. The own
 | `P0-BASELINE` | Pass | Deterministic fixture, checksums, artifact policy, sanitized command runner | Second clean ARM64 reproduction outstanding |
 | Pi lifecycle/custody/resume/child probes | Pass | Native JSONL custody, exact resume/import, blocking compaction export, child provenance | Harness-level evidence, not candidate integration |
 | `P0-PI-ACP-0031-CONTRACT` | Pass | Upstream `pi-acp` reaches required Pi seams | Does not repair AoE authority or Git custody |
-| `P0-DIRECT-FOUNDATION` | Pass | One daemon owns SQLite task/session/run state and a recorded pinned container running Pi RPC plus the workspace shell; it ingests events/custody and marks ambiguous restart state orphaned | Deterministic provider only; active side-effect reconciliation and production auth remain open |
+| `P0-DIRECT-FOUNDATION` | Pass | One daemon owns SQLite task/session/run state and a recorded pinned container running Pi RPC plus the workspace shell; it ingests events/custody and safely pauses verified idle state after restart | Deterministic provider only; production auth remains open |
 | `P0-TASK-POLICY` | Pass | Assignment scope, independent review, protected human decision, completion gate | Retained as the in-memory reference baseline for the integrated proof below |
 | `P0-DIRECT-TASK-POLICY` | Pass | Hashed bearer capabilities and the full worker/reviewer/orchestrator/owner policy pass through the direct HTTP/SQLite transaction and ordered audit stream | Container delivery now passes in C0-02; owner-authenticated issuance remains C0-05 work |
 | `P0-RUNTIME-GIT-RTK` | Pass | Pinned ARM64 task image, restricted mounts, host Git checkpoint, credential isolation, RTK raw/redacted evidence | Foundation-neutral reference contract retained for comparison |
 | `P0-DIRECT-RUNTIME-GIT-RTK` | Pass | The selected daemon owns the container record, credential materialization/lock, host Git capabilities, provenance checkpoint, and RTK artifact receipts | Synthetic reference contract complemented by the live evidence below |
 | `P0-DIRECT-LIVE-PROVIDER` | Pass | Owner-authorized OpenAI Codex turn, Pi Bash→RTK interception, canonical credential immutability, run-copy deletion, and container cleanup through the selected daemon | One bounded turn; no parallel refresh, rate-limit, or fallback claim |
+| `P0-DIRECT-RESTART-RECONCILIATION` | Pass | Durable intent/completion receipts; verified idle pause; uncertain provider/tool hold; checksum snapshot and provenance Git recovery without replay | Conservative pause, not in-flight Pi RPC reattachment; no host/Docker power-cycle |
 | `P0-REMOTE-EDGE` | Pass | Host/Origin/forwarding, outer+inner auth, cookies, CSRF, WebSocket reconnect, streaming, uploads, revocation | Disposable synthetic proxy/auth; no SWAG deployment |
 | `P0-MEMORY-FTS` | Pass | Canonical SQL plus model-less scoped FTS, receipts, deletion/rebuild, adversarial cases | Standalone benchmark not wired into candidate context assembly |
 | `P0-AOE-FOUNDATION-STOP` | Fail/stop | Exact pinned source builds, but conflicts with G-01/G-05 and requires a broad core fork | Source-level stop evidence; no fork patch existed to rebase |
@@ -41,7 +42,7 @@ This checkpoint does not claim that every direct-Pi hard gate is closed. The own
 | G-04 upstream bridge | Pass | Pass at adapter seam | No private Pi or `pi-acp` fork is required. |
 | G-05 Git custody | Pass | Fail/stop | The direct daemon exposes status/diff/checkpoint/commit-request capabilities; the container can edit files but cannot use the shared Git metadata. AoE's sandbox path mounts main Git metadata read-write. |
 | G-06 credentials | Pass | Not run | Synthetic isolation plus an owner-authorized OpenAI Codex turn prove read-only source delivery, private Pi state, one-run OAuth leasing, canonical checksum verification, post-run copy deletion, and no checked-in or printed credential material. |
-| G-07 restart recovery | Partial | Not run | Direct marks a deliberately interrupted run orphaned; active side-effect/container reconciliation remains. |
+| G-07 restart recovery | Pass | Not run | Restart proves recorded container identity before cleanup, preserves native Pi bytes, pauses idle state, recovers checksum/provenance-verifiable snapshot and Git effects, and never replays uncertain provider/tool work. |
 | G-08 task/policy | Pass | Not run | Direct HTTP/SQLite capability transactions enforce assignment, concurrency, fixed-revision independent review, owner decisions, validation, completion, and merge requests. |
 | G-09 model-less portability | Component | Bridge-only | Native import/export and independent FTS rebuild both pass; one governed context path still must combine them. |
 | G-10 public edge | Component | Contract only | The origin contract passes; the selected application's real owner session must run through it. |
@@ -57,12 +58,11 @@ The directional comparison is nevertheless decisive:
 
 ## Recorded decision
 
-The human owner selected the thin direct-Pi control plane as the Boss Man v2 foundation on 2026-07-16, with AoE retained as a UI/runtime reference rather than a dependency. C0-01 and C0-02 are complete. The remaining checkpoints before production use are:
+The human owner selected the thin direct-Pi control plane as the Boss Man v2 foundation on 2026-07-16, with AoE retained as a UI/runtime reference rather than a dependency. C0-01 through C0-03 are complete. The remaining checkpoints before production use are:
 
-1. reconcile active containers and side-effect receipts after restart;
-2. combine native custody and governed FTS through one context receipt path;
-3. run the real owner authentication implementation through the remote-edge suite; and
-4. reproduce the fixture and task image on a second clean ARM64 environment.
+1. combine native custody and governed FTS through one context receipt path;
+2. run the real owner authentication implementation through the remote-edge suite; and
+3. reproduce the fixture and task image on a second clean ARM64 environment.
 
 ## Compose decision
 

@@ -213,6 +213,29 @@ export class Phase0Store {
         request_sha256 TEXT NOT NULL,
         created_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS side_effects (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        request_sha256 TEXT NOT NULL,
+        state TEXT NOT NULL,
+        intent_json TEXT NOT NULL,
+        result_json TEXT,
+        started_at TEXT NOT NULL,
+        completed_at TEXT,
+        reconciled_at TEXT,
+        UNIQUE(run_id, kind, idempotency_key)
+      );
+      CREATE TABLE IF NOT EXISTS side_effect_receipts (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        side_effect_id TEXT NOT NULL REFERENCES side_effects(id),
+        phase TEXT NOT NULL,
+        state TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        receipt_sha256 TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
     `);
     this.ensureColumn("tasks", "parent_task_id", "TEXT");
     this.ensureColumn("tasks", "assigned_worker", "TEXT");
@@ -548,6 +571,10 @@ export class Phase0Store {
     return this.database.prepare("SELECT * FROM runs WHERE id=?").get(id) ?? null;
   }
 
+  runningRuns() {
+    return this.database.prepare("SELECT * FROM runs WHERE state='running' ORDER BY started_at,id").all();
+  }
+
   appendRunEvent(runId, sequence, type, payload) {
     this.database
       .prepare("INSERT OR IGNORE INTO run_events(run_id,sequence,type,payload_json,created_at) VALUES(?,?,?,?,?)")
@@ -566,18 +593,122 @@ export class Phase0Store {
     return this.getRun(runId);
   }
 
-  reconcileRunningRuns() {
-    const running = this.database.prepare("SELECT * FROM runs WHERE state='running'").all();
-    for (const run of running) {
-      const last = this.database.prepare("SELECT COALESCE(MAX(sequence),0) AS value FROM run_events WHERE run_id=?").get(run.id);
-      this.appendRunEvent(run.id, Number(last.value) + 1, "run_reconciliation_required", {
-        priorState: "running",
-        reason: "control_plane_restart",
-        processId: run.process_id,
-      });
-      this.finishRun(run.id, "orphaned");
+  nextRunEventSequence(runId) {
+    const last = this.database.prepare("SELECT COALESCE(MAX(sequence),0) AS value FROM run_events WHERE run_id=?").get(runId);
+    return Number(last.value) + 1;
+  }
+
+  beginSideEffect({ runId, kind, idempotencyKey, intent = {} }) {
+    if (!runId || !kind || !idempotencyKey) {
+      throw codedError("invalid_request", "side-effect run, kind, and idempotency key are required");
     }
-    return running.map((run) => run.id);
+    const requestSha256 = sha256(JSON.stringify({ runId, kind, idempotencyKey, intent }));
+    const prior = this.database.prepare(
+      "SELECT * FROM side_effects WHERE run_id=? AND kind=? AND idempotency_key=?",
+    ).get(runId, kind, idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "side-effect identity was reused for a different intent");
+      }
+      return { effect: this.parseSideEffect(prior), replayed: true };
+    }
+    const id = randomUUID();
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`INSERT INTO side_effects(
+        id,run_id,kind,idempotency_key,request_sha256,state,intent_json,started_at
+      ) VALUES(?,?,?,?,?,?,?,?)`).run(
+        id, runId, kind, idempotencyKey, requestSha256, "intent", JSON.stringify(intent), now,
+      );
+      this.appendSideEffectReceipt({
+        sideEffectId: id, phase: "intent", state: "intent",
+        payload: { runId, kind, idempotencyKey, requestSha256, intent }, createdAt: now,
+      });
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return { effect: this.getSideEffect(id), replayed: false };
+  }
+
+  completeSideEffect(id, result = {}, { reconciled = false } = {}) {
+    const effect = this.getSideEffect(id);
+    if (!effect) throw codedError("not_found", `unknown side effect: ${id}`);
+    if (effect.state === "completed") return { effect, replayed: true };
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`UPDATE side_effects SET
+        state='completed',result_json=?,completed_at=COALESCE(completed_at,?),
+        reconciled_at=CASE WHEN ? THEN ? ELSE reconciled_at END
+        WHERE id=?`).run(JSON.stringify(result), now, reconciled ? 1 : 0, now, id);
+      this.appendSideEffectReceipt({
+        sideEffectId: id, phase: reconciled ? "reconciliation" : "completion",
+        state: "completed", payload: result, createdAt: now,
+      });
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return { effect: this.getSideEffect(id), replayed: false };
+  }
+
+  requireSideEffectReconciliation(id, reason, evidence = {}) {
+    const effect = this.getSideEffect(id);
+    if (!effect) throw codedError("not_found", `unknown side effect: ${id}`);
+    if (effect.state === "completed") return effect;
+    const now = this.clock();
+    const result = { reason, evidence };
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`UPDATE side_effects SET
+        state='reconciliation_required',result_json=?,reconciled_at=? WHERE id=?`)
+        .run(JSON.stringify(result), now, id);
+      this.appendSideEffectReceipt({
+        sideEffectId: id, phase: "reconciliation", state: "reconciliation_required",
+        payload: result, createdAt: now,
+      });
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return this.getSideEffect(id);
+  }
+
+  appendSideEffectReceipt({ sideEffectId, phase, state, payload, createdAt = this.clock() }) {
+    const serialized = JSON.stringify({ sideEffectId, phase, state, payload, createdAt });
+    this.database.prepare(`INSERT INTO side_effect_receipts(
+      side_effect_id,phase,state,payload_json,receipt_sha256,created_at
+    ) VALUES(?,?,?,?,?,?)`).run(sideEffectId, phase, state, JSON.stringify(payload), sha256(serialized), createdAt);
+  }
+
+  parseSideEffect(row) {
+    return row ? { ...row, intent: parseJson(row.intent_json), result: parseJson(row.result_json) } : null;
+  }
+
+  getSideEffect(id) {
+    return this.parseSideEffect(this.database.prepare("SELECT * FROM side_effects WHERE id=?").get(id));
+  }
+
+  findSideEffect(runId, kind, idempotencyKey) {
+    return this.parseSideEffect(this.database.prepare(
+      "SELECT * FROM side_effects WHERE run_id=? AND kind=? AND idempotency_key=?",
+    ).get(runId, kind, idempotencyKey));
+  }
+
+  sideEffectsForRun(runId) {
+    return this.database.prepare("SELECT * FROM side_effects WHERE run_id=? ORDER BY started_at,id")
+      .all(runId).map((row) => this.parseSideEffect(row));
+  }
+
+  sideEffectReceipts(runId) {
+    return this.database.prepare(`SELECT r.* FROM side_effect_receipts r
+      JOIN side_effects e ON e.id=r.side_effect_id WHERE e.run_id=? ORDER BY r.sequence`)
+      .all(runId).map((row) => ({ ...row, payload: parseJson(row.payload_json) }));
   }
 
   recordArtifact({ sessionId, kind, path, sha256, metadata = {} }) {

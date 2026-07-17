@@ -18,8 +18,8 @@
   },
   "sanitized_command": "node phase0/scripts/probe-direct-runtime-git-rtk.mjs /absolute/generated-fixture",
   "exit_code": 0,
-  "started_at": "2026-07-17T13:19:38Z",
-  "ended_at": "2026-07-17T13:19:42Z",
+  "started_at": "2026-07-17T13:58:22Z",
+  "ended_at": "2026-07-17T13:58:27Z",
   "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
   "assertions": [
     {
@@ -53,7 +53,7 @@
         "shared_git_metadata_denied": true,
         "host_status_saw_edit": true,
         "host_diff_saw_edit": true,
-        "checkpoint_revision": "bc31e562f5ad0bb47bc098dbddf79a6ea0eb6cc7",
+        "checkpoint_revision": "0aa2e511c600b04f450e4983887aec0beb0dc263",
         "checkpoint_idempotent": true,
         "provenance_trailers_present": true
       }
@@ -83,7 +83,7 @@
   "artifacts": [
     {
       "path": "phase0/direct/runtime.mjs",
-      "sha256": "b5786c942b59783156ce2b3911d452a669af5b1226a01a1ec86689aa285686fa",
+      "sha256": "a4cdd25a07f2e9b4fe2db810478b78f67ce8638bf4e5f483ba9533933800dc61",
       "media_type": "text/javascript",
       "tracked": true
     },
@@ -95,7 +95,7 @@
     },
     {
       "path": "phase0/direct/git-service.mjs",
-      "sha256": "be0a16c75bc6f0c688f5eb0a6bd9a4e35053725e3a55c8d2acb899f9507a61e8",
+      "sha256": "58953c04800622cbf99452c2f7470a3a33418ae9d7ddaf8e7e5adee327978c7f",
       "media_type": "text/javascript",
       "tracked": true
     },
@@ -107,7 +107,7 @@
     },
     {
       "path": "phase0/direct/control-plane.mjs",
-      "sha256": "7458b8ff7a5fcf77e1716f81282b0d0321e21dc0e102b0027b451aa713f4c75b",
+      "sha256": "c9816e667386057991810eab51964e173d57f9715403fc75438e6e2152d8b325",
       "media_type": "text/javascript",
       "tracked": true
     },
@@ -150,6 +150,6 @@
     "OAuth refresh mutations in private run state are intentionally discarded. Parallel OAuth runs remain disabled until locked reconciliation or a credential broker is approved.",
     "The container uses bridge networking so Pi can reach the host control plane and a future model provider. This is accidental-damage containment, not a malicious-code boundary or an egress firewall.",
     "The Phase 0 runtime adapter uses the local Docker CLI as its Engine transport; the daemon/container authority boundary does not depend on that transport choice.",
-    "Active side-effect and container reconciliation after a daemon crash is C0-03 work."
+    "Crash reconciliation now passes separately in P0-DIRECT-RESTART-RECONCILIATION; this fixture covers the normal completion path."
   ]
 }
