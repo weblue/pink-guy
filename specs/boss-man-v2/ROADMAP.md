@@ -61,7 +61,8 @@ Scope:
 - persistent PTY with resize, reconnect, scrollback, and tmux/cmux attach information;
 - task workspace with diffs, tests, review, artifacts, context snapshots, decisions, and raw evidence;
 - host-owned checkpoint/commit operations and manual merge preparation;
-- local provider/model selection and current run/resource observability;
+- centrally assigned per-run provider/model selection and current run/resource
+  observability;
 - desktop browser tests and local smoke runbook;
 - explicit trusted-LAN listener profile with interface/CIDR validation and a clear “no application auth” warning.
 

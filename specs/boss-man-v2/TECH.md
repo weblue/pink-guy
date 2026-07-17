@@ -86,6 +86,8 @@ The selected direct path owns this API rather than delegating lifecycle to a sec
 The supervisor creates one managed Pi process per active session/run inside a container and communicates directly with `pi --mode rpc`. It never treats terminal scraping as authoritative. It owns:
 
 - container create/start/stop/inspect/remove;
+- resolving the centrally authorized provider/model/thinking policy and passing
+  it to Pi at startup;
 - Pi RPC requests, responses, and notifications;
 - heartbeats and lifecycle reconciliation;
 - turn boundaries and idempotency keys;
@@ -337,6 +339,14 @@ Initial policy:
 1. OpenAI-backed Pi authentication/model while included usage is available.
 2. Claude, Gemini, OpenRouter, or another supported route selectable manually through configurable model policy and evaluation, not embedded in task code.
 3. Prepaid OpenRouter automatic fallback deferred until the core provider/model selection, snapshot, and safe-boundary switch path is proven.
+
+Each orchestrator and task-subagent run stores its resolved provider, model,
+thinking level, policy source, and billing class before process creation. The
+supervisor starts Pi with explicit `--provider` and `--model` arguments (or a
+provider-qualified `--model`) rather than inheriting Pi's last interactive
+selection. The effective model returned by Pi is checked against the run
+record. RPC `set_model` is permitted only through the safe-boundary switch
+workflow; it is not an unrestricted agent capability.
 
 The first release must support a manual safe-boundary model change. Before switching, write a context snapshot and an event describing the old route, failure class, new route, and retry identity. If the last provider request may have completed tool actions, pause for reconciliation instead of replaying. Automatic paid fallback becomes a later policy layer unless the foundation exposes it with little additional risk.
 

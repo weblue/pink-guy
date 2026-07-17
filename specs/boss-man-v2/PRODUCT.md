@@ -329,13 +329,17 @@ The selected mode is visible before the child starts and remains part of its pro
 
 12.2 A project can define model policies by work type, budget, and availability rather than a single hard-coded model, even before automatic cross-provider fallback is enabled.
 
-12.3 The system shows whether credentials represent subscription use, direct API billing, prepaid gateway credit, or an unknown billing mode.
+12.3 Every orchestrator and task-subagent run records its resolved provider,
+model, and thinking policy before launch. Boss Man supplies that selection when
+starting Pi; an agent cannot silently switch itself to a different route.
 
-12.4 Automatic paid fallback is a later objective unless the provider abstraction makes it low-risk and inexpensive to deliver. Until enabled, exhaustion pauses the run with a portable snapshot and a manual model-switch path.
+12.4 The system shows whether credentials represent subscription use, direct API billing, prepaid gateway credit, or an unknown billing mode.
 
-12.5 Spend limits and fallback policies are explicit. Running out of the primary provider's allowance does not automatically authorize unbounded paid usage.
+12.5 Automatic paid fallback is a later objective unless the provider abstraction makes it low-risk and inexpensive to deliver. Until enabled, exhaustion pauses the run with a portable snapshot and a manual model-switch path.
 
-12.6 Provider and model identifiers can change without changing the context or task formats.
+12.6 Spend limits and fallback policies are explicit. Running out of the primary provider's allowance does not automatically authorize unbounded paid usage.
+
+12.7 Provider and model identifiers can change without changing the context or task formats.
 
 ### 13. Failure and recovery
 
