@@ -55,9 +55,9 @@ async function request(path, { method = "GET", body, idempotencyKey, capabilityT
 }
 
 const page = await request("/");
-assert(page.status === 200 && page.value.includes("task-first route"), "minimal board route is missing");
+assert(page.status === 200 && page.value.includes("Task board") && !page.value.includes("chat input"), "task-first operator shell is missing");
 const health = await request("/api/health");
-assert(health.value.authority === "direct_pi_daemon", "daemon authority identity is missing");
+assert(health.value.authority === "boss_man_central_api", "central authority identity is missing");
 const initialBoard = await request("/api/board");
 assert(initialBoard.value.columns.ready.length === 1, "seed task is not ready");
 const workerCapability = authority.store.issueCapability({

@@ -32,7 +32,7 @@ Build a Pi-native control plane that reuses the proven product concepts from Bos
 
 Phase 0 compared two equal candidates: (A) a bounded Agent of Empires core fork running Pi through `pi-acp`, and (B) a direct Pi RPC control plane using SQLite, a task-first web cockpit, the Docker Engine API, and a host-owned Git service. The owner selected the direct-Pi foundation on 2026-07-16. `PHASE0-RESULTS.md` records the evidence and remaining closure gates; `ADR-FOUNDATION.md` records the accepted decision.
 
-Boss Man must have one lifecycle authority. An unchanged Agent of Empires daemon beside an independent Boss Man service is rejected because it duplicates session, worker, worktree, container, authentication, and Git state. AoE is selected only if its reusable runtime and cockpit value exceeds the demonstrated long-term cost of maintaining the necessary core fork; Pi JSONL remains authoritative session evidence in either path.
+Boss Man must have one durable lifecycle authority: the central API and its SQLite transaction log. One leased orchestrator process per project may coordinate its task agents, but it never owns a competing durable database. An unchanged Agent of Empires daemon beside an independent Boss Man service is rejected because it duplicates session, worker, worktree, container, authentication, and Git state. Pi JSONL remains authoritative session evidence.
 
 ## High-level architecture
 
@@ -41,7 +41,8 @@ flowchart LR
     U["Remote browser"] -->|"HTTPS subdomain + conditional Basic Auth"| SWAG["Home-server SWAG"]
     SWAG -->|"LAN or encrypted tunnel"| API["Boss Man control plane and cockpit"]
     API --> DB[("SQLite + audit log")]
-    API --> SUP["Run supervisor"]
+    API --> ORCH["Project orchestrator leases (one active per project)"]
+    ORCH --> SUP["Phase-scoped task supervisors"]
     API --> GIT["Host Git service"]
     API --> ART["Artifact and context store"]
     API --> MEM["Governed memory + FTS5"]
@@ -60,6 +61,8 @@ flowchart LR
 
 The control plane is authoritative for tasks, policies, runs, workspaces, and artifact provenance. Pi's JSONL is authoritative for native session history. Neither database is reconstructed from an LLM summary.
 
+Project orchestrators may be ordinary daemons or tmux-backed processes managed with cmux or SSH. They register, heartbeat, and receive commands through the central API. The API rejects a competing live lease for the same project. Each task-agent run records exactly one initial phase (`implementation`, `test`, or `review`); a phase change creates a new run rather than silently broadening the current agent's authority.
+
 ## Components
 
 ### Control-plane API
@@ -74,6 +77,7 @@ Responsibilities:
 - run lifecycle and recovery coordination;
 - provider/model policy evaluation at safe boundaries;
 - artifact indexing and download.
+- project-orchestrator registration, lease heartbeat, expiry, and command authority.
 
 The selected direct path owns this API rather than delegating lifecycle to a second session manager. The closure implementation uses a small Node HTTP/SQLite seam to prove transactions; Hono, React, and a supported SQLite binding remain reasonable production choices after the closure gates. `UI.md` defines the required cockpit independently of the server framework.
 

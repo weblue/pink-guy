@@ -238,6 +238,9 @@ export default function lifecycleProbe(pi: ExtensionAPI): void {
     await snapshot("turn_end", ctx);
     ctx.ui.notify(`phase0-turn-end:${ctx.sessionManager.getSessionId()}`, "info");
   });
+  pi.on("session_before_compact", async (_event, ctx) => {
+    await snapshot("before_compact", ctx);
+  });
   pi.on("session_before_switch", async (event, ctx) => {
     await snapshot(`before_switch_${event.reason}`, ctx);
   });

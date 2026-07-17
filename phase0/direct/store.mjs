@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 const TASK_STATES = new Set(["backlog", "ready", "in_progress", "review", "blocked", "done"]);
+const RUN_PHASES = new Set(["implementation", "test", "review"]);
 const CAPABILITY_ACTIONS = {
   worker: new Set([
     "read", "claim", "release", "progress", "block", "create_child", "request_review", "propose_complete",
@@ -30,6 +31,12 @@ function sha256(value) {
 
 function codedError(code, message, details = {}) {
   return Object.assign(new Error(message), { code, ...details });
+}
+
+function publicOrchestrator(row) {
+  if (!row) return null;
+  const { token_sha256: ignoredTokenHash, metadata_json: ignoredMetadataJson, ...visible } = row;
+  return { ...visible, metadata: parseJson(row.metadata_json) ?? {} };
 }
 
 export class Phase0Store {
@@ -86,6 +93,19 @@ export class Phase0Store {
         shell_process_id INTEGER,
         started_at TEXT NOT NULL,
         ended_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS project_orchestrators (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        transport TEXT NOT NULL,
+        endpoint TEXT NOT NULL,
+        token_sha256 TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL,
+        lease_expires_at TEXT NOT NULL,
+        last_heartbeat_at TEXT NOT NULL,
+        metadata_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS run_events (
         run_id TEXT NOT NULL REFERENCES runs(id),
@@ -213,6 +233,93 @@ export class Phase0Store {
         request_sha256 TEXT NOT NULL,
         created_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS task_context_items (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL REFERENCES tasks(id),
+        kind TEXT NOT NULL,
+        body TEXT NOT NULL,
+        status TEXT NOT NULL,
+        source_ref TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS memory_events (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id TEXT NOT NULL UNIQUE,
+        record_id TEXT,
+        event_type TEXT NOT NULL,
+        actor_type TEXT NOT NULL,
+        actor_id TEXT NOT NULL,
+        occurred_at TEXT NOT NULL,
+        payload_json TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS memory_records (
+        id TEXT PRIMARY KEY,
+        schema_version TEXT NOT NULL,
+        type TEXT NOT NULL,
+        scope_type TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        project_id TEXT,
+        repository_id TEXT,
+        task_id TEXT,
+        status TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        confidence REAL NOT NULL,
+        trust_class TEXT NOT NULL,
+        author_type TEXT NOT NULL,
+        author_id TEXT NOT NULL,
+        source_refs_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        valid_from TEXT,
+        expires_at TEXT,
+        supersedes_id TEXT,
+        contested_by_json TEXT NOT NULL,
+        tags_json TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        content_hash TEXT NOT NULL,
+        projection_version INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS memory_tombstones (
+        record_id TEXT PRIMARY KEY,
+        content_hash TEXT NOT NULL UNIQUE,
+        deleted_at TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        source_refs_json TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS normalized_evidence (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        repository_id TEXT,
+        task_id TEXT,
+        scope_type TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        trust_class TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        tags_json TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        source_refs_json TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        expires_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS context_receipts (
+        receipt_id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL REFERENCES tasks(id),
+        session_id TEXT,
+        run_id TEXT,
+        query_text TEXT NOT NULL,
+        filters_json TEXT NOT NULL,
+        method_json TEXT NOT NULL,
+        ranked_sources_json TEXT NOT NULL,
+        exclusions_json TEXT NOT NULL,
+        injected_excerpts_json TEXT NOT NULL,
+        receipt_json TEXT NOT NULL,
+        receipt_sha256 TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS side_effects (
         id TEXT PRIMARY KEY,
         run_id TEXT NOT NULL,
@@ -243,6 +350,8 @@ export class Phase0Store {
     this.ensureColumn("tasks", "validation_passed", "INTEGER NOT NULL DEFAULT 0");
     this.ensureColumn("tasks", "requested_review_revision", "TEXT");
     this.ensureColumn("tasks", "merge_requested", "INTEGER NOT NULL DEFAULT 0");
+    this.ensureColumn("tasks", "acceptance_criteria_json", "TEXT NOT NULL DEFAULT '[]'");
+    this.ensureColumn("projects", "repository_id", "TEXT");
     this.ensureColumn("task_events", "actor_role", "TEXT");
     this.ensureColumn("task_events", "run_id", "TEXT");
     this.ensureColumn("task_events", "task_version", "INTEGER");
@@ -250,6 +359,23 @@ export class Phase0Store {
     this.ensureColumn("runs", "image_id", "TEXT");
     this.ensureColumn("runs", "workspace_id", "TEXT");
     this.ensureColumn("runs", "credential_profile", "TEXT");
+    this.ensureColumn("runs", "orchestrator_id", "TEXT");
+    this.ensureColumn("runs", "phase", "TEXT");
+    this.database.exec(`
+      CREATE INDEX IF NOT EXISTS memory_records_scope_status
+        ON memory_records(project_id,repository_id,task_id,scope_type,scope_id,status,trust_class);
+      CREATE INDEX IF NOT EXISTS normalized_evidence_scope_status
+        ON normalized_evidence(project_id,repository_id,task_id,scope_type,scope_id,status,trust_class);
+      CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+        source_key UNINDEXED,
+        title,
+        body,
+        tags,
+        tokenize='porter unicode61'
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS one_active_orchestrator_per_project
+        ON project_orchestrators(project_id) WHERE status='active';
+    `);
   }
 
   ensureColumn(table, column, definition) {
@@ -261,22 +387,142 @@ export class Phase0Store {
     this.database.close();
   }
 
-  seedProjectTask({ projectId = "phase0-project", taskId = "phase0-task", repositoryPath, title, revision = "fixture-revision-1" }) {
+  seedProjectTask({
+    projectId = "phase0-project",
+    repositoryId = `${projectId}-repository`,
+    projectName = "Phase 0 fixture",
+    taskId = "phase0-task",
+    repositoryPath,
+    title,
+    revision = "fixture-revision-1",
+    acceptanceCriteria = [],
+  }) {
     const now = this.clock();
     this.database
-      .prepare("INSERT OR IGNORE INTO projects(id,name,repository_path,created_at) VALUES(?,?,?,?)")
-      .run(projectId, "Phase 0 fixture", repositoryPath, now);
+      .prepare("INSERT OR IGNORE INTO projects(id,name,repository_path,created_at,repository_id) VALUES(?,?,?,?,?)")
+      .run(projectId, projectName, repositoryPath, now, repositoryId);
+    this.database.prepare("UPDATE projects SET repository_id=COALESCE(repository_id,?) WHERE id=?").run(repositoryId, projectId);
     this.database
       .prepare(`INSERT OR IGNORE INTO tasks(
-        id,project_id,title,status,version,updated_at,revision,validation_passed,merge_requested
-      ) VALUES(?,?,?,?,1,?,?,0,0)`)
-      .run(taskId, projectId, title, "ready", now, revision);
+        id,project_id,title,status,version,updated_at,revision,validation_passed,merge_requested,acceptance_criteria_json
+      ) VALUES(?,?,?,?,1,?,?,0,0,?)`)
+      .run(taskId, projectId, title, "ready", now, revision, JSON.stringify(acceptanceCriteria));
     this.database.prepare("UPDATE tasks SET revision=COALESCE(revision,?) WHERE id=?").run(revision, taskId);
     return this.getTask(taskId);
   }
 
   getTask(taskId) {
     return this.database.prepare("SELECT * FROM tasks WHERE id=?").get(taskId) ?? null;
+  }
+
+  getProject(projectId) {
+    return this.database.prepare("SELECT * FROM projects WHERE id=?").get(projectId) ?? null;
+  }
+
+  projects() {
+    return this.database.prepare(`SELECT p.*,
+      (SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id) AS task_count,
+      (SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.status IN ('in_progress','review','blocked')) AS active_task_count
+      FROM projects p ORDER BY p.name,p.id`).all();
+  }
+
+  sessions() {
+    return this.database.prepare(`SELECT s.*,t.project_id,
+      (SELECT r.state FROM runs r WHERE r.session_id=s.id ORDER BY r.started_at DESC LIMIT 1) AS latest_run_state
+      FROM sessions s JOIN tasks t ON t.id=s.task_id ORDER BY s.updated_at DESC,s.id`).all();
+  }
+
+  expireOrchestratorLeases() {
+    const now = this.clock();
+    this.database.prepare(`UPDATE project_orchestrators SET
+      status='expired',updated_at=? WHERE status='active' AND lease_expires_at<=?`).run(now, now);
+  }
+
+  registerProjectOrchestrator({
+    projectId,
+    transport = "daemon",
+    endpoint,
+    metadata = {},
+    leaseSeconds = 90,
+  }) {
+    if (!this.getProject(projectId)) throw codedError("not_found", `unknown project: ${projectId}`);
+    if (!["daemon", "tmux"].includes(transport) || !endpoint) {
+      throw codedError("invalid_request", "orchestrator transport and endpoint are required");
+    }
+    if (!Number.isInteger(leaseSeconds) || leaseSeconds < 15 || leaseSeconds > 3600) {
+      throw codedError("invalid_request", "orchestrator lease must be between 15 and 3600 seconds");
+    }
+    this.expireOrchestratorLeases();
+    const active = this.activeProjectOrchestrator(projectId);
+    if (active) {
+      throw codedError("orchestrator_conflict", `project already has an active orchestrator lease: ${active.id}`);
+    }
+    const id = randomUUID();
+    const token = randomBytes(32).toString("base64url");
+    const now = this.clock();
+    const leaseExpiresAt = new Date(Date.parse(now) + leaseSeconds * 1000).toISOString();
+    this.database.prepare(`INSERT INTO project_orchestrators(
+      id,project_id,transport,endpoint,token_sha256,status,lease_expires_at,last_heartbeat_at,
+      metadata_json,created_at,updated_at
+    ) VALUES(?,?,?,?,?,'active',?,?,?,?,?)`).run(
+      id, projectId, transport, endpoint, sha256(token), leaseExpiresAt, now,
+      JSON.stringify(metadata), now, now,
+    );
+    return { ...publicOrchestrator(this.projectOrchestrator(id)), token };
+  }
+
+  heartbeatProjectOrchestrator({ token, leaseSeconds = 90 }) {
+    if (!token) throw codedError("orchestrator_denied", "orchestrator bearer token is required");
+    if (!Number.isInteger(leaseSeconds) || leaseSeconds < 15 || leaseSeconds > 3600) {
+      throw codedError("invalid_request", "orchestrator lease must be between 15 and 3600 seconds");
+    }
+    this.expireOrchestratorLeases();
+    const row = this.database.prepare(
+      "SELECT * FROM project_orchestrators WHERE token_sha256=? AND status='active'",
+    ).get(sha256(token));
+    if (!row) throw codedError("orchestrator_denied", "orchestrator lease is missing or expired");
+    const now = this.clock();
+    const leaseExpiresAt = new Date(Date.parse(now) + leaseSeconds * 1000).toISOString();
+    this.database.prepare(`UPDATE project_orchestrators SET
+      lease_expires_at=?,last_heartbeat_at=?,updated_at=? WHERE id=?`).run(leaseExpiresAt, now, now, row.id);
+    return publicOrchestrator(this.projectOrchestrator(row.id));
+  }
+
+  authorizeProjectOrchestrator(token, projectId) {
+    if (!token) throw codedError("orchestrator_denied", "orchestrator bearer token is required");
+    this.expireOrchestratorLeases();
+    const row = this.database.prepare(`SELECT * FROM project_orchestrators
+      WHERE token_sha256=? AND project_id=? AND status='active'`).get(sha256(token), projectId);
+    if (!row) throw codedError("orchestrator_denied", "orchestrator lease is missing, expired, or outside project scope");
+    return { ...row, metadata: parseJson(row.metadata_json) ?? {} };
+  }
+
+  releaseProjectOrchestrator(token) {
+    if (!token) throw codedError("orchestrator_denied", "orchestrator bearer token is required");
+    const now = this.clock();
+    const result = this.database.prepare(`UPDATE project_orchestrators SET
+      status='released',updated_at=? WHERE token_sha256=? AND status='active'`).run(now, sha256(token));
+    if (Number(result.changes) !== 1) throw codedError("orchestrator_denied", "active orchestrator lease was not found");
+  }
+
+  projectOrchestrator(id) {
+    const row = this.database.prepare("SELECT * FROM project_orchestrators WHERE id=?").get(id);
+    return row ? { ...row, metadata: parseJson(row.metadata_json) ?? {} } : null;
+  }
+
+  activeProjectOrchestrator(projectId) {
+    this.expireOrchestratorLeases();
+    const row = this.database.prepare(
+      "SELECT * FROM project_orchestrators WHERE project_id=? AND status='active'",
+    ).get(projectId);
+    return row ? { ...row, metadata: parseJson(row.metadata_json) ?? {} } : null;
+  }
+
+  projectOrchestrators() {
+    this.expireOrchestratorLeases();
+    return this.database.prepare(`SELECT o.*,p.name project_name FROM project_orchestrators o
+      JOIN projects p ON p.id=o.project_id ORDER BY p.name,o.created_at`).all()
+      .map((row) => publicOrchestrator(row));
   }
 
   getTaskDetails(taskId) {
@@ -286,6 +532,7 @@ export class Phase0Store {
       ...task,
       validation_passed: Boolean(task.validation_passed),
       merge_requested: Boolean(task.merge_requested),
+      acceptance_criteria: parseJson(task.acceptance_criteria_json) ?? [],
       children: this.database.prepare("SELECT id,title,status,version FROM tasks WHERE parent_task_id=? ORDER BY id").all(taskId),
       reviews: this.database.prepare("SELECT * FROM reviews WHERE task_id=? ORDER BY created_at,id").all(taskId)
         .map((row) => ({ ...row, findings: parseJson(row.findings_json) })),
@@ -295,6 +542,21 @@ export class Phase0Store {
         .map((row) => ({ ...row, evidence: parseJson(row.evidence_json) })),
       merge_requests: this.database.prepare("SELECT * FROM merge_requests WHERE task_id=? ORDER BY created_at,id").all(taskId),
     };
+  }
+
+  recordTaskContextItem({ id = randomUUID(), taskId, kind, body, status = "active", sourceRef = null }) {
+    if (!["assumption", "open_question", "decision"].includes(kind)) {
+      throw codedError("invalid_request", `unsupported task context kind: ${kind}`);
+    }
+    const now = this.clock();
+    this.database.prepare(`INSERT INTO task_context_items(
+      id,task_id,kind,body,status,source_ref,created_at,updated_at
+    ) VALUES(?,?,?,?,?,?,?,?)`).run(id, taskId, kind, body, status, sourceRef, now, now);
+    return this.database.prepare("SELECT * FROM task_context_items WHERE id=?").get(id);
+  }
+
+  taskContextItems(taskId) {
+    return this.database.prepare("SELECT * FROM task_context_items WHERE task_id=? ORDER BY created_at,id").all(taskId);
   }
 
   issueCapability({ role, actorId, taskId, runId = null, actions = [...(CAPABILITY_ACTIONS[role] ?? [])], expiresAt }) {
@@ -558,12 +820,28 @@ export class Phase0Store {
     return this.database.prepare("SELECT * FROM sessions WHERE id=?").get(id) ?? null;
   }
 
-  createRun({ id = randomUUID(), sessionId, processId, shellProcessId, containerId = null, imageId = null, workspaceId = null, credentialProfile = null }) {
+  createRun({
+    id = randomUUID(), sessionId, processId = null, shellProcessId = null, containerId = null, imageId = null,
+    workspaceId = null, credentialProfile = null, orchestratorId = null, phase = "implementation",
+  }) {
+    if (!RUN_PHASES.has(phase)) throw codedError("invalid_request", `unsupported run phase: ${phase}`);
+    if (orchestratorId) {
+      const session = this.getSession(sessionId);
+      const task = session ? this.getTask(session.task_id) : null;
+      const orchestrator = task ? this.activeProjectOrchestrator(task.project_id) : null;
+      if (!task || !orchestrator || orchestrator.id !== orchestratorId) {
+        throw codedError("orchestrator_denied", "run orchestrator must hold the active lease for the task project");
+      }
+    }
     this.database
       .prepare(`INSERT INTO runs(
-        id,session_id,state,process_id,shell_process_id,started_at,container_id,image_id,workspace_id,credential_profile
-      ) VALUES(?,?,?,?,?,?,?,?,?,?)`)
-      .run(id, sessionId, "running", processId, shellProcessId, this.clock(), containerId, imageId, workspaceId, credentialProfile);
+        id,session_id,state,process_id,shell_process_id,started_at,container_id,image_id,workspace_id,
+        credential_profile,orchestrator_id,phase
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(
+        id, sessionId, "running", processId, shellProcessId, this.clock(), containerId, imageId,
+        workspaceId, credentialProfile, orchestratorId, phase,
+      );
     return this.getRun(id);
   }
 

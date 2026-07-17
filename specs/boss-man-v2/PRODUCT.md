@@ -137,6 +137,10 @@ A task can have multiple sequential runs and sessions. A session may be attached
 
 3.9 A human can override any task state, pause autonomous merging, or reopen completed work and can see when the new state conflicts with agent, reviewer, or validation evidence.
 
+3.10 One central Boss Man API manages every registered project. Each project can have at most one active orchestrator lease, whether its process is run as a daemon or in a tmux/cmux session.
+
+3.11 A project orchestrator may run multiple task subagents concurrently when policy and host capacity allow it. Each subagent run is scoped to one recorded phase—initially implementation, test, or review—so its permissions, expected output, and evidence are unambiguous.
+
 ### 4. Session lifecycle
 
 4.1 Starting a task creates or selects a durable Pi session and an isolated workspace.
@@ -154,6 +158,8 @@ A task can have multiple sequential runs and sessions. A session may be attached
 - **Fork:** the complete selected Pi session branch.
 
 The selected mode is visible before the child starts and remains part of its provenance.
+
+4.6 cmux, tmux, terminal clients, and SSH are attach and process-management transports. They do not become alternative task, session, lease, or artifact authorities; all durable changes pass through the central API.
 
 ### 5. Context custody and export
 

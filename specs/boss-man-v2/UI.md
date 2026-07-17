@@ -28,6 +28,8 @@ AoE is not usable as a normal plugin or unchanged companion service for this spe
 
 The application is organized around work state, not conversations.
 
+The diagram below is the C0-04 information-architecture wireframe. It defines placement and hierarchy, not final visual design. The served Phase 0 operator shell implements this three-region shape for projects, orchestrator leases, the task board, sessions, context status, and a terminal/attach placeholder. Detailed interaction wireframes listed at the end of this document remain Phase 1 design work.
+
 ```text
 ┌──────────────────┬────────────────────────────────────┬─────────────────────┐
 │ Projects / Work  │ Main work surface                  │ Inspector           │

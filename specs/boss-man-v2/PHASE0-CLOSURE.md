@@ -70,13 +70,13 @@ The concise current capability and artifact inventory is maintained in `CURRENT-
 | C0-01 task and policy transaction | Completed | `P0-DIRECT-TASK-POLICY`: real HTTP/SQLite capability path, 13 ordered committed events, competing-writer conflict, fixed-revision review, owner decision, and gated merge request |
 | C0-02 runtime/Git/credentials/RTK | Completed | `P0-DIRECT-RUNTIME-GIT-RTK` proves the synthetic isolation/custody path; `P0-DIRECT-LIVE-PROVIDER` proves one owner-authorized OpenAI Codex turn and Pi Bash→RTK artifact path without changing the canonical credential or retaining run copies |
 | C0-03 restart reconciliation | Completed | `P0-DIRECT-RESTART-RECONCILIATION`: intent/completion receipts, verified-idle pause, uncertain response/tool hold, checksum snapshot recovery, and provenance Git recovery with no replay |
-| C0-04 context and retrieval | Pending | Harness custody and standalone FTS contracts pass; unified manifest pending |
+| C0-04 context and retrieval | Completed | `P0-DIRECT-CONTEXT-CUSTODY`: atomic 11-file bundle, native-byte and future-entry preservation, scoped FTS receipt/exclusions, canonical clean-store rebuild, transcript-free Pi bundle child, and one-project-orchestrator lease enforcement with no provider/network use |
 | C0-05 owner authentication | Pending | Disposable edge contract passes; real application auth pending |
 | C0-06 second-host reproduction | Pending | Runs after the integrated closure suite |
 
 ## Sequencing
 
-C0-04 is the next implementation priority because it joins the already-proven native custody and governed FTS primitives through one authoritative context path. C0-05 can proceed independently as long as shared store/schema changes remain integration-owner controlled. C0-06 runs last.
+C0-04 joins the already-proven native custody and governed FTS primitives through one authoritative context path and is complete. C0-05 is next. C0-06 runs last.
 
 The integration owner controls schema changes and final merges. Each implementation task includes unit tests for isolated policy/serialization behavior and integration tests at daemon, container, Git, custody, or edge boundaries as appropriate.
 

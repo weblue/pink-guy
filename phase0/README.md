@@ -4,6 +4,8 @@ This directory contains architecture-neutral fixtures, schemas, and scripts used
 
 The current capability map, data inventory, open questions, and closure sequence are summarized in [`specs/boss-man-v2/CURRENT-STATE.md`](../specs/boss-man-v2/CURRENT-STATE.md).
 
+For the first localhost serve, multi-repository registration, and one-project-orchestrator-per-project workflow, use [`RUNBOOK.md`](../RUNBOOK.md).
+
 Tracked files must contain no real credentials, native user sessions, provider responses, or unredacted runtime logs. Disposable outputs belong outside the repository and are referenced by redacted manifests plus SHA-256 checksums.
 
 ## Create the acceptance fixture
@@ -170,6 +172,15 @@ node ./phase0/scripts/probe-memory-fts.mjs \
 
 The benchmark uses canonical SQLite records and an FTS5 projection with network/model/vector access absent. It validates scope filters, provenance receipts, supersession, deletion/rebuild, exact constraints, stale records, injection text, secret canaries, and cross-project decoys.
 
+## Run the integrated context-custody path
+
+```sh
+node ./phase0/scripts/probe-direct-context-custody.mjs \
+  /absolute/path/to/disposable/task-repo
+```
+
+This C0-04 proof atomically exports the native Pi session, selected branch, task/audit/context items, decisions, canonical and selected memory, complete FTS receipt, artifact references, Git state, manifest, and checksums. It verifies native-byte and future-entry preservation, scoped exclusions before rank, canonical clean-store import and FTS rebuild, and a phase-scoped Pi bundle child that receives provenance without the source transcript. It uses no provider, network request, embedding, or vector index.
+
 ## Inspect the pinned AoE candidate
 
 ```sh
@@ -181,4 +192,4 @@ This is a reproducible source-level stop-rule probe, not an AoE runtime pass. It
 
 ## Why there is no Phase 0 Compose file
 
-No stable multi-service deployment boundary has emerged. The direct candidate is one process with embedded SQLite and managed subprocesses; task containers are daemon-created per run; the edge probe is disposable. A Compose file would imply services and lifecycle ownership that Phase 0 has not selected. Add one when a fixed control-plane, broker, or proxy service boundary is proven.
+No stable fixed multi-service deployment boundary has emerged. The central API embeds SQLite; project orchestrators are dynamic per-project daemon/tmux processes with central leases; task containers are created per run; the edge probe is disposable. A Compose file would imply fixed service lifecycle ownership that Phase 0 has not selected. Add one when a fixed broker, proxy, or other independently deployed service boundary is proven.

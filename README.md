@@ -1,6 +1,6 @@
 # Boss Man v2 planning workspace
 
-This repository contains the planning baseline and executable Phase 0 feasibility work for Boss Man v2. The production application has not started. Current code includes deterministic fixtures, Pi lifecycle/custody probes, a minimal direct-Pi control-plane slice, task-policy and governed-memory contracts, a pinned task image, Git/credential/RTK probes, a disposable remote-edge test, and evidence manifests used to select the foundation.
+This repository contains the planning baseline and executable Phase 0 feasibility work for Boss Man v2. The production application has not started, but the C0-04 central API and localhost operator shell can now be served using the exact instructions in [`RUNBOOK.md`](RUNBOOK.md). Current code includes deterministic fixtures, Pi lifecycle/custody probes, a direct-Pi control-plane slice, project-orchestrator leases, task-policy and governed-memory contracts, atomic context export/import, a pinned task image, Git/credential/RTK probes, a disposable remote-edge test, and evidence manifests used to select the foundation.
 
 The design is organized under [`specs/boss-man-v2`](specs/boss-man-v2):
 

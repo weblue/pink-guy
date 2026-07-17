@@ -78,7 +78,7 @@
   "artifacts": [
     {
       "path": "phase0/pi/lifecycle-probe.ts",
-      "sha256": "d49e9ef91d3652ac00307772a6941026baf6b73ab68cc721b73208e8d333712c",
+      "sha256": "3fb51e7d9299a0ec848d90d73a575bc964b5afd80626bb6f040e4fb5daa4498b",
       "media_type": "text/typescript",
       "tracked": true
     },
