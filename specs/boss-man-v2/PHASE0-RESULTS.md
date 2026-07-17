@@ -20,7 +20,8 @@ This checkpoint does not claim that every direct-Pi hard gate is closed. The own
 | Pi lifecycle/custody/resume/child probes | Pass | Native JSONL custody, exact resume/import, blocking compaction export, child provenance | Harness-level evidence, not candidate integration |
 | `P0-PI-ACP-0031-CONTRACT` | Pass | Upstream `pi-acp` reaches required Pi seams | Does not repair AoE authority or Git custody |
 | `P0-DIRECT-FOUNDATION` | Pass | One daemon owns its SQLite task/session/run state, Pi RPC, shell, events, custody ingestion, orphan reconciliation | Host subprocess and component slice; no production auth/container reconciliation |
-| `P0-TASK-POLICY` | Pass | Assignment scope, independent review, protected human decision, completion gate | In-memory contract not wired transactionally into the direct store |
+| `P0-TASK-POLICY` | Pass | Assignment scope, independent review, protected human decision, completion gate | Retained as the in-memory reference baseline for the integrated proof below |
+| `P0-DIRECT-TASK-POLICY` | Pass | Hashed bearer capabilities and the full worker/reviewer/orchestrator/owner policy pass through the direct HTTP/SQLite transaction and ordered audit stream | Owner-authenticated issuance and container delivery remain C0-05/C0-02 work |
 | `P0-RUNTIME-GIT-RTK` | Pass | Pinned ARM64 task image, restricted mounts, host Git checkpoint, credential isolation, RTK raw/redacted evidence | Shared mechanic not yet invoked by either candidate daemon |
 | `P0-REMOTE-EDGE` | Pass | Host/Origin/forwarding, outer+inner auth, cookies, CSRF, WebSocket reconnect, streaming, uploads, revocation | Disposable synthetic proxy/auth; no SWAG deployment |
 | `P0-MEMORY-FTS` | Pass | Canonical SQL plus model-less scoped FTS, receipts, deletion/rebuild, adversarial cases | Standalone benchmark not wired into candidate context assembly |
@@ -39,7 +40,7 @@ This checkpoint does not claim that every direct-Pi hard gate is closed. The own
 | G-05 Git custody | Component | Fail/stop | Shared host-owned checkpoint passes. AoE's sandbox path mounts main Git metadata read-write. |
 | G-06 credentials | Component | Not run | Shared concurrent run-scoped isolation passes; direct-daemon delivery remains to be wired. |
 | G-07 restart recovery | Partial | Not run | Direct marks a deliberately interrupted run orphaned; active side-effect/container reconciliation remains. |
-| G-08 task/policy | Component | Not run | Direct policy passes independently; transactional store integration remains. |
+| G-08 task/policy | Pass | Not run | Direct HTTP/SQLite capability transactions enforce assignment, concurrency, fixed-revision independent review, owner decisions, validation, completion, and merge requests. |
 | G-09 model-less portability | Component | Bridge-only | Native import/export and independent FTS rebuild both pass; one governed context path still must combine them. |
 | G-10 public edge | Component | Contract only | The origin contract passes; the selected application's real owner session must run through it. |
 

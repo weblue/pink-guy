@@ -16,8 +16,8 @@
   },
   "sanitized_command": "node phase0/scripts/probe-direct-foundation.mjs <generated-fixture>",
   "exit_code": 0,
-  "started_at": "2026-07-16T22:53:15Z",
-  "ended_at": "2026-07-16T22:54:40Z",
+  "started_at": "2026-07-17T00:36:53Z",
+  "ended_at": "2026-07-17T00:36:55Z",
   "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
   "assertions": [
     {
@@ -36,6 +36,7 @@
       "observed": {
         "initial_state": "ready",
         "claimed_state": "in_progress",
+        "task_reads_require_capability": true,
         "idempotent_replay_duplicated_event": false,
         "stale_write_http_status": 409
       }
@@ -51,11 +52,29 @@
       }
     },
     {
+      "name": "upstream Pi loads the Boss Man capability tools without prompt-defined authorization",
+      "passed": true,
+      "observed": {
+        "registered_tools": [
+          "boss_review_submit",
+          "boss_task_block",
+          "boss_task_claim",
+          "boss_task_create_child",
+          "boss_task_get",
+          "boss_task_progress",
+          "boss_task_propose_complete",
+          "boss_task_request_review"
+        ],
+        "identity_source": "server-side hashed bearer capability",
+        "private_pi_fork": false
+      }
+    },
+    {
       "name": "context custody manifests and native Pi session remain durable",
       "passed": true,
       "observed": {
         "custody_manifest_count": 5,
-        "native_session_sha256": "9fe533b233771d08a7cc6c67cd85527627dd9fcac7e1cd6da76ed9f5eb837cf4",
+        "native_session_sha256": "f69ca3c1367c46621b0c6e65fbe7088d1f4f0f9b19367ea76807194d91756b7b",
         "native_session_changed_during_restart": false
       }
     },
@@ -72,7 +91,7 @@
   "artifacts": [
     {
       "path": "phase0/direct/store.mjs",
-      "sha256": "4df1ea93a26de8af238c79ae4e297341c3627d927a9f6ba5e786e516e03cf4a7",
+      "sha256": "04963e231bbff04d91ffae54bf758e97f607717ce0a1f58b47ac5bef541e6dcb",
       "media_type": "text/javascript",
       "tracked": true
     },
@@ -84,25 +103,31 @@
     },
     {
       "path": "phase0/direct/control-plane.mjs",
-      "sha256": "3276cef08f18557329bf79c27c0dd7383580cfb7d1276bff06e497a2ea70b666",
+      "sha256": "9dbc93202672149d9234944df5c27791c03b90af22db9141faae3e5c53c38e7e",
       "media_type": "text/javascript",
       "tracked": true
     },
     {
       "path": "phase0/scripts/probe-direct-foundation.mjs",
-      "sha256": "5459aed3012a468cf98f8e316fdb0cfc91a9f196fecd09df71d6669e99a8560e",
+      "sha256": "74e6193a7148089300ad26b0f097cb86808bc3ff69576c8e7bf954b7e6a8a843",
       "media_type": "text/javascript",
       "tracked": true
     },
     {
+      "path": "phase0/pi/boss-man-extension.ts",
+      "sha256": "e53d4bbb3a53dce0f33fc2bf8295a56adb8d77576506ac8358fa78b1ee98a5fe",
+      "media_type": "text/typescript",
+      "tracked": true
+    },
+    {
       "path": "untracked:phase0/direct/native.pi-session.jsonl",
-      "sha256": "9fe533b233771d08a7cc6c67cd85527627dd9fcac7e1cd6da76ed9f5eb837cf4",
+      "sha256": "f69ca3c1367c46621b0c6e65fbe7088d1f4f0f9b19367ea76807194d91756b7b",
       "media_type": "application/x-ndjson",
       "tracked": false
     },
     {
       "path": "untracked:phase0/direct/boss-man.sqlite",
-      "sha256": "f0ac5a5449d10228f155f340fd2117030ea98768934975b66bc8e96ca90a9db4",
+      "sha256": "a9a9104dbdefc98afd701c1f1a67ba598155361d0133d23bbef06221f0d69a91",
       "media_type": "application/vnd.sqlite3",
       "tracked": false
     }
@@ -114,7 +139,7 @@
     "hard_gates": ["G-01", "G-02", "G-07", "G-09"]
   },
   "limitations": [
-    "This is a deliberately minimal Phase 0 route and API, not the production cockpit, authentication system, or durable public schema.",
+    "This is a deliberately minimal Phase 0 route and API, not the production cockpit or owner authentication system.",
     "Pi and the workspace shell run as host subprocesses in this candidate slice; container, credential, RTK, and restricted Git evidence belongs to P0-04.",
     "Restart reconciliation conservatively marks an ambiguous run orphaned. Reattaching a demonstrably live process is not implemented in this prototype.",
     "The deterministic in-process provider exercises real Pi RPC without network or credentials; remote provider transport is outside this result.",

@@ -90,7 +90,16 @@ node ./phase0/scripts/probe-direct-foundation.mjs /absolute/path/to/disposable/t
 node ./phase0/scripts/probe-task-policy.mjs
 ```
 
-This proves assignment scope, independent fixed-revision review, change requests, owner-only protected decisions, and completion/merge-request gating. The contract is not yet transactionally wired into the direct candidate store.
+This retains the original in-memory policy baseline for comparison. The integrated direct-store proof is the next command.
+
+## Run the integrated direct task-policy boundary
+
+```sh
+node ./phase0/scripts/probe-direct-task-policy.mjs \
+  /absolute/path/to/disposable/task-repo
+```
+
+This C0-01 probe exercises opaque hashed bearer capabilities through the real HTTP and SQLite transaction boundary. It verifies server-derived actor/run scope, idempotency, competing-writer conflicts, child tasks, independent fixed-revision review, validation, owner-only decisions, completion, merge requests, and one ordered audit stream. The direct Pi session also loads the same worker/reviewer actions as upstream `pi.registerTool()` tools.
 
 ## Build and probe the task runtime
 

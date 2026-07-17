@@ -39,12 +39,13 @@ authority.seed();
 const address = await authority.listen();
 const base = `http://127.0.0.1:${address.port}`;
 
-async function request(path, { method = "GET", body, idempotencyKey } = {}) {
+async function request(path, { method = "GET", body, idempotencyKey, capabilityToken } = {}) {
   const response = await fetch(`${base}${path}`, {
     method,
     headers: {
       ...(body ? { "content-type": "application/json" } : {}),
       ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
+      ...(capabilityToken ? { authorization: `Bearer ${capabilityToken}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -59,23 +60,30 @@ const health = await request("/api/health");
 assert(health.value.authority === "direct_pi_daemon", "daemon authority identity is missing");
 const initialBoard = await request("/api/board");
 assert(initialBoard.value.columns.ready.length === 1, "seed task is not ready");
+const workerCapability = authority.store.issueCapability({
+  role: "worker", actorId: "phase0-worker", taskId: "phase0-task", runId: "phase0-claim-run",
+  expiresAt: "2099-01-01T00:00:00.000Z",
+});
 
-const claim = await request("/api/tasks/phase0-task/transition", {
+const claim = await request("/api/tasks/phase0-task/actions/claim", {
   method: "POST",
   idempotencyKey: "phase0-claim-once",
-  body: { expectedVersion: 1, status: "in_progress", actor: "phase0-owner" },
+  capabilityToken: workerCapability.token,
+  body: { expectedVersion: 1, payload: {} },
 });
 assert(claim.status === 201 && claim.value.task.version === 2, "task claim was not committed");
-const replay = await request("/api/tasks/phase0-task/transition", {
+const replay = await request("/api/tasks/phase0-task/actions/claim", {
   method: "POST",
   idempotencyKey: "phase0-claim-once",
-  body: { expectedVersion: 1, status: "in_progress", actor: "phase0-owner" },
+  capabilityToken: workerCapability.token,
+  body: { expectedVersion: 1, payload: {} },
 });
 assert(replay.status === 200 && replay.value.replayed === true, "idempotent task mutation was duplicated");
-const conflict = await request("/api/tasks/phase0-task/transition", {
+const conflict = await request("/api/tasks/phase0-task/actions/progress", {
   method: "POST",
   idempotencyKey: "phase0-stale-write",
-  body: { expectedVersion: 1, status: "blocked", actor: "phase0-owner" },
+  capabilityToken: workerCapability.token,
+  body: { expectedVersion: 1, payload: { text: "stale" } },
 });
 assert(conflict.status === 409, "stale task mutation was not rejected");
 
@@ -83,6 +91,9 @@ const started = await request("/api/tasks/phase0-task/sessions", { method: "POST
 assert(started.status === 201, `session start failed: ${JSON.stringify(started.value)}`);
 const { session, run } = started.value;
 assert(session.state === "idle" && run.state === "running", "durable session/run records are invalid");
+const managed = authority.sessions.get(session.id);
+const registeredTools = JSON.parse(await readFile(managed.env.BOSS_MAN_EXTENSION_EVIDENCE_PATH, "utf8"));
+assert(registeredTools.tools.length === 8 && registeredTools.tools.every((name) => name.startsWith("boss_")), "Pi did not register the Boss Man capability tools");
 
 const shellProof = join(fixture, ".boss-man-shell-proof");
 const shell = await request(`/api/sessions/${session.id}/shell`, {
@@ -124,6 +135,7 @@ const result = {
   task_board_route: true,
   task_idempotency: true,
   optimistic_conflict_rejection: true,
+  pi_capability_tools: registeredTools.tools,
   durable_session_and_run: true,
   direct_pi_rpc: true,
   structured_event_count: prompted.value.events.length,

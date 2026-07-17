@@ -1,6 +1,6 @@
 # Boss Man v2 Phase 0 closure plan
 
-Status: Approved foundation, ready for implementation
+Status: Implementation active
 
 Foundation: Thin direct-Pi control plane
 
@@ -60,6 +60,17 @@ Exit: HTTP, WebSocket, streaming, artifact, reconnect, Host/Origin, outer/inner 
 - Review disk/resource measurements and explicitly choose initial concurrency limits for the 64 GB M1 Max host.
 
 Exit: every still-applicable direct-Pi hard gate has candidate-level evidence, the working tree is reproducible, and the owner authorizes Phase 1.
+
+## Progress
+
+| Work package | Status | Evidence |
+|---|---|---|
+| C0-01 task and policy transaction | Completed | `P0-DIRECT-TASK-POLICY`: real HTTP/SQLite capability path, 13 ordered committed events, competing-writer conflict, fixed-revision review, owner decision, and gated merge request |
+| C0-02 runtime/Git/credentials/RTK | Next | Shared P0-04 contract passes; direct-daemon integration pending |
+| C0-03 restart reconciliation | Pending | Depends on C0-02 side-effect boundaries |
+| C0-04 context and retrieval | Pending | Harness custody and standalone FTS contracts pass; unified manifest pending |
+| C0-05 owner authentication | Pending | Disposable edge contract passes; real application auth pending |
+| C0-06 second-host reproduction | Pending | Runs after the integrated closure suite |
 
 ## Parallelism
 

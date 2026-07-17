@@ -46,7 +46,7 @@ flowchart LR
     API --> ART["Artifact and context store"]
     API --> MEM["Governed memory + FTS5"]
     SUP --> D["Docker Engine"]
-    D --> C1["pi-acp / Pi RPC container"]
+    D --> C1["Pi RPC task container"]
     C1 --> EXT["Boss Man Pi extension"]
     C1 --> RTK["RTK filter + raw tee"]
     EXT -->|"capability API"| API
@@ -75,11 +75,11 @@ Responsibilities:
 - provider/model policy evaluation at safe boundaries;
 - artifact indexing and download.
 
-On the Agent of Empires path, extend its Rust service, SQLite event facilities, React web dashboard, and persistent worker model rather than adding a second service. Its supported plugin API does not expose session creation/control, prompt dispatch, transcript custody, worktree/container policy, arbitrary API routes, or a full board route, so a normal plugin is insufficient. The required core fork is justified only if it stays bounded and passes the upstream-sync rehearsal in `FOUNDATION.md`. On the direct path, Hono, React, and `better-sqlite3` remain reasonable continuity choices. `UI.md` defines the required cockpit independently of either stack.
+The selected direct path owns this API rather than delegating lifecycle to a second session manager. The closure implementation uses a small Node HTTP/SQLite seam to prove transactions; Hono, React, and a supported SQLite binding remain reasonable production choices after the closure gates. `UI.md` defines the required cockpit independently of the server framework.
 
 ### Run supervisor
 
-The supervisor creates one managed Pi process per active session/run inside a container. On the AoE candidate it uses a modified persistent structured worker and `pi-acp`; on the direct candidate it communicates with `pi --mode rpc`. Neither path treats terminal scraping as authoritative. It owns:
+The supervisor creates one managed Pi process per active session/run inside a container and communicates directly with `pi --mode rpc`. It never treats terminal scraping as authoritative. It owns:
 
 - container create/start/stop/inspect/remove;
 - Pi RPC requests, responses, and notifications;
@@ -355,7 +355,7 @@ Primary routes:
 
 Task detail combines specification/readiness, state, dependencies, assignments, live session, Git changes, tests, independent review, artifacts, timeline, conversation, and an interactive workspace terminal. Session detail combines structured timeline, conversation, terminal, context tree/snapshots, injected-memory receipts, model history, RTK output provenance, and controls. The memory route exposes candidates, active/contested/stale records, governed diffs, and evidence links. The complete layout and candidate evaluation live in `UI.md`.
 
-The UI foundation spike compares Agent of Empires plus `pi-acp` with the direct cockpit. If AoE is selected, fork its web dashboard and persistent worker model within the boundary in `FOUNDATION.md`. Otherwise, use xterm.js for terminals and optionally launch code-server as a separately authenticated workspace application. Ghostty and cmux remain local clients rather than server dependencies.
+The direct cockpit is selected. Use xterm.js for terminals and optionally launch code-server as a separately authenticated workspace application. Agent of Empires remains a behavior and interaction reference only; Ghostty and cmux remain local clients rather than server dependencies.
 
 ## Critical sequences
 
