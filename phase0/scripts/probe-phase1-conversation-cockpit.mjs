@@ -57,6 +57,8 @@ assert(
     && shell.value.includes('data-testid="conversation-stream"')
     && shell.value.includes('data-testid="task-board"')
     && shell.value.includes("Ask orchestrator")
+    && shell.value.includes("data-focus-task")
+    && shell.value.includes("task.classList.add(\"focused\")")
     && !shell.value.includes("new Terminal(")
     && !shell.value.includes("xterm"),
   "cockpit does not expose the approved structured conversation workspace",
@@ -97,6 +99,7 @@ process.stdout.write(`${JSON.stringify({
   ask_orchestrator: true,
   persistent_conversation_projection: true,
   structured_change_surface: true,
+  change_to_board_navigation: true,
   browser_terminal_emulator: false,
   provider_requests: 0,
   isolated_root: root,

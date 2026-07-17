@@ -28,13 +28,14 @@ as Jira. The board remains authoritative and direct task controls remain a
 fast path. The owner approved the first-class topic, system-intake
 orchestrator, and read-only source-snapshot directions as D-039 through D-041
 on 2026-07-17. The topic/turn substrate, persistent Pi RPC bridge, sanitized
-event projection, and first provenance-linked task mutation are implemented.
+event projection, cockpit, and provenance-linked task-graph mutations are
+implemented.
 
 ## Capability map
 
 | Area | Current capability | Remaining boundary |
 |---|---|---|
-| Authority and tasks | One central Node API owns the SQLite task projection, capability-scoped agent mutations, audited loopback-owner task creation/scheduling, review, protected decisions, validation, merge-request records, and per-project orchestrator leases. Scheduling atomically assigns the task, moves it to `in_progress`, and queues one phase-scoped command. The durable FIFO command lifecycle supports idempotent enqueue, project-scoped single claim, structured success/failure, and no-replay reconciliation after lease expiry/release. | Task description/criteria editing, dependencies, stop/reconcile commands, and attention UX remain Phase 1. Actual merge/rebase/push is Phase 2. |
+| Authority and tasks | One central Node API owns the SQLite task projection, capability-scoped agent mutations, audited loopback-owner task creation/scheduling, review, protected decisions, validation, merge-request records, and per-project orchestrator leases. Conversation authority can create, update, split, link, annotate, and decision-gate tasks with optimistic versions and exact turn provenance; cross-project references and dependency cycles are rejected, and unfinished dependencies block scheduling/completion. Scheduling atomically assigns the task, moves it to `in_progress`, and queues one phase-scoped command. | Owner task-detail editing/decision resolution, stop/reconcile commands, and attention UX remain Phase 1. Actual merge/rebase/push is Phase 2. |
 | Pi sessions | Upstream Pi runs in RPC mode inside recorded task containers and as a host-managed persistent orchestrator session. Native JSONL lifecycle, model-less resume/import, child provenance, blocking task-session pre-compaction custody, owner-authorized OpenAI Codex task and orchestrator turns, and C0-04 bundle-child consumption pass. Orchestrator conversation runs persist their effective provider/model/thinking policy and native session path; deterministic two-turn coverage and a live `openai-codex/gpt-5.4-mini` turn prove no transcript resend. | Conversation pre-compaction custody, true in-flight RPC reattachment, and production session controls remain. |
 | Containers | The daemon creates, inspects, stops, and removes pinned Linux/ARM64 containers with a non-root user, read-only root, resource limits, minimal mounts, and no Docker socket. Restart reconciliation proves recorded ID, image, label, and liveness before cleanup. | True process reattachment and explicit production egress policy remain. Containers are damage containment, not a malicious-code boundary. |
 | Git and workspaces | The daemon creates a worktree; the container edits files without usable shared Git metadata. Capability routes expose host-generated status/diff and idempotent host-owned checkpoint/commit requests with provenance trailers. A commit made immediately before daemon loss is recovered from parent/provenance identity without duplication. | Checkpoint-versus-final-commit policy, actual merge/rebase/push, conflicts, and worktree cleanup remain. |
@@ -44,8 +45,8 @@ event projection, and first provenance-linked task mutation are implemented.
 | Memory and retrieval | The canonical memory/evidence schema and FTS5 projection are integrated into the central SQLite store. Eligibility is filtered before BM25 rank; receipts retain filters, scores, revisions, source refs, exclusions, excerpt checksums, and token use. A clean import rebuilds FTS from canonical JSON. | Semantic/vector retrieval remains deferred and rebuildable. Promotion UI and production mutation policy remain. |
 | Restart recovery | SQLite records immutable intent/completion/reconciliation receipts. Startup checks container identity/liveness, pauses verified idle runs, holds uncertain response/tool effects without replay, recovers checksum-valid snapshots, and recovers parent/provenance-valid Git commits without duplication. | The prototype conservatively stops the old container; true Pi RPC reattachment and host/Docker power-cycle coverage remain production work. |
 | Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
-| Developer cockpit | The loopback Phase 1 cockpit keeps projects and the multi-project board visible while adding New topic, project Ask orchestrator, a persistent conversation composer, reconnectable Pi text/lifecycle state, structured task-change cards, synchronized topic/board projections, sessions, commands, and tmux/SSH attach guidance. Direct task creation/scheduling remains a secondary fast path. | Task detail editing/dependencies/reconciliation, diffs/tests/review/source/decision/custody inspectors, and optional trusted-LAN access remain. D-043 defers a browser PTY. |
-| Orchestrator interaction | First-class topic/conversation projections, central model policy, ordered turns/events, scoped leases, one-turn claiming, no-replay lease-loss reconciliation, persistent managed Pi RPC runs, sanitized reconnect streams, provenance-linked task creation, and the first browser workspace are implemented. Two-turn deterministic coverage and an owner-authorized live turn prove no history resend. D-039 through D-043 govern the accepted slice. | Further task-graph tools, conversation custody, and repository import/source snapshots remain. |
+| Developer cockpit | The loopback Phase 1 cockpit keeps projects and the multi-project board visible while adding New topic, project Ask orchestrator, a persistent conversation composer, reconnectable Pi text/lifecycle state, structured task-change cards with board navigation, synchronized topic/board projections, sessions, commands, and tmux/SSH attach guidance. Direct task creation/scheduling remains a secondary fast path. | Task detail/decision/reconciliation, diffs/tests/review/source/custody inspectors, and optional trusted-LAN access remain. D-043 defers a browser PTY. |
+| Orchestrator interaction | First-class topic/conversation projections, central model policy, ordered turns/events, scoped leases, one-turn claiming, no-replay lease-loss reconciliation, persistent managed Pi RPC runs, sanitized reconnect streams, audited create/update/split/dependency/assumption/decision task mutations, and the first browser workspace are implemented. Two-turn deterministic coverage and an owner-authorized live turn prove no history resend. D-039 through D-043 govern the accepted slice. | Conversation custody and repository import/source snapshots remain. |
 
 ## Artifact and data layout
 
@@ -95,9 +96,9 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 
 ## Next steps
 
-1. **Phase 1 — orchestrator task deltas and custody.** Expand the landed
-   managed Pi bridge beyond task creation to update/split/dependency,
-   assumption, and decision tools, then add model-less conversation custody.
+1. **Phase 1 — conversation custody.** Extend the model-less bundle with topic,
+   conversation turn/run, and task-origin records; make it the blocking
+   precondition for compaction, scope transfer, and model/provider switching.
 2. **Phase 1 — repository and source intake.** Add host-owned repository URL
    import plus immutable manual/Jira snapshots with no write-back.
 3. **Phase 1 — task detail and reconciliation.** Add description/acceptance

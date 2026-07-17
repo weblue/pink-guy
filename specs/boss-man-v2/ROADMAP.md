@@ -50,11 +50,12 @@ and
 [`../phase1-orchestrator-conversations/TECH.md`](../phase1-orchestrator-conversations/TECH.md);
 its durable topic/intake scope was approved as D-039 through D-041 on
 2026-07-17. Its additive topic/conversation store, local API, scoped leases,
-managed persistent Pi RPC bridge, sanitized reconnect stream, and first
-provenance-linked task mutation are implemented. The first New topic/Ask
-orchestrator workspace, conversation stream, change cards, and synchronized
-board projection are also implemented. Further task-graph tools,
-repository/source intake, custody, and deeper inspectors remain.
+managed persistent Pi RPC bridge, sanitized reconnect stream, and audited
+create/update/split/dependency/assumption/decision task mutations are
+implemented. The first New topic/Ask orchestrator workspace, conversation
+stream, navigable change cards, and synchronized board projection are also
+implemented. Repository/source intake, conversation custody, and deeper
+inspectors remain.
 
 Scope:
 

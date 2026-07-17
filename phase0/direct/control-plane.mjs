@@ -213,6 +213,40 @@ export class DirectControlPlane {
     });
   }
 
+  async applyConversationTaskMutation({ token, turnId, body, idempotencyKey }) {
+    if (body.operation === "create") {
+      const active = this.store.activeConversationTurnForLease(token, turnId);
+      if (!active.conversation.project_id) {
+        throw Object.assign(new Error("an unbound topic cannot create executable tasks"), {
+          code: "project_required",
+        });
+      }
+      const project = this.store.getProject(active.conversation.project_id);
+      return this.store.createConversationTask({
+        token,
+        turnId,
+        title: body.title,
+        acceptanceCriteria: body.acceptanceCriteria ?? [],
+        revision: await repositoryRevision(project.repository_path),
+        idempotencyKey,
+      });
+    }
+    return this.store.mutateConversationTask({
+      token,
+      turnId,
+      operation: body.operation,
+      taskId: body.taskId,
+      expectedVersion: body.expectedVersion,
+      title: body.title,
+      acceptanceCriteria: body.acceptanceCriteria,
+      dependsOnTaskId: body.dependsOnTaskId,
+      body: body.body,
+      category: body.category,
+      question: body.question,
+      idempotencyKey,
+    });
+  }
+
   async startTask(taskId, { orchestratorToken = null, phase = "implementation" } = {}) {
     const task = this.store.getTask(taskId);
     if (!task) throw new Error(`unknown task: ${taskId}`);
@@ -832,25 +866,10 @@ export class DirectControlPlane {
       );
       if (request.method === "POST" && conversationTaskMutation) {
         const body = await readBody(request);
-        if (body.operation !== "create") {
-          throw Object.assign(new Error("only create task mutations are implemented"), { code: "invalid_request" });
-        }
-        const turn = this.store.activeConversationTurnForLease(
-          bearerToken(request),
-          conversationTaskMutation[1],
-        );
-        if (!turn.conversation.project_id) {
-          throw Object.assign(new Error("an unbound topic cannot create executable tasks"), {
-            code: "project_required",
-          });
-        }
-        const project = this.store.getProject(turn.conversation.project_id);
-        const result = this.store.createConversationTask({
+        const result = await this.applyConversationTaskMutation({
           token: bearerToken(request),
           turnId: conversationTaskMutation[1],
-          title: body.title,
-          acceptanceCriteria: body.acceptanceCriteria ?? [],
-          revision: await repositoryRevision(project.repository_path),
+          body,
           idempotencyKey: request.headers["idempotency-key"],
         });
         return json(response, result.replayed ? 200 : 201, result);
@@ -861,25 +880,14 @@ export class DirectControlPlane {
       );
       if (request.method === "POST" && activeConversationTaskMutation) {
         const body = await readBody(request);
-        if (body.operation !== "create") {
-          throw Object.assign(new Error("only create task mutations are implemented"), { code: "invalid_request" });
-        }
         const active = this.store.activeConversationTurnForConversation(
           bearerToken(request),
           activeConversationTaskMutation[1],
         );
-        if (!active.conversation.project_id) {
-          throw Object.assign(new Error("an unbound topic cannot create executable tasks"), {
-            code: "project_required",
-          });
-        }
-        const project = this.store.getProject(active.conversation.project_id);
-        const result = this.store.createConversationTask({
+        const result = await this.applyConversationTaskMutation({
           token: bearerToken(request),
           turnId: active.turn.id,
-          title: body.title,
-          acceptanceCriteria: body.acceptanceCriteria ?? [],
-          revision: await repositoryRevision(project.repository_path),
+          body,
           idempotencyKey: request.headers["idempotency-key"],
         });
         return json(response, result.replayed ? 200 : 201, result);

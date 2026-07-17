@@ -292,6 +292,15 @@ export class Phase0Store {
         created_at TEXT NOT NULL,
         PRIMARY KEY (task_id, task_version)
       );
+      CREATE TABLE IF NOT EXISTS task_dependencies (
+        task_id TEXT NOT NULL REFERENCES tasks(id),
+        depends_on_task_id TEXT NOT NULL REFERENCES tasks(id),
+        conversation_id TEXT REFERENCES orchestrator_conversations(id),
+        turn_id TEXT REFERENCES conversation_turns(id),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (task_id, depends_on_task_id),
+        CHECK (task_id <> depends_on_task_id)
+      );
       CREATE TABLE IF NOT EXISTS run_events (
         run_id TEXT NOT NULL REFERENCES runs(id),
         sequence INTEGER NOT NULL,
@@ -568,6 +577,8 @@ export class Phase0Store {
         ON conversation_turns(state,created_at,conversation_id,sequence);
       CREATE INDEX IF NOT EXISTS conversation_runs_turn_state
         ON conversation_runs(turn_id,state,started_at);
+      CREATE INDEX IF NOT EXISTS task_dependencies_reverse
+        ON task_dependencies(depends_on_task_id,task_id);
       CREATE UNIQUE INDEX IF NOT EXISTS one_active_orchestration_lease_per_scope
         ON orchestration_leases(scope_type,scope_id) WHERE status='active';
     `);
@@ -697,6 +708,15 @@ export class Phase0Store {
         task: this.parseAuditEvent(priorAudit).current,
         command: publicOrchestratorCommand(priorCommand),
       };
+    }
+    const unresolvedDependency = this.database.prepare(`SELECT t.id,t.title,t.status
+      FROM task_dependencies d JOIN tasks t ON t.id=d.depends_on_task_id
+      WHERE d.task_id=? AND t.status<>'done' ORDER BY t.id LIMIT 1`).get(taskId);
+    if (unresolvedDependency) {
+      throw codedError(
+        "transition_denied",
+        `task dependency is not complete: ${unresolvedDependency.id}`,
+      );
     }
     const orchestrator = this.activeProjectOrchestrator(task.project_id);
     if (!orchestrator) {
@@ -1425,6 +1445,359 @@ export class Phase0Store {
     return { replayed: false, task: this.getTaskDetails(id) };
   }
 
+  mutateConversationTask({
+    token,
+    turnId,
+    operation,
+    taskId,
+    expectedVersion,
+    title = null,
+    acceptanceCriteria = null,
+    dependsOnTaskId = null,
+    body = null,
+    category = null,
+    question = null,
+    idempotencyKey,
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    if (!["update", "split", "add_dependency", "record_assumption", "require_decision"].includes(operation)) {
+      throw codedError("invalid_request", `unsupported conversation task mutation: ${operation}`);
+    }
+    const { turn, conversation } = this.activeConversationTurnForLease(token, turnId);
+    if (!conversation.project_id) {
+      throw codedError("project_required", "an unbound topic cannot mutate executable tasks");
+    }
+    const task = this.getTask(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    if (task.project_id !== conversation.project_id) {
+      throw codedError("orchestrator_denied", "task mutation is outside the conversation project scope");
+    }
+    if (task.status === "done") {
+      throw codedError("transition_denied", "completed tasks must be reopened before mutation");
+    }
+    if (!Number.isInteger(expectedVersion)) {
+      throw codedError("invalid_request", "expected task version is required");
+    }
+
+    let normalizedTitle = null;
+    let normalizedCriteria = null;
+    let normalizedBody = null;
+    let normalizedCategory = null;
+    let normalizedQuestion = null;
+    if (operation === "update" || operation === "split") {
+      normalizedTitle = typeof title === "string" ? title.trim() : "";
+      if (!normalizedTitle || normalizedTitle.length > 500 || normalizedTitle.includes("\0")) {
+        throw codedError("invalid_request", "task title must be between 1 and 500 characters");
+      }
+      if (
+        !Array.isArray(acceptanceCriteria) || acceptanceCriteria.length > 100
+        || acceptanceCriteria.some(
+          (item) => typeof item !== "string" || !item.trim() || item.length > 2000,
+        )
+      ) {
+        throw codedError("invalid_request", "acceptance criteria must be a list of non-empty strings");
+      }
+      normalizedCriteria = acceptanceCriteria.map((item) => item.trim());
+    } else if (operation === "add_dependency") {
+      if (!dependsOnTaskId || dependsOnTaskId === taskId) {
+        throw codedError("invalid_request", "a task must depend on a different task");
+      }
+      const dependency = this.getTask(dependsOnTaskId);
+      if (!dependency) throw codedError("not_found", `unknown dependency task: ${dependsOnTaskId}`);
+      if (dependency.project_id !== conversation.project_id) {
+        throw codedError("orchestrator_denied", "dependency is outside the conversation project scope");
+      }
+      const cycle = this.database.prepare(`WITH RECURSIVE reachable(id) AS (
+        VALUES(?)
+        UNION
+        SELECT d.depends_on_task_id FROM task_dependencies d JOIN reachable r ON d.task_id=r.id
+      ) SELECT 1 value FROM reachable WHERE id=? LIMIT 1`).get(dependsOnTaskId, taskId);
+      if (cycle) throw codedError("transition_denied", "task dependency would create a cycle");
+    } else if (operation === "record_assumption") {
+      normalizedBody = typeof body === "string" ? body.trim() : "";
+      if (!normalizedBody || normalizedBody.length > 20_000 || normalizedBody.includes("\0")) {
+        throw codedError("invalid_request", "assumption must be between 1 and 20000 characters");
+      }
+    } else if (operation === "require_decision") {
+      normalizedCategory = typeof category === "string" ? category.trim() : "";
+      normalizedQuestion = typeof question === "string" ? question.trim() : "";
+      if (
+        !normalizedCategory || normalizedCategory.length > 200 || normalizedCategory.includes("\0")
+        || !normalizedQuestion || normalizedQuestion.length > 20_000 || normalizedQuestion.includes("\0")
+      ) {
+        throw codedError("invalid_request", "decision category and question are required");
+      }
+    }
+
+    const request = {
+      action: `conversation_${operation}`,
+      conversationId: conversation.id,
+      turnId,
+      taskId,
+      expectedVersion,
+      title: normalizedTitle,
+      acceptanceCriteria: normalizedCriteria,
+      dependsOnTaskId,
+      body: normalizedBody,
+      category: normalizedCategory,
+      question: normalizedQuestion,
+    };
+    const requestSha256 = sha256(JSON.stringify(request));
+    const expectedType = {
+      update: "task_updated",
+      split: "task_split",
+      add_dependency: "task_dependency_added",
+      record_assumption: "task_assumption_recorded",
+      require_decision: "decision_required",
+    }[operation];
+    const priorEvent = this.database.prepare(
+      "SELECT * FROM audit_events WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (priorEvent) {
+      if (priorEvent.request_sha256 !== requestSha256 || priorEvent.type !== expectedType) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different task mutation");
+      }
+      const prior = this.parseAuditEvent(priorEvent);
+      const childTaskId = prior.payload?.childTaskId ?? null;
+      return {
+        replayed: true,
+        operation,
+        task: this.getTaskDetails(taskId),
+        childTask: childTaskId ? this.getTaskDetails(childTaskId) : null,
+      };
+    }
+    if (expectedVersion !== task.version) {
+      throw codedError(
+        "version_conflict",
+        `task version conflict: expected ${expectedVersion}, current ${task.version}`,
+      );
+    }
+    if (
+      operation === "add_dependency"
+      && this.database.prepare(
+        "SELECT 1 value FROM task_dependencies WHERE task_id=? AND depends_on_task_id=?",
+      ).get(taskId, dependsOnTaskId)
+    ) {
+      throw codedError("transition_denied", "task dependency already exists");
+    }
+
+    const now = this.clock();
+    const nextVersion = task.version + 1;
+    const prior = this.getTaskDetails(taskId);
+    const actor = `orchestrator:${conversation.id}`;
+    let childTaskId = null;
+    let contextItemId = null;
+    let decisionId = null;
+    const eventPayload = { operation, turnId };
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      if (operation === "update") {
+        this.database.prepare(`UPDATE tasks SET
+          title=?,acceptance_criteria_json=?,version=?,updated_at=? WHERE id=? AND version=?`).run(
+          normalizedTitle,
+          JSON.stringify(normalizedCriteria),
+          nextVersion,
+          now,
+          taskId,
+          task.version,
+        );
+        Object.assign(eventPayload, { title: normalizedTitle, acceptanceCriteria: normalizedCriteria });
+      } else if (operation === "split") {
+        childTaskId = randomUUID();
+        this.database.prepare(`INSERT INTO tasks(
+          id,project_id,title,status,version,updated_at,parent_task_id,revision,
+          validation_passed,merge_requested,acceptance_criteria_json
+        ) VALUES(?,?,?,'ready',1,?,?,?,0,0,?)`).run(
+          childTaskId,
+          task.project_id,
+          normalizedTitle,
+          now,
+          taskId,
+          task.revision,
+          JSON.stringify(normalizedCriteria),
+        );
+        this.database.prepare(
+          "UPDATE tasks SET version=?,updated_at=? WHERE id=? AND version=?",
+        ).run(nextVersion, now, taskId, task.version);
+        Object.assign(eventPayload, {
+          childTaskId,
+          title: normalizedTitle,
+          acceptanceCriteria: normalizedCriteria,
+        });
+      } else if (operation === "add_dependency") {
+        this.database.prepare(`INSERT INTO task_dependencies(
+          task_id,depends_on_task_id,conversation_id,turn_id,created_at
+        ) VALUES(?,?,?,?,?)`).run(taskId, dependsOnTaskId, conversation.id, turnId, now);
+        this.database.prepare(
+          "UPDATE tasks SET version=?,updated_at=? WHERE id=? AND version=?",
+        ).run(nextVersion, now, taskId, task.version);
+        Object.assign(eventPayload, { dependsOnTaskId });
+      } else if (operation === "record_assumption") {
+        contextItemId = randomUUID();
+        this.database.prepare(`INSERT INTO task_context_items(
+          id,task_id,kind,body,status,source_ref,created_at,updated_at
+        ) VALUES(?,?,'assumption',?,'active',?,?,?)`).run(
+          contextItemId,
+          taskId,
+          normalizedBody,
+          `conversation:${conversation.id}:turn:${turnId}`,
+          now,
+          now,
+        );
+        this.database.prepare(
+          "UPDATE tasks SET version=?,updated_at=? WHERE id=? AND version=?",
+        ).run(nextVersion, now, taskId, task.version);
+        Object.assign(eventPayload, { contextItemId, body: normalizedBody });
+      } else {
+        decisionId = randomUUID();
+        this.database.prepare(`INSERT INTO decision_gates(
+          id,task_id,category,question,status,created_at
+        ) VALUES(?,?,?,?,'decision_required',?)`).run(
+          decisionId,
+          taskId,
+          normalizedCategory,
+          normalizedQuestion,
+          now,
+        );
+        this.database.prepare(
+          "UPDATE tasks SET version=?,updated_at=? WHERE id=? AND version=?",
+        ).run(nextVersion, now, taskId, task.version);
+        Object.assign(eventPayload, {
+          decisionId,
+          category: normalizedCategory,
+          question: normalizedQuestion,
+        });
+      }
+
+      const changed = this.database.prepare("SELECT changes() AS value").get();
+      if (Number(changed.value) !== 1) throw codedError("version_conflict", "task changed during mutation");
+      this.database.prepare(`INSERT INTO task_origins(
+        task_id,task_version,topic_id,conversation_id,turn_id,parent_task_id,created_at
+      ) VALUES(?,?,?,?,?,?,?)`).run(
+        taskId,
+        nextVersion,
+        conversation.topic_id,
+        conversation.id,
+        turnId,
+        task.parent_task_id,
+        now,
+      );
+      if (childTaskId) {
+        this.database.prepare(`INSERT INTO task_origins(
+          task_id,task_version,topic_id,conversation_id,turn_id,parent_task_id,created_at
+        ) VALUES(?,?,?,?,?,?,?)`).run(
+          childTaskId,
+          1,
+          conversation.topic_id,
+          conversation.id,
+          turnId,
+          taskId,
+          now,
+        );
+      }
+      const current = this.getTaskDetails(taskId);
+      this.database.prepare(`INSERT INTO task_events(
+        task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+        actor_role,run_id,task_version
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        taskId,
+        expectedType,
+        actor,
+        task.status,
+        task.status,
+        JSON.stringify(eventPayload),
+        idempotencyKey,
+        now,
+        "orchestrator",
+        null,
+        nextVersion,
+      );
+      this.database.prepare(`INSERT INTO audit_events(
+        task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+        idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        taskId,
+        expectedType,
+        actor,
+        "orchestrator",
+        null,
+        null,
+        JSON.stringify(prior),
+        JSON.stringify(current),
+        JSON.stringify(eventPayload),
+        idempotencyKey,
+        requestSha256,
+        now,
+      );
+      if (childTaskId) {
+        const child = this.getTaskDetails(childTaskId);
+        const childPayload = {
+          operation: "create_from_split",
+          parentTaskId: taskId,
+          turnId,
+          title: normalizedTitle,
+          acceptanceCriteria: normalizedCriteria,
+        };
+        this.database.prepare(`INSERT INTO task_events(
+          task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+          actor_role,run_id,task_version
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+          childTaskId,
+          "task_created_from_split",
+          actor,
+          null,
+          "ready",
+          JSON.stringify(childPayload),
+          `${idempotencyKey}:child`,
+          now,
+          "orchestrator",
+          null,
+          1,
+        );
+        this.database.prepare(`INSERT INTO audit_events(
+          task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+          idempotency_key,request_sha256,created_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+          childTaskId,
+          "task_created_from_split",
+          actor,
+          "orchestrator",
+          null,
+          null,
+          "null",
+          JSON.stringify(child),
+          JSON.stringify(childPayload),
+          `${idempotencyKey}:child`,
+          sha256(JSON.stringify({ ...request, childTaskId })),
+          now,
+        );
+      }
+      this.appendConversationEvent(conversation.id, turnId, "task_mutation_applied", "orchestrator", {
+        operation,
+        taskId,
+        taskVersion: nextVersion,
+        childTaskId,
+        title: normalizedTitle ?? task.title,
+        dependsOnTaskId,
+        contextItemId,
+        assumption: normalizedBody,
+        decisionId,
+        decisionCategory: normalizedCategory,
+        decisionQuestion: normalizedQuestion,
+      }, now);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      replayed: false,
+      operation,
+      task: this.getTaskDetails(taskId),
+      childTask: childTaskId ? this.getTaskDetails(childTaskId) : null,
+    };
+  }
+
   completeConversationTurn({ token, turnId, state, result = {} }) {
     if (!["waiting_for_owner", "completed", "failed", "cancelled"].includes(state)) {
       throw codedError("invalid_request", "unsupported conversation turn completion state");
@@ -1787,6 +2160,15 @@ export class Phase0Store {
         "SELECT * FROM task_origins WHERE task_id=? AND task_version=?",
       ).get(taskId, task.version) ?? null,
       children: this.database.prepare("SELECT id,title,status,version FROM tasks WHERE parent_task_id=? ORDER BY id").all(taskId),
+      dependencies: this.database.prepare(`SELECT
+        d.depends_on_task_id id,t.title,t.status,t.version,d.conversation_id,d.turn_id,d.created_at
+        FROM task_dependencies d JOIN tasks t ON t.id=d.depends_on_task_id
+        WHERE d.task_id=? ORDER BY d.created_at,d.depends_on_task_id`).all(taskId),
+      dependents: this.database.prepare(`SELECT
+        d.task_id id,t.title,t.status,t.version,d.conversation_id,d.turn_id,d.created_at
+        FROM task_dependencies d JOIN tasks t ON t.id=d.task_id
+        WHERE d.depends_on_task_id=? ORDER BY d.created_at,d.task_id`).all(taskId),
+      context_items: this.taskContextItems(taskId),
       reviews: this.database.prepare("SELECT * FROM reviews WHERE task_id=? ORDER BY created_at,id").all(taskId)
         .map((row) => ({ ...row, findings: parseJson(row.findings_json) })),
       decision_gates: this.database.prepare("SELECT * FROM decision_gates WHERE task_id=? ORDER BY created_at,id").all(taskId)
@@ -2033,10 +2415,14 @@ export class Phase0Store {
     const validation = this.database.prepare(`SELECT * FROM validations WHERE
       task_id=? AND revision=? AND status='passed' ORDER BY created_at DESC LIMIT 1`).get(taskId, task.revision);
     const openDecision = this.database.prepare("SELECT id FROM decision_gates WHERE task_id=? AND status='decision_required' LIMIT 1").get(taskId);
+    const unresolvedDependency = this.database.prepare(`SELECT t.id FROM task_dependencies d
+      JOIN tasks t ON t.id=d.depends_on_task_id
+      WHERE d.task_id=? AND t.status<>'done' LIMIT 1`).get(taskId);
     const reasons = [];
     if (latestReview?.disposition !== "approve") reasons.push("independent_review_required");
     if (!validation || !task.validation_passed) reasons.push("validation_required");
     if (openDecision) reasons.push("human_decision_required");
+    if (unresolvedDependency) reasons.push("unresolved_dependency");
     return { allowed: reasons.length === 0, reasons, reviewedRevision: latestReview?.disposition === "approve" ? latestReview.revision : null };
   }
 

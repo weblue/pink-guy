@@ -1,6 +1,6 @@
 # Boss Man local development runbook
 
-Status: Phase 1 local cockpit (first control-loop slice)
+Status: Phase 1 local cockpit (conversation and task-graph slice)
 
 The current application can be served locally for multi-project observability
 and durable project-orchestrator command delivery. The local-smoke profile
@@ -155,6 +155,8 @@ node ./phase0/scripts/probe-phase1-conversation-runtime.mjs \
   /Users/ND139178/Documents/boss-man
 node ./phase0/scripts/probe-phase1-conversation-cockpit.mjs \
   /Users/ND139178/Documents/boss-man
+node ./phase0/scripts/probe-phase1-task-graph-mutations.mjs \
+  /Users/ND139178/Documents/boss-man
 ```
 
 ## Current execution boundary
@@ -162,12 +164,14 @@ node ./phase0/scripts/probe-phase1-conversation-cockpit.mjs \
 The served Phase 1 cockpit shows projects, topics, the task board, sessions,
 project-orchestrator leases, recent commands, local create/schedule controls,
 and a reconnectable Pi RPC conversation workspace with structured task-change
-cards. The existing automated probes exercise real task claiming, Pi RPC,
+cards. The orchestrator can create, update, split, link, annotate, and
+decision-gate tasks inside its project with exact turn provenance. The
+existing automated probes exercise real task claiming, Pi RPC,
 containers, worktrees, host Git checkpoints, RTK evidence, and context export.
-Task editing/dependencies, reconciliation actions, and deeper
-diff/test/review/source/decision/custody inspectors are the next local-product
-slices, not authentication prerequisites. D-043 defers a browser PTY;
-tmux/SSH remains the current exact-session attach path.
+Conversation custody, owner reconciliation/decision controls, and deeper
+diff/test/review/source/custody inspectors are the next local-product slices,
+not authentication prerequisites. D-043 defers a browser PTY; tmux/SSH remains
+the current exact-session attach path.
 
 To exercise the complete model-less C0-04 context path:
 

@@ -2,12 +2,11 @@
 
 This repository contains the specification, selected direct-Pi foundation, and
 executable local application for Boss Man v2. Phase 0 is complete for the
-unauthenticated loopback-smoke profile. Phase 1 is in progress: the central API
-now has a durable project-orchestrator command loop with phase-scoped work,
-idempotent enqueue/claim/complete operations, lease-loss reconciliation, and
-cockpit visibility. The owner can also create tasks with acceptance criteria
-and atomically claim/schedule them from the board. Serve it using
-[`RUNBOOK.md`](RUNBOOK.md).
+unauthenticated loopback-smoke profile. Phase 1 is in progress: a task-first
+cockpit now opens durable topic/project conversations backed by persistent Pi
+RPC sessions, projects structured task changes onto the authoritative board,
+and retains the existing phase-scoped project-orchestrator command loop. Serve
+it using [`RUNBOOK.md`](RUNBOOK.md).
 
 Current code also includes deterministic fixtures, Pi lifecycle/custody
 probes, authoritative task policy, governed memory and FTS retrieval, atomic
@@ -15,7 +14,10 @@ context export/import, a pinned task image, host-owned Git and credential
 boundaries, RTK evidence, and the Phase 0 manifests used to select the
 foundation.
 
-The design is organized under [`specs/boss-man-v2`](specs/boss-man-v2):
+Start with the [`specification index`](specs/README.md), then use
+[`specs/boss-man-v2/CURRENT-STATE.md`](specs/boss-man-v2/CURRENT-STATE.md) for
+the current capability and next-step inventory. The longer-lived design is
+organized under [`specs/boss-man-v2`](specs/boss-man-v2):
 
 - [`PRODUCT.md`](specs/boss-man-v2/PRODUCT.md) defines the intended user experience and behavioral contract.
 - [`TECH.md`](specs/boss-man-v2/TECH.md) proposes the architecture and implementation sequence.
@@ -33,8 +35,8 @@ The design is organized under [`specs/boss-man-v2`](specs/boss-man-v2):
 - [`phase1-local-task-controls`](specs/phase1-local-task-controls) defines and
   verifies the local create/claim/schedule slice.
 - [`phase1-orchestrator-conversations`](specs/phase1-orchestrator-conversations)
-  drafts the next conversation-first topic, repository, and work-item intake
-  slice.
+  is the approved and active conversation-first topic, task-graph, repository,
+  and work-item intake slice.
 
 The upstream source reviewed for this baseline was:
 

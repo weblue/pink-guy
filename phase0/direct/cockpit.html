@@ -117,6 +117,7 @@
   #board { display: grid; gap: .5rem; grid-template-columns: repeat(6, minmax(9rem, 1fr)); overflow-x: auto; }
   .column { min-height: 10rem; }
   .task { border-left: 3px solid #5c7cfa; }
+  .task.focused { outline: 2px solid var(--yellow); outline-offset: 2px; }
   .controls { display: flex; gap: .35rem; margin-top: .5rem; }
   .controls select { min-width: 0; flex: 1; }
   .change-card { border-left: 3px solid var(--green); }
@@ -292,6 +293,7 @@
       for (const task of tasks) {
         const card = document.createElement("article");
         card.className = "task";
+        card.dataset.taskId = task.id;
         card.innerHTML = "<strong>" + esc(task.title) + "</strong><div class=\"muted\">"
           + esc(task.project_id) + " · v" + esc(task.version) + "</div>"
           + ((state === "ready" || state === "backlog")
@@ -338,12 +340,24 @@
     }).join("") || "<p class=\"muted\">No turns yet. Describe the desired outcome below.</p>";
     conversation.scrollTop = conversation.scrollHeight;
     const mutations = app.conversationEvents.filter((event) => event.type === "task_mutation_applied");
+    const mutationDetail = (payload) => {
+      if (payload.operation === "add_dependency") return "Depends on " + (payload.dependsOnTaskId || "another task");
+      if (payload.operation === "record_assumption") return payload.assumption || "Assumption recorded";
+      if (payload.operation === "require_decision") {
+        return (payload.decisionCategory ? payload.decisionCategory + " · " : "")
+          + (payload.decisionQuestion || "Owner decision required");
+      }
+      if (payload.operation === "split") return "Created child " + (payload.childTaskId || "");
+      return payload.title || payload.taskId;
+    };
     document.querySelector("#changes").innerHTML = mutations.map((event) =>
-      "<div class=\"change-card\"><strong>" + esc(event.payload?.operation || "changed") + " task</strong>"
-      + "<div>" + esc(event.payload?.title || event.payload?.taskId) + "</div>"
+      "<div class=\"change-card\"><strong>" + esc((event.payload?.operation || "changed").replaceAll("_", " "))
+      + " task</strong><div>" + esc(mutationDetail(event.payload || {})) + "</div>"
       + "<div class=\"muted\">turn " + esc(
         detail.turns.find((turn) => turn.id === event.turn_id)?.sequence || "?",
-      ) + " · v" + esc(event.payload?.taskVersion || "?") + "</div></div>"
+      ) + " · v" + esc(event.payload?.taskVersion || "?") + "</div>"
+      + "<button class=\"ghost\" data-focus-task=\"" + esc(event.payload?.childTaskId || event.payload?.taskId)
+      + "\">Show on board</button></div>"
     ).join("") || "<p class=\"muted\">No structured task changes from this conversation yet.</p>";
   }
 
@@ -534,6 +548,20 @@
     } finally {
       button.disabled = false;
     }
+  });
+
+  document.querySelector("#changes").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-focus-task]");
+    if (!button) return;
+    const task = [...document.querySelectorAll("#board [data-task-id]")]
+      .find((item) => item.dataset.taskId === button.dataset.focusTask);
+    if (!task) {
+      mutationStatus("The changed task is not on the current board.", true);
+      return;
+    }
+    document.querySelectorAll("#board .focused").forEach((item) => item.classList.remove("focused"));
+    task.classList.add("focused");
+    task.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
   });
 
   refresh().then(() => {

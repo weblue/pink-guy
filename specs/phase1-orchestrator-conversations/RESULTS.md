@@ -1,7 +1,7 @@
 # Phase 1 orchestrator conversations — substrate results
 
-Status: Durable conversation runtime and first cockpit workspace implemented;
-custody and intake adapters remain
+Status: Durable conversation runtime, cockpit, and audited task-graph mutations
+implemented; custody and intake adapters remain
 
 Last updated: 2026-07-17
 
@@ -42,7 +42,13 @@ Last updated: 2026-07-17
   projections;
 - owner/Pi turn lifecycle, structured task-change cards, and synchronized
   board/topic projections; and
-- explicit tmux/cmux/SSH attach guidance without a browser terminal emulator.
+- explicit tmux/cmux/SSH attach guidance without a browser terminal emulator;
+- optimistic-versioned task title and acceptance-criteria replacement;
+- one-child-per-call task splitting with parent/child origin records;
+- same-project, cycle-free task dependencies that block scheduling and
+  completion until finished;
+- explicit low-risk task assumptions and protected owner decision gates; and
+- direct change-card navigation back to the authoritative board.
 
 ## Verification
 
@@ -86,7 +92,23 @@ The in-app browser flow also passed against disposable local state: project
 Ask orchestrator created a bound topic, the owner turn appeared queued, a
 simulated central orchestrator completion reconnected into the same
 conversation, and its provenance-linked task appeared as a structured change
-card.
+card. A second disposable smoke rendered update and assumption cards from one
+turn, refreshed the authoritative task to version 3, and focused that exact
+board card through **Show on board**.
+
+The model-less task-graph mutation probe passes:
+
+```text
+node phase0/scripts/probe-phase1-task-graph-mutations.mjs \
+  /Users/ND139178/Documents/boss-man
+```
+
+It covers create, update, split, dependency, assumption, and protected-decision
+operations through one leased conversation turn. It proves optimistic version
+conflicts, exact turn provenance, split retry idempotency, cross-project
+denial, dependency-cycle rejection, unresolved-dependency scheduling gates,
+and a protected decision completion gate. It makes no provider requests and
+starts no task containers.
 
 An owner-authorized live Pi smoke test also passed through the integrated
 project orchestrator and the retained local API state. Pi ran with
@@ -100,10 +122,9 @@ and deleted its private credential copy on shutdown.
 
 ## Remaining in the approved slice
 
-1. Expand structured, provenance-linked task mutations beyond create to
-   update/split/dependency/assumption/decision operations.
-2. Snapshot conversation custody before compaction, scope transfer, model
+1. Snapshot conversation custody before compaction, scope transfer, model
    switch, and provider continuation.
-3. Add host-owned repository import/dedup and immutable manual/Jira source
+2. Add host-owned repository import/dedup and immutable manual/Jira source
    snapshots.
-4. Add deeper source/decision/custody inspectors and task-change navigation.
+3. Add owner decision resolution plus deeper source/decision/custody and task
+   detail inspectors.

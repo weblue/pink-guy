@@ -43,6 +43,27 @@ function result(value: JsonObject) {
   };
 }
 
+async function mutateTask(
+  toolCallId: string,
+  operation: string,
+  payload: JsonObject,
+  signal: AbortSignal,
+) {
+  const configuration = configured();
+  return result(await request(
+    `/api/orchestration/conversations/${encodeURIComponent(configuration.conversationId)}/task-mutations`,
+    {
+      method: "POST",
+      signal,
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": `pi-tool:${toolCallId}`,
+      },
+      body: JSON.stringify({ operation, ...payload }),
+    },
+  ));
+}
+
 export default function orchestratorExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "boss_orchestrator_context",
@@ -70,23 +91,88 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
       acceptanceCriteria: Type.Array(Type.String({ minLength: 1, maxLength: 2_000 }), { maxItems: 100 }),
     }),
     async execute(toolCallId, params, signal) {
-      const configuration = configured();
-      return result(await request(
-        `/api/orchestration/conversations/${encodeURIComponent(configuration.conversationId)}/task-mutations`,
-        {
-        method: "POST",
-        signal,
-        headers: {
-          "content-type": "application/json",
-          "idempotency-key": `pi-tool:${toolCallId}`,
-        },
-        body: JSON.stringify({
-          operation: "create",
-          title: params.title,
-          acceptanceCriteria: params.acceptanceCriteria,
-        }),
-        },
-      ));
+      return mutateTask(toolCallId, "create", {
+        title: params.title,
+        acceptanceCriteria: params.acceptanceCriteria,
+      }, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_orchestrator_update_task",
+    label: "Update a Boss Man task",
+    description: "Replace a scoped task's title and acceptance criteria using its current version.",
+    promptSnippet: "Refine a current task without changing its execution state",
+    parameters: Type.Object({
+      taskId: Type.String({ minLength: 1 }),
+      expectedVersion: Type.Integer({ minimum: 1 }),
+      title: Type.String({ minLength: 1, maxLength: 500 }),
+      acceptanceCriteria: Type.Array(Type.String({ minLength: 1, maxLength: 2_000 }), { maxItems: 100 }),
+    }),
+    async execute(toolCallId, params, signal) {
+      return mutateTask(toolCallId, "update", params, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_orchestrator_split_task",
+    label: "Split a Boss Man task",
+    description: "Create one ready child task beneath a scoped parent; call again for another child.",
+    promptSnippet: "Split a task into independently observable child work while leaving the parent intact",
+    parameters: Type.Object({
+      taskId: Type.String({ minLength: 1 }),
+      expectedVersion: Type.Integer({ minimum: 1 }),
+      title: Type.String({ minLength: 1, maxLength: 500 }),
+      acceptanceCriteria: Type.Array(Type.String({ minLength: 1, maxLength: 2_000 }), { maxItems: 100 }),
+    }),
+    async execute(toolCallId, params, signal) {
+      return mutateTask(toolCallId, "split", params, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_orchestrator_add_dependency",
+    label: "Add a Boss Man task dependency",
+    description: "Make one scoped task depend on another task in the same project; cycles are rejected.",
+    promptSnippet: "Record only dependencies that materially constrain task ordering",
+    parameters: Type.Object({
+      taskId: Type.String({ minLength: 1 }),
+      expectedVersion: Type.Integer({ minimum: 1 }),
+      dependsOnTaskId: Type.String({ minLength: 1 }),
+    }),
+    async execute(toolCallId, params, signal) {
+      return mutateTask(toolCallId, "add_dependency", params, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_orchestrator_record_assumption",
+    label: "Record a Boss Man task assumption",
+    description: "Record a low-risk reversible assumption against one scoped task.",
+    promptSnippet: "State an assumption explicitly before proceeding through low-risk ambiguity",
+    parameters: Type.Object({
+      taskId: Type.String({ minLength: 1 }),
+      expectedVersion: Type.Integer({ minimum: 1 }),
+      body: Type.String({ minLength: 1, maxLength: 20_000 }),
+    }),
+    async execute(toolCallId, params, signal) {
+      return mutateTask(toolCallId, "record_assumption", params, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_orchestrator_require_decision",
+    label: "Require a Boss Man owner decision",
+    description: "Create an unresolved protected decision gate against one scoped task.",
+    promptSnippet: "Escalate high-risk or hard-to-change ambiguity to the owner",
+    parameters: Type.Object({
+      taskId: Type.String({ minLength: 1 }),
+      expectedVersion: Type.Integer({ minimum: 1 }),
+      category: Type.String({ minLength: 1, maxLength: 200 }),
+      question: Type.String({ minLength: 1, maxLength: 20_000 }),
+    }),
+    async execute(toolCallId, params, signal) {
+      return mutateTask(toolCallId, "require_decision", params, signal);
     },
   });
 }
