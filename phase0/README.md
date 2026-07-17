@@ -2,6 +2,8 @@
 
 This directory contains architecture-neutral fixtures, schemas, and scripts used by the research program in [`specs/boss-man-v2/PHASE0.md`](../specs/boss-man-v2/PHASE0.md).
 
+The current capability map, data inventory, open questions, and closure sequence are summarized in [`specs/boss-man-v2/CURRENT-STATE.md`](../specs/boss-man-v2/CURRENT-STATE.md).
+
 Tracked files must contain no real credentials, native user sessions, provider responses, or unredacted runtime logs. Disposable outputs belong outside the repository and are referenced by redacted manifests plus SHA-256 checksums.
 
 ## Create the acceptance fixture

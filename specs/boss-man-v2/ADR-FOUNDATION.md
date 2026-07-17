@@ -18,12 +18,12 @@ Build on the thin direct-Pi control plane. Use upstream Pi directly and keep tas
 
 - Native Pi custody, resume/import, and pre-compaction barriers work upstream without a private bridge.
 - The direct slice already demonstrates one daemon-owned store, Pi RPC, shell/event streaming, custody ingestion, and honest orphan reconciliation.
-- The remaining task-policy, runtime, Git, credential, memory, and edge work has executable neutral contracts and can be integrated behind that authority.
+- Task policy and the synthetic runtime/Git/credential boundary are now integrated behind that authority. Recovery, unified context/memory, real owner auth, and clean-host reproduction retain executable contracts or explicit closure plans.
 - AoE's retained UI/runtime value is substantial, but meeting Boss Man's invariants requires changes across its durable lifecycle writers, sandbox Git mounts, server routes, task data model, and top-level navigation. That is a broad long-lived fork, not an isolated product layer.
 
 ## Conditions before production implementation is considered safe
 
-- Close the six direct integration conditions in `PHASE0-RESULTS.md` with candidate-level evidence.
+- Close the remaining direct integration conditions in `PHASE0-RESULTS.md` with candidate-level evidence.
 - Keep the web experience task-first; chat remains one workspace tab, not the application shell.
 - Keep SWAG and deployment changes human-operated. Agents may generate inert configuration and test deployments only.
 - Retain sessions and artifacts until explicit deletion and keep retrieval indexes rebuildable from canonical records.

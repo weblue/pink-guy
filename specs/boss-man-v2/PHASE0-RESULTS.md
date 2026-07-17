@@ -21,7 +21,7 @@ This checkpoint does not claim that every direct-Pi hard gate is closed. The own
 | `P0-PI-ACP-0031-CONTRACT` | Pass | Upstream `pi-acp` reaches required Pi seams | Does not repair AoE authority or Git custody |
 | `P0-DIRECT-FOUNDATION` | Pass | One daemon owns SQLite task/session/run state and a recorded pinned container running Pi RPC plus the workspace shell; it ingests events/custody and marks ambiguous restart state orphaned | Deterministic provider only; active side-effect reconciliation and production auth remain open |
 | `P0-TASK-POLICY` | Pass | Assignment scope, independent review, protected human decision, completion gate | Retained as the in-memory reference baseline for the integrated proof below |
-| `P0-DIRECT-TASK-POLICY` | Pass | Hashed bearer capabilities and the full worker/reviewer/orchestrator/owner policy pass through the direct HTTP/SQLite transaction and ordered audit stream | Owner-authenticated issuance and container delivery remain C0-05/C0-02 work |
+| `P0-DIRECT-TASK-POLICY` | Pass | Hashed bearer capabilities and the full worker/reviewer/orchestrator/owner policy pass through the direct HTTP/SQLite transaction and ordered audit stream | Container delivery now passes in C0-02; owner-authenticated issuance remains C0-05 work |
 | `P0-RUNTIME-GIT-RTK` | Pass | Pinned ARM64 task image, restricted mounts, host Git checkpoint, credential isolation, RTK raw/redacted evidence | Foundation-neutral reference contract retained for comparison |
 | `P0-DIRECT-RUNTIME-GIT-RTK` | Pass | The selected daemon owns the container record, credential materialization/lock, host Git capabilities, provenance checkpoint, and RTK artifact receipts | Synthetic credential/provider proof; owner-operated live Pi auth smoke remains |
 | `P0-REMOTE-EDGE` | Pass | Host/Origin/forwarding, outer+inner auth, cookies, CSRF, WebSocket reconnect, streaming, uploads, revocation | Disposable synthetic proxy/auth; no SWAG deployment |
@@ -56,14 +56,13 @@ The directional comparison is nevertheless decisive:
 
 ## Recorded decision
 
-The human owner selected the thin direct-Pi control plane as the Boss Man v2 foundation on 2026-07-16, with AoE retained as a UI/runtime reference rather than a dependency. The decision retains these required integration gaps before production use:
+The human owner selected the thin direct-Pi control plane as the Boss Man v2 foundation on 2026-07-16, with AoE retained as a UI/runtime reference rather than a dependency. C0-01 is complete and C0-02 is integrated with synthetic credentials. The remaining checkpoints before production use are:
 
-1. transact task policy with the authoritative SQLite store;
-2. complete the owner-operated live Pi authentication smoke for the integrated task-container, credential, and host-Git capability path;
-3. reconcile active containers and side-effect receipts after restart;
-4. combine native custody and governed FTS through one context receipt path;
-5. run the real owner authentication implementation through the remote-edge suite; and
-6. reproduce the fixture and task image on a second clean ARM64 environment.
+1. complete the owner-operated live Pi authentication smoke for the integrated task-container, credential, and host-Git capability path;
+2. reconcile active containers and side-effect receipts after restart;
+3. combine native custody and governed FTS through one context receipt path;
+4. run the real owner authentication implementation through the remote-edge suite; and
+5. reproduce the fixture and task image on a second clean ARM64 environment.
 
 ## Compose decision
 

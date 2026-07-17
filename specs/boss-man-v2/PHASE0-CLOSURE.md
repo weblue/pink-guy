@@ -63,6 +63,8 @@ Exit: every still-applicable direct-Pi hard gate has candidate-level evidence, t
 
 ## Progress
 
+The concise current capability and artifact inventory is maintained in `CURRENT-STATE.md`.
+
 | Work package | Status | Evidence |
 |---|---|---|
 | C0-01 task and policy transaction | Completed | `P0-DIRECT-TASK-POLICY`: real HTTP/SQLite capability path, 13 ordered committed events, competing-writer conflict, fixed-revision review, owner decision, and gated merge request |
@@ -72,9 +74,9 @@ Exit: every still-applicable direct-Pi hard gate has candidate-level evidence, t
 | C0-05 owner authentication | Pending | Disposable edge contract passes; real application auth pending |
 | C0-06 second-host reproduction | Pending | Runs after the integrated closure suite |
 
-## Parallelism
+## Sequencing
 
-C0-01 and the schema portion of C0-04 establish shared contracts and should land first. After those interfaces are fixed, C0-02, C0-04 retrieval integration, and C0-05 may proceed in separate worktrees. C0-03 depends on the real C0-02 side-effect boundaries. C0-06 runs last.
+Finish the owner-operated C0-02 live-auth smoke first. C0-03 is the next implementation priority because it hardens the side-effect boundaries that now exist. C0-04 and C0-05 can proceed independently after the C0-02 checkpoint as long as shared store/schema changes remain integration-owner controlled. C0-06 runs last.
 
 The integration owner controls schema changes and final merges. Each implementation task includes unit tests for isolated policy/serialization behavior and integration tests at daemon, container, Git, custody, or edge boundaries as appropriate.
 

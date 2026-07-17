@@ -1,6 +1,8 @@
 # Boss Man v2 foundation assessment
 
-Status: Draft for owner review
+Status: Evaluation complete; superseded by `ADR-FOUNDATION.md`
+
+The owner selected the thin direct-Pi foundation on 2026-07-16. This document is retained as the historical candidate comparison and stop-rule record.
 
 Last verified: 2026-07-16
 

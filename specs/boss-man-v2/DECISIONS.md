@@ -1,6 +1,6 @@
 # Boss Man v2 decision log
 
-Status: Draft
+Status: Active decision log
 
 Last updated: 2026-07-16
 
