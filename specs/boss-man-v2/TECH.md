@@ -1,6 +1,6 @@
 # Boss Man v2 technical design
 
-Status: Draft for architecture review
+Status: Direct-Pi foundation approved; Phase 0 closure
 
 Last updated: 2026-07-16
 
@@ -30,7 +30,7 @@ The Pi ecosystem now also contains several local memory extensions. [`pi-persist
 
 Build a Pi-native control plane that reuses the proven product concepts from Boss Man, but replace the execution, UI, task-authorization, and context seams instead of incrementally wrapping Sandcastle.
 
-Phase 0 compared two equal candidates: (A) a bounded Agent of Empires core fork running Pi through `pi-acp`, and (B) a direct Pi RPC control plane using SQLite, a task-first web cockpit, the Docker Engine API, and a host-owned Git service. `PHASE0-RESULTS.md` records the evidence and `ADR-FOUNDATION.md` proposes the direct foundation for owner approval. Until the owner accepts that ADR, the diagrams and implementation sections describe the proposed target rather than an authorized production build.
+Phase 0 compared two equal candidates: (A) a bounded Agent of Empires core fork running Pi through `pi-acp`, and (B) a direct Pi RPC control plane using SQLite, a task-first web cockpit, the Docker Engine API, and a host-owned Git service. The owner selected the direct-Pi foundation on 2026-07-16. `PHASE0-RESULTS.md` records the evidence and remaining closure gates; `ADR-FOUNDATION.md` records the accepted decision.
 
 Boss Man must have one lifecycle authority. An unchanged Agent of Empires daemon beside an independent Boss Man service is rejected because it duplicates session, worker, worktree, container, authentication, and Git state. AoE is selected only if its reusable runtime and cockpit value exceeds the demonstrated long-term cost of maintaining the necessary core fork; Pi JSONL remains authoritative session evidence in either path.
 
@@ -558,4 +558,4 @@ The main integration agent owns schema definitions, migrations, shared generated
 
 ## Implementation gate
 
-Do not begin the main implementation until the owner resolves the proposed foundation ADR in `ADR-FOUNDATION.md` and records any changed conditions in `DECISIONS.md`. The direct candidate is recommended, but its task-policy, runtime/Git/credential, active-recovery, memory, and real-auth contracts still require candidate-level integration evidence before production use. Phase 0 evidence is summarized in `PHASE0-RESULTS.md`; the human owner makes the foundation/fork decision.
+The owner resolved the foundation ADR in favor of direct Pi on 2026-07-16. Begin with the bounded Phase 0 closure vertical slice: integrate task policy, runtime/Git/credentials, active recovery, governed context retrieval, and real owner authentication behind the selected daemon authority. Do not broaden into the production cockpit backlog until those candidate-level tests and the second clean ARM64 reproduction pass. Phase 0 evidence and conditions are summarized in `PHASE0-RESULTS.md`.

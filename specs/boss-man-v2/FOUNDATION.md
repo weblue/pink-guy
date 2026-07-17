@@ -8,7 +8,7 @@ Initial detailed inspection: [`7803b25451bc836ad40ad9ad9d5efad11de83764`](https:
 
 ## Current verdict
 
-Agent of Empires is a strong runtime and cockpit substrate, but it does not currently satisfy the Boss Man v2 product contract as an installed plugin or unchanged subordinate service. The bounded Phase 0 candidate is now stopped and the direct-Pi foundation is proposed for owner approval in `ADR-FOUNDATION.md`.
+Agent of Empires is a strong runtime and cockpit substrate, but it does not currently satisfy the Boss Man v2 product contract as an installed plugin or unchanged subordinate service. The bounded Phase 0 candidate is stopped, and the owner selected the direct-Pi foundation on 2026-07-16 in `ADR-FOUNDATION.md`.
 
 It solves much of the expensive horizontal infrastructure: persistent agent processes, browser and TUI clients, mobile PWA behavior, real terminals, structured ACP rendering, worktrees, containers, diffs, artifacts, authentication, reverse-proxy protections, and active upstream maintenance. It does not solve the product's differentiating control-plane requirements: SQL task authority, dependency-aware board state, independent review and merge policy, human architecture gates, governed memory, deterministic Pi-native custody, restricted Git authority, or deployment boundaries.
 
@@ -125,6 +125,6 @@ If any of the first three conditions fail, use AoE as a source and UX reference 
 
 ## Recommendation after Phase 0
 
-Select the thin direct-Pi control plane, subject to the owner decision and integration conditions in `ADR-FOUNDATION.md`.
+The owner selected the thin direct-Pi control plane, subject to the retained integration conditions in `ADR-FOUNDATION.md`.
 
 AoE remains a valuable UI/runtime reference because rebuilding its polished terminal, structured session, mobile, diff, authentication, and recovery behavior is expensive. Its missing pieces, however, are exactly Boss Man's core identity, and the pinned probe showed that its present extension and sandbox boundaries cannot carry them as an isolated product layer. A meaningful fork would be broad enough to own the project's long-term maintenance risk, so Phase 0 does not recommend it.

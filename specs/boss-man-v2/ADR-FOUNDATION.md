@@ -1,6 +1,6 @@
 # ADR: Boss Man v2 foundation
 
-Status: Proposed, owner decision required
+Status: Accepted
 
 Date: 2026-07-16
 
@@ -10,7 +10,7 @@ Boss Man v2 needs a Pi-specific, provider-agnostic, remote-first orchestration c
 
 Phase 0 compared a bounded Agent of Empires product fork with a thin direct-Pi control plane. The evidence and remaining gaps are summarized in `PHASE0-RESULTS.md`.
 
-## Proposed decision
+## Decision
 
 Build on the thin direct-Pi control plane. Use upstream Pi directly and keep task, policy, session, artifact, container, credential, and Git authority inside one Boss Man daemon. Treat Agent of Empires as a source of tested interaction patterns and possible license-compatible component ideas, not as a runtime dependency or fork base.
 
@@ -52,8 +52,8 @@ Negative:
 
 ## Owner record
 
-Decision: _pending_
+Decision: Approved. Build Boss Man v2 on the thin direct-Pi control plane and retain Agent of Empires as a UI/runtime reference only.
 
-Conditions changed or added: _pending_
+Conditions changed or added: None. The documented pre-production integration conditions remain in force.
 
-Approved by/date: _pending_
+Approved by/date: Human owner, 2026-07-16

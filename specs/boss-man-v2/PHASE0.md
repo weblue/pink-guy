@@ -312,7 +312,7 @@ For each candidate, publish:
 - upstream rebase evidence for AoE; and
 - recommendation with viable fallback.
 
-The owner records the final foundation decision and conditions in `DECISIONS.md`. Until then, Phase 1 remains blocked.
+The owner recorded the direct-Pi foundation decision and unchanged conditions in `DECISIONS.md` on 2026-07-16. Broad Phase 1 work remains blocked until the direct integration and second-host closure conditions pass.
 
 ## Weighted comparison
 
@@ -374,7 +374,7 @@ P0-04 through P0-06 may overlap only after the fixture and evidence schemas are 
 | P0-04 Runtime/Git/RTK | Shared contract pass | Pinned ARM64 image, restricted mounts, host checkpoint, concurrent synthetic credentials, and RTK raw/redacted evidence pass; selected-daemon integration remains |
 | P0-05 Remote edge | Contract pass | Disposable HTTP/WebSocket origin and proxy pass; no real infrastructure changed |
 | P0-06 Memory/retrieval | Baseline pass | Model-less SQLite FTS5 benchmark, governance, receipts, scope, deletion/rebuild, and canonical export/import pass |
-| P0-07 ADR | Owner checkpoint | Results and proposed direct-Pi ADR are ready; numeric scoring is prohibited because direct integration gates remain partial |
+| P0-07 ADR | Completed | Human owner approved the direct-Pi foundation and retained the documented pre-production integration conditions on 2026-07-16 |
 
 ## Phase 0 exit
 

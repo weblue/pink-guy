@@ -1,6 +1,6 @@
 # Boss Man v2 Phase 0 results
 
-Status: Owner checkpoint
+Status: Foundation selected; closure gates active
 
 Evidence date: 2026-07-16
 
@@ -10,7 +10,7 @@ Phase 0 now has an executable direct-Pi control-plane slice and reusable contrac
 
 The bounded Agent of Empires candidate is stopped. At the pinned revision, AoE has competing durable lifecycle writers and deliberately mounts the main repository plus shared Git metadata read-write so agents can use Git. Its supported plugin capabilities cannot introduce the required task/Git/session authority. Correcting those constraints while adding the task database, board route, policy, memory, and task-first navigation is a core product fork across the storage, server, sandbox, and frontend seams, not a bounded product layer.
 
-This checkpoint does not claim that every direct-Pi hard gate is closed. Several contracts pass independently but are not yet transactionally integrated into one candidate. Phase 1 remains blocked until the owner records the foundation decision and either accepts the proposed integration conditions or asks for another bounded investigation.
+This checkpoint does not claim that every direct-Pi hard gate is closed. The owner accepted the direct-Pi foundation and its documented integration conditions on 2026-07-16. Broad Phase 1 work remains blocked until the independent contracts are transactionally integrated into the selected candidate and the second-host reproduction is complete.
 
 ## Evidence inventory
 
@@ -52,9 +52,9 @@ The directional comparison is nevertheless decisive:
 - Direct Pi preserves native custody, has one small control-plane authority, and lets the already-proven task, Git, credential, memory, and edge contracts be integrated without replacing another supervisor.
 - AoE retains much more terminal, diff, mobile, authentication, and reconnect value, but the product's defining authority and custody constraints collide with its current storage and sandbox design. The fork would be meaningful, but broad and permanently coupled to high-churn core seams.
 
-## Proposed next decision
+## Recorded decision
 
-Select the thin direct-Pi control plane as the Boss Man v2 foundation, with AoE retained as a UI/runtime reference rather than a dependency. Make the decision conditional on closing the direct integration gaps before production use:
+The human owner selected the thin direct-Pi control plane as the Boss Man v2 foundation on 2026-07-16, with AoE retained as a UI/runtime reference rather than a dependency. The decision retains these required integration gaps before production use:
 
 1. transact task policy with the authoritative SQLite store;
 2. make task-container, credential, and host-Git requests daemon capabilities;
