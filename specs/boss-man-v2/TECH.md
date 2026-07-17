@@ -309,7 +309,7 @@ Pi OAuth refresh and concurrent access to shared auth state are a risk. The firs
 5. discard private refresh mutations rather than silently reconciling them; and
 6. delete both materialized run copies after verifying the canonical source checksum.
 
-This is sufficient for a bounded live smoke and synthetic isolation proof, not yet a durable refresh strategy. Production must either add explicit locked reconciliation with conflict handling or introduce a host credential broker before parallel OAuth-backed runs are allowed. Direct API and prepaid gateway keys can use higher concurrency only when the owner profile explicitly permits it.
+This path passed both the synthetic isolation proof and one bounded owner-authorized OpenAI Codex turn, including a Pi Bash tool call through managed RTK capture. It is still not a durable refresh strategy. Production must either add explicit locked reconciliation with conflict handling or introduce a host credential broker before parallel OAuth-backed runs are allowed. Direct API and prepaid gateway keys can use higher concurrency only when the owner profile explicitly permits it.
 
 Direct API and prepaid gateway keys are simpler to scope than consumer OAuth files. Secrets must be redacted before event/artifact persistence.
 
@@ -546,7 +546,7 @@ The main integration agent owns schema definitions, migrations, shared generated
 ## Risks and unresolved constraints
 
 1. **Pi API stability:** RPC, session JSONL, and extension hooks can evolve. Pin a tested Pi version, wrap it behind adapters, and retain unknown event types.
-2. **OAuth concurrency:** shared consumer credentials may race or be invalid for isolated processes. Complete the credential spike before parallel runs.
+2. **OAuth concurrency:** single-run snapshot isolation and one live turn pass; parallel consumer OAuth remains disabled until locked refresh reconciliation or a host broker is approved.
 3. **Exactly-once side effects:** provider failure after a tool call cannot always be classified automatically. Prefer pause-and-reconcile over replay.
 4. **Git metadata isolation:** linked worktrees normally reference a shared common Git directory. Prove the mount design before promising strict Git custody.
 5. **Secret persistence:** raw tool results can contain credentials. Redaction must occur before durable event capture, while preserving evidence that redaction occurred.

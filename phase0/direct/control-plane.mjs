@@ -62,6 +62,7 @@ export class DirectControlPlane {
     databasePath, stateRoot, fixturePath, environment = process.env,
     runtimeImage = "boss-man-phase0:pi-0.80.9-rtk-0.42.3",
     dockerCommand = "docker", credentialProfile = null,
+    runtimeProvider = "boss-man-phase0", runtimeModel = "complete", runtimeOffline = true,
   }) {
     this.store = new Phase0Store(databasePath);
     this.stateRoot = stateRoot;
@@ -69,6 +70,9 @@ export class DirectControlPlane {
     this.environment = environment;
     this.runtimeImage = runtimeImage;
     this.dockerCommand = dockerCommand;
+    this.runtimeProvider = runtimeProvider;
+    this.runtimeModel = runtimeModel;
+    this.runtimeOffline = runtimeOffline;
     this.credentialVault = new RunCredentialVault({ stateRoot, profile: credentialProfile });
     this.git = new HostGitService({ store: this.store, repositoryPath: fixturePath, workspaceRoot: join(stateRoot, "workspaces") });
     this.sessions = new Map();
@@ -122,7 +126,6 @@ export class DirectControlPlane {
       TMPDIR: "/tmp",
       PI_CODING_AGENT_DIR: "/config",
       PI_CODING_AGENT_SESSION_DIR: "/sessions",
-      PI_OFFLINE: "1",
       PI_TELEMETRY: "0",
       RTK_TELEMETRY_DISABLED: "1",
       RTK_TEE_DIR: "/artifacts/rtk-tee",
@@ -131,6 +134,7 @@ export class DirectControlPlane {
       BOSS_MAN_TASK_ID: taskId,
       BOSS_MAN_CAPABILITY_TOKEN: capability.token,
       BOSS_MAN_EXTENSION_EVIDENCE_PATH: "/artifacts/boss-man-tools.json",
+      ...(this.runtimeOffline ? { PI_OFFLINE: "1" } : {}),
     };
     let runtime = null;
     try {
@@ -151,8 +155,9 @@ export class DirectControlPlane {
           "--extension", "/boss-man/extensions/lifecycle-probe.ts",
           "--extension", "/boss-man/extensions/boss-man-extension.ts",
           "--extension", "/boss-man/extensions/rtk-managed-extension.ts",
-          "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-context-files", "--no-approve", "--offline",
-          "--provider", "boss-man-phase0", "--model", "complete",
+          "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-context-files", "--no-approve",
+          ...(this.runtimeOffline ? ["--offline"] : []),
+          "--provider", this.runtimeProvider, "--model", this.runtimeModel,
         ]),
         onEvent: (event) => {
           const safeEvent = sanitize(event);

@@ -18,8 +18,8 @@
   },
   "sanitized_command": "node phase0/scripts/probe-direct-runtime-git-rtk.mjs /absolute/generated-fixture",
   "exit_code": 0,
-  "started_at": "2026-07-17T02:02:12Z",
-  "ended_at": "2026-07-17T02:02:16Z",
+  "started_at": "2026-07-17T13:19:38Z",
+  "ended_at": "2026-07-17T13:19:42Z",
   "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
   "assertions": [
     {
@@ -53,7 +53,7 @@
         "shared_git_metadata_denied": true,
         "host_status_saw_edit": true,
         "host_diff_saw_edit": true,
-        "checkpoint_revision": "b84e72a2355677f990d6aca7551d58b291321bbc",
+        "checkpoint_revision": "bc31e562f5ad0bb47bc098dbddf79a6ea0eb6cc7",
         "checkpoint_idempotent": true,
         "provenance_trailers_present": true
       }
@@ -107,7 +107,7 @@
     },
     {
       "path": "phase0/direct/control-plane.mjs",
-      "sha256": "3896ba55bbf929cc7ba80a810d96432f57c97b05c7e7007ae8e55b2241caaf74",
+      "sha256": "7458b8ff7a5fcf77e1716f81282b0d0321e21dc0e102b0027b451aa713f4c75b",
       "media_type": "text/javascript",
       "tracked": true
     },

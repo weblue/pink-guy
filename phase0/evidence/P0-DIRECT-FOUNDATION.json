@@ -16,8 +16,8 @@
   },
   "sanitized_command": "node phase0/scripts/probe-direct-foundation.mjs <generated-fixture>",
   "exit_code": 0,
-  "started_at": "2026-07-17T02:02:16Z",
-  "ended_at": "2026-07-17T02:02:19Z",
+  "started_at": "2026-07-17T13:19:42Z",
+  "ended_at": "2026-07-17T13:19:45Z",
   "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
   "assertions": [
     {
@@ -82,7 +82,7 @@
       "passed": true,
       "observed": {
         "custody_manifest_count": 7,
-        "native_session_sha256": "7d6d78defbf91591179470b69a1d355d653d8df690e738aff9fe96a31890526b",
+        "native_session_sha256": "2c3e9129a011110df058cd7c380a5b1e2b14a4db31811751a9de1400e012ea12",
         "native_session_changed_during_restart": false
       }
     },
@@ -111,7 +111,7 @@
     },
     {
       "path": "phase0/direct/control-plane.mjs",
-      "sha256": "3896ba55bbf929cc7ba80a810d96432f57c97b05c7e7007ae8e55b2241caaf74",
+      "sha256": "7458b8ff7a5fcf77e1716f81282b0d0321e21dc0e102b0027b451aa713f4c75b",
       "media_type": "text/javascript",
       "tracked": true
     },
@@ -141,13 +141,13 @@
     },
     {
       "path": "untracked:phase0/direct/native.pi-session.jsonl",
-      "sha256": "7d6d78defbf91591179470b69a1d355d653d8df690e738aff9fe96a31890526b",
+      "sha256": "2c3e9129a011110df058cd7c380a5b1e2b14a4db31811751a9de1400e012ea12",
       "media_type": "application/x-ndjson",
       "tracked": false
     },
     {
       "path": "untracked:phase0/direct/boss-man.sqlite",
-      "sha256": "2dbb5d31ff6a6ab4a457a5457a532e70beb7832c8b5c5ad5c5d122d16c95b3db",
+      "sha256": "7daf7ecc017a47e3cb7eef4627e85940cd0e3f47be415a42ab016920964e8026",
       "media_type": "application/vnd.sqlite3",
       "tracked": false
     }

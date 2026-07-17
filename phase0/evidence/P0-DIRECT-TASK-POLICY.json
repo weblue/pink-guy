@@ -17,8 +17,8 @@
   },
   "sanitized_command": "node phase0/scripts/probe-direct-task-policy.mjs /absolute/generated-fixture",
   "exit_code": 0,
-  "started_at": "2026-07-17T00:36:52Z",
-  "ended_at": "2026-07-17T00:36:53Z",
+  "started_at": "2026-07-17T13:19:45Z",
+  "ended_at": "2026-07-17T13:19:46Z",
   "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
   "assertions": [
     {
@@ -91,7 +91,7 @@
     },
     {
       "path": "phase0/direct/control-plane.mjs",
-      "sha256": "3896ba55bbf929cc7ba80a810d96432f57c97b05c7e7007ae8e55b2241caaf74",
+      "sha256": "7458b8ff7a5fcf77e1716f81282b0d0321e21dc0e102b0027b451aa713f4c75b",
       "media_type": "text/javascript",
       "tracked": true
     },

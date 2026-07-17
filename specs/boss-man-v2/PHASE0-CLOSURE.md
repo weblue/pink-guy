@@ -68,15 +68,15 @@ The concise current capability and artifact inventory is maintained in `CURRENT-
 | Work package | Status | Evidence |
 |---|---|---|
 | C0-01 task and policy transaction | Completed | `P0-DIRECT-TASK-POLICY`: real HTTP/SQLite capability path, 13 ordered committed events, competing-writer conflict, fixed-revision review, owner decision, and gated merge request |
-| C0-02 runtime/Git/credentials/RTK | Integrated; owner smoke pending | `P0-DIRECT-RUNTIME-GIT-RTK`: daemon-created pinned container, read-only synthetic auth source/private run copy with post-run deletion, one-run OAuth lock, host Git status/diff/idempotent checkpoint, and redacted RTK evidence all pass; a bounded owner-operated live Pi login smoke remains before closure |
-| C0-03 restart reconciliation | Pending | Depends on C0-02 side-effect boundaries |
+| C0-02 runtime/Git/credentials/RTK | Completed | `P0-DIRECT-RUNTIME-GIT-RTK` proves the synthetic isolation/custody path; `P0-DIRECT-LIVE-PROVIDER` proves one owner-authorized OpenAI Codex turn and Pi Bash→RTK artifact path without changing the canonical credential or retaining run copies |
+| C0-03 restart reconciliation | Next | The live C0-02 side-effect boundaries are now available for crash/reconciliation tests |
 | C0-04 context and retrieval | Pending | Harness custody and standalone FTS contracts pass; unified manifest pending |
 | C0-05 owner authentication | Pending | Disposable edge contract passes; real application auth pending |
 | C0-06 second-host reproduction | Pending | Runs after the integrated closure suite |
 
 ## Sequencing
 
-Finish the owner-operated C0-02 live-auth smoke first. C0-03 is the next implementation priority because it hardens the side-effect boundaries that now exist. C0-04 and C0-05 can proceed independently after the C0-02 checkpoint as long as shared store/schema changes remain integration-owner controlled. C0-06 runs last.
+C0-03 is the next implementation priority because it hardens the side-effect boundaries that now exist. C0-04 and C0-05 can proceed independently as long as shared store/schema changes remain integration-owner controlled. C0-06 runs last.
 
 The integration owner controls schema changes and final merges. Each implementation task includes unit tests for isolated policy/serialization behavior and integration tests at daemon, container, Git, custody, or edge boundaries as appropriate.
 

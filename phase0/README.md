@@ -130,6 +130,20 @@ This starts Pi and the workspace shell in a daemon-created task container, prove
 
 `runtime/provider-profile.example.json` and `schemas/provider-profile.schema.json` define the redacted owner-managed provider profile contract. Real provider login is an explicit owner operation outside the repository; the live-auth smoke is intentionally separate from this synthetic proof.
 
+## Run the owner-authorized live-provider smoke
+
+This command spends one bounded provider turn and must only be run after the owner has populated the isolated Pi auth directory:
+
+```sh
+node ./phase0/scripts/probe-direct-live-provider.mjs \
+  /absolute/path/to/disposable/task-repo \
+  "$HOME/.config/boss-man/provider-auth/chatgpt-primary/auth.json" \
+  openai-codex \
+  gpt-5.4-mini
+```
+
+The probe never prints or checks in the auth contents. It verifies a real provider response inside the daemon-owned container, one Pi Bash tool call through the managed RTK extension, redacted raw/filtered/receipt ingestion, canonical credential immutability, post-run credential-copy deletion, and container removal.
+
 ## Run the remote-edge contract
 
 ```sh
