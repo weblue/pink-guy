@@ -6,7 +6,7 @@ Date: 2026-07-16
 
 ## Context
 
-Boss Man v2 needs a Pi-specific, provider-agnostic, remote-first orchestration control plane with one lifecycle authority, native session custody, task and review policy, platform-owned Git, isolated credentials, governed model-less memory, and a task-first developer cockpit.
+Boss Man v2 needs a Pi-specific, provider-agnostic orchestration control plane with one lifecycle authority, native session custody, task and review policy, platform-owned Git, isolated credentials, governed model-less memory, and a task-first developer cockpit. Delivery is now local-first; remote operation remains a later capability.
 
 Phase 0 compared a bounded Agent of Empires product fork with a thin direct-Pi control plane. The evidence and remaining gaps are summarized in `PHASE0-RESULTS.md`.
 
@@ -18,12 +18,12 @@ Build on the thin direct-Pi control plane. Use upstream Pi directly and keep tas
 
 - Native Pi custody, resume/import, and pre-compaction barriers work upstream without a private bridge.
 - The direct slice already demonstrates one daemon-owned store, Pi RPC, shell/event streaming, custody ingestion, and honest orphan reconciliation.
-- Task policy and the synthetic runtime/Git/credential boundary are now integrated behind that authority. Recovery, unified context/memory, real owner auth, and clean-host reproduction retain executable contracts or explicit closure plans.
+- Task policy, runtime/Git/credential custody, recovery, and unified context/memory are integrated behind that authority. Local Phase 1 proceeds without application authentication; clean-host reproduction is Phase 2 and authenticated remote access is Phase 3.
 - AoE's retained UI/runtime value is substantial, but meeting Boss Man's invariants requires changes across its durable lifecycle writers, sandbox Git mounts, server routes, task data model, and top-level navigation. That is a broad long-lived fork, not an isolated product layer.
 
 ## Conditions before production implementation is considered safe
 
-- Close the remaining direct integration conditions in `PHASE0-RESULTS.md` with candidate-level evidence.
+- Preserve the completed Phase 0 local contracts while building the Phase 1 cockpit.
 - Keep the web experience task-first; chat remains one workspace tab, not the application shell.
 - Keep SWAG and deployment changes human-operated. Agents may generate inert configuration and test deployments only.
 - Retain sessions and artifacts until explicit deletion and keep retrieval indexes rebuildable from canonical records.
@@ -57,3 +57,5 @@ Decision: Approved. Build Boss Man v2 on the thin direct-Pi control plane and re
 Conditions changed or added: None. The documented pre-production integration conditions remain in force.
 
 Approved by/date: Human owner, 2026-07-16
+
+Roadmap amendment: On 2026-07-17 the owner moved second-host reproduction to Phase 2 and authenticated remote access to Phase 3. This does not change the selected foundation.

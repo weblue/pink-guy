@@ -1,6 +1,6 @@
 # Boss Man v2 Phase 0 research program
 
-Status: Active
+Status: Complete for the local-smoke profile
 
 Started: 2026-07-16
 
@@ -25,7 +25,7 @@ The following are requirements, not variables in the foundation comparison:
 - Git commits and merges are platform-owned.
 - Real secrets are human-managed deployment inputs; agents work from schemas, references, and canary values.
 - Complete sessions and artifacts are retained until explicit deletion.
-- SWAG is the public HTTPS edge; Boss Man maintains inner owner authentication.
+- SWAG remains the planned Phase 3 public HTTPS edge; Phase 0/1 local profiles require no application authentication.
 - The port-315 home server is the default SSH bastion; no new public Mac port is in scope.
 - SQL and canonical records answer authoritative task questions. Retrieval indexes, chunks, summaries, and embeddings are disposable projections.
 
@@ -89,7 +89,7 @@ Every result records exact versions, lockfiles, image digests, host architecture
 7. A networkless in-process provider exercised real v0.80.9 RPC prompt, streaming notification, state, model selection, abort, new-session, and exact restart behavior. Aborted output persisted with `stopReason: aborted`, no tool execution occurred, parent provenance survived `new_session`, and restart did not replay the completed response.
 8. Pinned upstream `pi-acp` v0.0.31 passed all 88 upstream tests, typecheck, and build. A real ACP v1 probe then streamed six deterministic turns, changed models, cancelled safely, reached the blocking custody hook through `/compact`, persisted native Pi state, and replayed retained history after a fresh adapter process loaded the session. It did not forward the extension's startup notification because subscription occurs after the Pi spawn handshake; active-turn notifications were forwarded. Npm reported three moderate and four high dependency audit findings in the pinned lockfile, which remain maintenance evidence rather than being auto-fixed during the comparison.
 9. Model-less child-context probes passed all three provenance modes: fresh contains only explicit instructions and artifact receipts, bundle contains a checksum-bound deterministic context receipt without eager source-transcript injection, and full fork preserves every selected native entry plus parent-session provenance.
-10. The direct candidate now has an executable daemon-owned SQLite task/session/run store, minimal board/API, direct Pi RPC process, persistent workspace shell, structured event stream, custody-manifest ingestion, and a durable side-effect ledger. Startup reconciliation preserves native bytes, pauses verified idle state, recovers checksum/provenance-verifiable snapshot and Git completion, and holds uncertain provider/tool effects without replay. Unified context/memory and production authentication remain integration work.
+10. The direct candidate now has an executable central SQLite task/session/run store, minimal board/API, direct Pi RPC process, persistent workspace shell, structured event stream, custody-manifest ingestion, a durable side-effect ledger, and unified context/memory export. Startup reconciliation preserves native bytes, pauses verified idle state, recovers checksum/provenance-verifiable snapshot and Git completion, and holds uncertain provider/tool effects without replay. Remote authentication is intentionally deferred to Phase 3.
 11. A pinned ARM64 task image now builds from a digest-pinned Node base with Pi 0.80.9 and checksum-verified RTK 0.42.3. The runtime probe demonstrated a non-root, read-only, networkless task container; denied access to shared Git metadata; a host-owned provenance checkpoint; two isolated synthetic credentials; and redacted RTK raw output with a receipt. RTK 0.42.3 requires `max_files` and `max_file_size` in its tee configuration even though the upstream abbreviated example omits them.
 12. The disposable remote-edge contract passed Host, Origin, forwarding-header, outer and inner authentication, cookie, CSRF, WebSocket reconnect, streaming, bounded artifact, and revocation cases without touching real SWAG or router state.
 13. The governed SQLite FTS5 baseline achieved recall@5 of 1.0, strict five-slot precision@5 of 0.314, returned-result precision of 0.478, complete provenance, and zero stale, scope, secret, injection, or cross-project violations. Index deletion/rebuild and canonical export/import were deterministic without a model, vector index, or network.
@@ -312,7 +312,7 @@ For each candidate, publish:
 - upstream rebase evidence for AoE; and
 - recommendation with viable fallback.
 
-The owner recorded the direct-Pi foundation decision and unchanged conditions in `DECISIONS.md` on 2026-07-16. Broad Phase 1 work remains blocked until the direct integration and second-host closure conditions pass.
+The owner recorded the direct-Pi foundation decision in `DECISIONS.md` on 2026-07-16. The local integration and operator smoke now pass. The revised roadmap authorizes local Phase 1 work; second-host reproduction moves to Phase 2 and authenticated remote exposure to Phase 3.
 
 ## Weighted comparison
 
@@ -387,4 +387,4 @@ Phase 0 exits only when:
 5. the owner selects a foundation or directs another bounded investigation; and
 6. `PRODUCT.md`, `TECH.md`, `FOUNDATION.md`, and `DECISIONS.md` are updated to match that decision.
 
-Only then should the Phase 1 implementation backlog become technology-specific.
+Those foundation conditions are satisfied for the local-smoke profile. `ROADMAP.md` now governs the technology-specific Phase 1 backlog.

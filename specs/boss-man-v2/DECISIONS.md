@@ -2,7 +2,7 @@
 
 Status: Active decision log
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 This file separates owner direction, accepted working decisions, technical hypotheses that require spikes, and the remaining implementation questions.
 
@@ -35,7 +35,7 @@ This file separates owner direction, accepted working decisions, technical hypot
 | D-023 | SQLite FTS5 is the required model-less retrieval baseline; embeddings, vector search, and knowledge graphs are optional and rebuildable. | Proposed | Supports offline recovery and predictable operations while leaving room to benchmark better recall. |
 | D-024 | Agents propose durable memory; policy promotes it. Low-trust, global/identity, secret-like, inferred, or contested records never auto-promote. | Proposed | Reduces cross-session prompt injection, false-memory accumulation, and privilege escalation. |
 | D-025 | `pi-persistent-intelligence` is the leading memory spike candidate, not an accepted production dependency. | Proposed spike | Its JSONL/projection/patch model fits closely, but its age and adoption are not yet sufficient for a core guarantee. |
-| D-026 | SWAG Basic Auth remains an outer non-local access gate; Boss Man also maintains its own single-owner authenticated device session for all terminal and mutation access. | Accepted | Conditional edge auth is useful defense in depth but does not establish application identity or protect local-LAN access. |
+| D-026 | SWAG Basic Auth remains an outer non-local access gate; Boss Man also maintains its own single-owner authenticated device session for all terminal and mutation access. | Superseded by D-036 | The remote-profile portion remains useful, but authentication no longer applies to loopback or explicitly trusted-LAN development. |
 | D-027 | Daily SSH recovery uses the existing key-only port 315 endpoint on the home server as a `ProxyJump` bastion to the Boss Man Mac over the LAN. A second router-forwarded Mac SSH port is deferred. | Accepted | Avoids another public host endpoint; direct IP SSH would bypass SWAG and normal Cloudflare HTTP protections. |
 | D-028 | High-risk, long-lived, or hard-to-reverse architecture decisions require an explicit human decision. Agents investigate options, record evidence and an ADR proposal, then block instead of assuming. | Direction given | Architecture, security, data, dependency, and operational choices can outlive the task and are expensive to undo. |
 | D-029 | Agents define a versioned secret/configuration contract with placeholders or references; the human supplies real values through deployment-owned secret storage. | Direction given | Keeps real credentials out of source, task text, model context, and durable artifacts while still making applications deployable. |
@@ -44,6 +44,8 @@ This file separates owner direction, accepted working decisions, technical hypot
 | D-032 | Select the thin direct-Pi control plane as the v2 foundation; retain Agent of Empires as a UI/runtime reference rather than a fork or runtime dependency. | Accepted | Approved by the human owner on 2026-07-16. Phase 0 proves the direct seams independently and stops AoE because fixing lifecycle authority and Git custody while adding the product layer crosses storage, server, sandbox, and navigation cores. See `PHASE0-RESULTS.md` and `ADR-FOUNDATION.md`. |
 | D-033 | For the C0-02 proof and bounded live smoke, copy an owner-managed provider credential snapshot into private per-run Pi state, mount the source read-only, and limit OAuth profiles to one active run; do not reconcile refresh mutations automatically. | Validated Phase 0 decision | Synthetic isolation and one owner-authorized OpenAI Codex turn pass without exposing shared writable auth state. This is not approval of the production refresh design; parallel OAuth runs still require an owner-approved reconciliation or broker architecture. |
 | D-034 | After daemon loss, recover only side effects whose identity and completion are independently provable; pause verified idle runs and require explicit reconciliation for uncertain provider or tool effects instead of replaying them. | Validated Phase 0 decision | C0-03 proves container identity/liveness checks, native-byte preservation, checksum snapshot recovery, provenance Git recovery, and zero tool/commit duplication without claiming in-flight Pi RPC reattachment. |
+| D-035 | One central Boss Man API is the durable authority across projects. Each project may hold one active orchestrator lease, represented by a daemon or tmux-backed process, and may run multiple task subagents whose runs are each scoped to exactly one initial phase: implementation, test, or review. | Direction given | Allows cmux/tmux and SSH process management without splitting durable task/session authority, prevents competing project orchestrators, and makes subagent purpose visible in the audit model. |
+| D-036 | Phase 0 closes on localhost smoke without application authentication. Phase 1 is local-first and may add an explicit unauthenticated trusted-LAN profile; second-host work moves to Phase 2; SWAG and simple one-owner authentication move to Phase 3. | Direction given | Authentication and public-edge work should not block development of the actual cockpit. Exposure profiles keep the unauthenticated boundary explicit and prevent accidental public binding. |
 
 ## Recorded deployment assumptions
 
@@ -61,7 +63,7 @@ This file separates owner direction, accepted working decisions, technical hypot
 
 ### Q-008: SWAG authentication
 
-SWAG uses a per-application Basic Auth gate, normally bypassed for local-source traffic. Boss Man will treat this as an outer edge control and retain an application session of its own. The v1 inner mechanism should stay simple: one owner passphrase, Argon2id storage, secure device-bound session cookies, rate limiting, revocation, and SSH recovery. A later passkey/OIDC change is not required for the first release.
+SWAG uses a per-application Basic Auth gate, normally bypassed for local-source traffic. It is not part of the local-first release. When Phase 3 enables the remote profile, Boss Man will treat SWAG auth as an optional outer control and add one simple owner mechanism: either a locally stored Argon2id password verifier with HttpOnly device sessions or a locally stored API-key hash with bearer authorization. Loopback and explicitly trusted-LAN profiles require no application authentication. Browser `localStorage` is not the default credential store because same-origin scripts can read bearer material.
 
 ### Q-009: network topology
 

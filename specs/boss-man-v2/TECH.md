@@ -32,7 +32,7 @@ Build a Pi-native control plane that reuses the proven product concepts from Bos
 
 Phase 0 compared two equal candidates: (A) a bounded Agent of Empires core fork running Pi through `pi-acp`, and (B) a direct Pi RPC control plane using SQLite, a task-first web cockpit, the Docker Engine API, and a host-owned Git service. The owner selected the direct-Pi foundation on 2026-07-16. `PHASE0-RESULTS.md` records the evidence and remaining closure gates; `ADR-FOUNDATION.md` records the accepted decision.
 
-Boss Man must have one lifecycle authority. An unchanged Agent of Empires daemon beside an independent Boss Man service is rejected because it duplicates session, worker, worktree, container, authentication, and Git state. AoE is selected only if its reusable runtime and cockpit value exceeds the demonstrated long-term cost of maintaining the necessary core fork; Pi JSONL remains authoritative session evidence in either path.
+Boss Man must have one durable lifecycle authority: the central API and its SQLite transaction log. One leased orchestrator process per project may coordinate its task agents, but it never owns a competing durable database. An unchanged Agent of Empires daemon beside an independent Boss Man service is rejected because it duplicates session, worker, worktree, container, authentication, and Git state. Pi JSONL remains authoritative session evidence.
 
 ## High-level architecture
 
@@ -41,7 +41,8 @@ flowchart LR
     U["Remote browser"] -->|"HTTPS subdomain + conditional Basic Auth"| SWAG["Home-server SWAG"]
     SWAG -->|"LAN or encrypted tunnel"| API["Boss Man control plane and cockpit"]
     API --> DB[("SQLite + audit log")]
-    API --> SUP["Run supervisor"]
+    API --> ORCH["Project orchestrator leases (one active per project)"]
+    ORCH --> SUP["Phase-scoped task supervisors"]
     API --> GIT["Host Git service"]
     API --> ART["Artifact and context store"]
     API --> MEM["Governed memory + FTS5"]
@@ -60,6 +61,8 @@ flowchart LR
 
 The control plane is authoritative for tasks, policies, runs, workspaces, and artifact provenance. Pi's JSONL is authoritative for native session history. Neither database is reconstructed from an LLM summary.
 
+Project orchestrators may be ordinary daemons or tmux-backed processes managed with cmux or SSH. They register, heartbeat, and receive commands through the central API. The API rejects a competing live lease for the same project. Each task-agent run records exactly one initial phase (`implementation`, `test`, or `review`); a phase change creates a new run rather than silently broadening the current agent's authority.
+
 ## Components
 
 ### Control-plane API
@@ -74,6 +77,7 @@ Responsibilities:
 - run lifecycle and recovery coordination;
 - provider/model policy evaluation at safe boundaries;
 - artifact indexing and download.
+- project-orchestrator registration, lease heartbeat, expiry, and command authority.
 
 The selected direct path owns this API rather than delegating lifecycle to a second session manager. The closure implementation uses a small Node HTTP/SQLite seam to prove transactions; Hono, React, and a supported SQLite binding remain reasonable production choices after the closure gates. `UI.md` defines the required cockpit independently of the server framework.
 
@@ -333,13 +337,17 @@ Expose provider health and remaining credit when a stable provider API supports 
 
 LiteLLM can be reconsidered only if centralized virtual keys, cross-provider budgets, or organization-scale routing become requirements that Pi plus OpenRouter cannot satisfy. If introduced, use a pinned, signed container image and a security update process; never a floating PyPI dependency.
 
-### Remote access
+### Exposure profiles and remote access
+
+Local smoke binds to loopback and has no application authentication. A later trusted-LAN development profile may bind to one explicitly selected private interface and accept only configured private CIDRs; it also has no application authentication initially. Startup rejects a public wildcard bind unless the authenticated remote profile is enabled. Request locality is derived from the configured listener and trusted network boundary, never an arbitrary forwarded header.
 
 The existing LinuxServer SWAG container and the Boss Man Mac are on the same LAN. SWAG is the public TLS endpoint for a dedicated Boss Man subdomain and proxies HTTP and WebSocket traffic to the Mac's reserved LAN address. The current conditional SWAG Basic Auth remains an outer gate for non-local requests.
 
 The SWAG configuration must preserve `Host`, `X-Forwarded-Proto`, and a controlled client-IP chain; support WebSocket upgrade; disable response buffering for live streams; use long but finite idle timeouts; and set an explicit upload limit for artifacts. Boss Man validates the public Host and Origin, generates external URLs from configured origin rather than untrusted headers, uses Secure/HttpOnly/SameSite cookies, and implements CSRF protection for mutations.
 
-Use one human owner identity in Boss Man itself: an owner passphrase stored as an Argon2id verifier, secure device-bound sessions, login rate limiting, session revocation, and SSH-based recovery/bootstrap. This application session is required even when a local address bypasses SWAG's Basic Auth. The two gates are intentionally independent; SWAG Basic Auth is not accepted as terminal authorization or user identity.
+Authenticated remote access is Phase 3, not a local development prerequisite. It supports one owner using either a password flow or an API-key flow. Password mode stores an Argon2id verifier on the host and exchanges the password for a Secure/HttpOnly/SameSite device session. API-key mode stores only a key hash and requires `Authorization: Bearer` on remote API requests. Rate limiting, rotation, revocation, and recovery apply to both as appropriate. SWAG Basic Auth is optional defense in depth, not application identity.
+
+Raw credentials never enter SQLite task/context data or Git. Browser `localStorage` is not the default because any same-origin script can read it after an XSS defect. The browser uses an HttpOnly session; non-browser clients use the OS keychain, an owner-protected secret file/environment, or session memory. A persistent browser bearer key is an explicit convenience mode that requires CSP/XSS review.
 
 Never expose the upstream origin publicly or run without application awareness that it is behind a proxy. The Mac's application and SSH listeners bind to the LAN or host firewall policy needed for this topology, not a new public router mapping by default.
 
@@ -421,11 +429,12 @@ This closes the Phase 0 restart gate without claiming in-flight Pi RPC process r
 
 ## Security model
 
-The first release assumes one trusted human owner but a public HTTPS subdomain. It treats internet requests, model output, repository content, tools, and downloaded dependencies as untrusted.
+The local-first release assumes one trusted human owner and a loopback or explicitly trusted-LAN listener. Model output, repository content, tools, and downloaded dependencies remain untrusted. The Phase 3 remote profile additionally treats every network request as untrusted until authenticated.
 
 Main controls:
 
-- SWAG TLS plus strong single-owner authentication, Host/Origin validation, CSRF defense, and rate limits;
+- loopback-by-default listener and explicit trusted-LAN/remote profiles;
+- Phase 3 SWAG TLS plus simple single-owner authentication, Host/Origin validation, CSRF defense, and rate limits;
 - least-privilege run capabilities;
 - no Docker socket in agents;
 - minimal mounts and secrets;
@@ -468,78 +477,49 @@ Containers reduce accidental host damage but do not stop a determined process fr
 - Concurrent task mutations and assignment conflicts.
 - Control-plane restart during idle, model response, tool call, and snapshot.
 - RTK compression hides no raw evidence and `rtk proxy` bypass remains available.
-- SWAG-proxied HTTP, WebSocket terminal, structured streams, uploads, secure cookies, Host/Origin rejection, and reconnect behavior.
-- SWAG Basic Auth bypass on the LAN still requires a valid Boss Man owner session.
+- Local browser, terminal, structured stream, upload, and reconnect behavior without application authentication.
+- In Phase 3, SWAG-proxied HTTP, WebSocket terminal, structured streams, uploads, owner sessions/API keys, Host/Origin rejection, and reconnect behavior.
 - Deployment manifests and configuration examples contain no real secrets, and unauthorized long-lived deployment mutations are rejected.
 
 ### End-to-end acceptance
 
-Automate the first-release behaviors in `PRODUCT.md` §14, including a reviewer/change-request loop, autonomous platform-owned merge for an unprotected change, a blocked merge requiring an owner architecture decision, forced provider failure with manual model switch, SWAG WebSocket reconnect, and a full host-service restart. Verify artifacts by checksums and by importing the exported native session into a new managed Pi runtime. Use Playwright for the cockpit's critical desktop/mobile flows and retain screenshots or traces for failed UI tests.
+Automate the local-first behaviors in `PRODUCT.md` §14, including a reviewer/change-request loop, autonomous platform-owned merge for an unprotected change, a blocked merge requiring an owner architecture decision, forced provider failure with manual model switch, local browser reconnect, and a full host-service restart. Verify artifacts by checksums and by importing the exported native session into a new managed Pi runtime. Phase 3 adds the SWAG/auth acceptance matrix. Use Playwright for the cockpit's critical desktop/mobile flows and retain screenshots or traces for failed UI tests.
 
 ## Delivery plan
 
-### Phase 0: feasibility gates
+### Phase 0: foundation and local smoke — complete
 
-Time-box prototypes for the highest-risk assumptions before broad UI work:
+- Direct Pi foundation selection and executable evidence.
+- Authoritative tasks/policy, managed runtime/Git/credentials/RTK, recovery, and unified context/FTS.
+- Central multi-project API, exclusive project-orchestrator leases, phase-scoped task runs, localhost runbook, and browser smoke.
+- No application authentication; the runnable listener is loopback-only.
 
-1. Run equal, narrow prototypes for the AoE core-fork candidate and the direct Pi RPC candidate. Score both against `FOUNDATION.md`: one lifecycle authority, Pi session/context fidelity, pre-compaction interception, task/control APIs, full cockpit route, host-owned Git, run-scoped credentials, testability, patch size, and an upstream rebase rehearsal.
-2. Exact native session resume/import and cross-model continuation through the selected foundation.
-3. Blocking, model-less pre-compaction export through a Pi extension, including through `pi-acp` if selected.
-4. RTK Pi interception with `tee.mode = "always"`, raw artifact ingestion, redaction, savings metrics, and diagnostic bypass.
-5. Host-owned worktree/status/commit with restricted Git metadata mounts or the selected foundation's equivalent custody controls.
-6. Safe concurrent credential refresh or per-session credential isolation.
-7. SWAG subdomain proxy to the target Mac, including authentication, Host/Origin enforcement, WebSockets, live streams, artifact transfers, and reconnect.
-8. Governed memory and retrieval proof: typed candidate, evidence-linked promotion, authoritative SQL separation, FTS5 recall benchmark, context receipt, export/import, index deletion/rebuild, cross-scope/poisoning tests, and a time-boxed `pi-persistent-intelligence` assessment. Run an optional disposable vector comparison only after recording the FTS5 baseline.
+### Phase 1: useful local-first developer cockpit
 
-`PHASE0.md` defines the common fixture, hard gates, scorecard, evidence schema, and execution order. Each spike produces a small executable test and an ADR. Failure changes the architecture before feature implementation.
+- Project-orchestrator command queue and task-agent scheduling.
+- Multi-project board, task workspace, attention queue, decisions, tests, review, diffs, artifacts, and context inspector.
+- Persistent PTY/reconnect/scrollback and tmux/cmux attach information.
+- Host checkpoint/commit plus manual merge preparation.
+- Explicit trusted-LAN profile with selected private interface/CIDR policy and no application authentication.
 
-### Phase 1: single-session vertical slice
+### Phase 2: autonomy, recovery, and portability
 
-- Project registration and one task.
-- SQLite migrations and audit/event envelope.
-- One managed Pi container and live structured timeline plus workspace terminal.
-- Native session persistence and manual deterministic snapshot.
-- RTK filtered output with retained raw artifact.
-- Managed worktree plus host status/diff.
-- Single-owner cockpit through SWAG.
+- Policy-governed merge/rebase/push, conflict handling, and cleanup.
+- Recovery/resume UX, retention/deletion/quotas, backup/restore, and storage pressure.
+- Provider failure drills, manual model switching, and paid-fallback decision.
+- Measured concurrency/resource limits on the target Mac.
+- Second clean ARM64 reproduction and migration rehearsal.
 
-### Phase 2: task control and Git custody
+### Phase 3: authenticated remote access
 
-- Full task state machine, dependencies, attention queue, and worker capability tools.
-- Agent progress/child-task/review operations.
-- Independent read-only reviewer loop and structured report.
-- Risk-based unit/integration validation policy.
-- Host checkpoint/commit, autonomous policy-governed merge, and validation evidence.
-- Typed human-decision gates, ADR proposals, owner resolution, and audit evidence.
-- Recovery reconciliation and operator overrides.
-
-### Phase 3: context and subagents
-
-- Automatic pre-compaction and lifecycle snapshots.
-- Context browser and artifact download.
-- Fresh, bundle, and full fork child modes.
-- Governed project memory, candidate review, FTS retrieval, context receipts, and memory inspector.
-- Retention, redaction, import, and provenance validation.
-- Optional semantic-retrieval benchmark; ship only if it materially improves recall over FTS without weakening portability.
-
-### Phase 4: model policy and provider resilience
-
-- Provider health and billing-mode display.
-- Safe-boundary manual model switching and failure drills.
-- Model/task policy evaluation using a checked-in benchmark suite.
-- Decide whether prepaid OpenRouter automatic fallback adds enough value to implement; if so, add spend caps and ambiguity-safe continuation.
-
-### Phase 5: hardening and fleet UX
-
-- Concurrency controls and resource telemetry.
-- Backup/restore drills, image verification, dependency audit, and update flow.
-- Cockpit usability hardening and external browser-IDE integration.
-- Versioned deployment/configuration package and operator runbook, stopping before long-lived deployment mutation.
-- Notification integrations only if later authorized.
+- SWAG subdomain, trusted proxy, Host/Origin, WebSocket, stream, upload, and reconnect configuration.
+- Locally stored password verifier or API-key hash, owner sessions/bearer authorization, rate limits, rotation/revocation, and recovery.
+- CSRF for cookie-backed requests and strict secret/log/context exclusion.
+- Versioned deployment/configuration package; the human performs long-lived deployment changes.
 
 ## Parallelization
 
-Phase 0 should remain mostly sequential because the foundation decision changes language, process ownership, event transport, and UI extension boundaries. Parallel implementation before that decision would produce throwaway adapters.
+Within Phase 1, cockpit surfaces can proceed against versioned API contracts while one integration owner controls central schema and orchestrator-command changes. Phase 2 reliability work follows the executable local workflow. Phase 3 remote/auth work is deliberately isolated so it does not slow local product iteration.
 
 After the foundation and schemas are fixed, three bounded tracks can run in parallel in separate worktrees and land as a coordinated PR series:
 
@@ -572,4 +552,4 @@ The main integration agent owns schema definitions, migrations, shared generated
 
 ## Implementation gate
 
-The owner resolved the foundation ADR in favor of direct Pi on 2026-07-16. Begin with the bounded Phase 0 closure vertical slice: integrate task policy, runtime/Git/credentials, active recovery, governed context retrieval, and real owner authentication behind the selected daemon authority. Do not broaden into the production cockpit backlog until those candidate-level tests and the second clean ARM64 reproduction pass. Phase 0 evidence and conditions are summarized in `PHASE0-RESULTS.md`.
+The owner resolved the foundation ADR in favor of direct Pi on 2026-07-16. The bounded Phase 0 local closure now integrates task policy, runtime/Git/credentials, active recovery, governed context retrieval, project-orchestrator leases, and a loopback operator smoke. Begin Phase 1 with the local cockpit and orchestrator command loop. Second-host reproduction is Phase 2; SWAG and owner authentication are Phase 3. Phase 0 evidence is summarized in `PHASE0-RESULTS.md`, and `ROADMAP.md` is the canonical delivery sequence.

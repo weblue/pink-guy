@@ -1,5 +1,7 @@
 # Boss Man v2 research record
 
+Roadmap note (2026-07-17): the owner subsequently made delivery local-first. The SWAG/authentication findings below remain relevant to Phase 3 remote exposure, but they no longer block Phase 0 closure or Phase 1 local/trusted-LAN development.
+
 Verified: 2026-07-16
 
 Purpose: preserve source, policy, and ecosystem evidence used by the product and technical drafts.
@@ -240,5 +242,5 @@ The Mac remains a single failure domain. Model-less artifacts make recovery poss
 - Treat provider billing mode as mutable runtime configuration.
 - Defer automatic paid fallback until manual safe-boundary model switching is reliable.
 - Defer LiteLLM until its additional policy layer is truly needed.
-- Serve through SWAG with conditional Basic Auth as an outer gate plus Boss Man's own owner session; use the port-315 home-server SSH bastion and keep SSH keys out of the application.
+- When Phase 3 enables remote access, serve through SWAG with conditional Basic Auth as an optional outer gate plus Boss Man's simple owner session or API key; use the port-315 home-server SSH bastion and keep SSH keys out of the application. Local and explicitly trusted-LAN profiles do not require application auth.
 - Prove the high-risk foundation/runtime seams before investing in polished visual design.

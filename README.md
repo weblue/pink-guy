@@ -1,12 +1,13 @@
 # Boss Man v2 planning workspace
 
-This repository contains the planning baseline and executable Phase 0 feasibility work for Boss Man v2. The production application has not started. Current code includes deterministic fixtures, Pi lifecycle/custody probes, a minimal direct-Pi control-plane slice, task-policy and governed-memory contracts, a pinned task image, Git/credential/RTK probes, a disposable remote-edge test, and evidence manifests used to select the foundation.
+This repository contains the planning baseline and executable Phase 0 feasibility work for Boss Man v2. The production application has not started, but Phase 0 is complete for the unauthenticated loopback-smoke profile and the central API/operator shell can be served using [`RUNBOOK.md`](RUNBOOK.md). Current code includes deterministic fixtures, Pi lifecycle/custody probes, a direct-Pi control-plane slice, project-orchestrator leases, task-policy and governed-memory contracts, atomic context export/import, a pinned task image, Git/credential/RTK probes, a disposable remote-edge test, and evidence manifests used to select the foundation.
 
 The design is organized under [`specs/boss-man-v2`](specs/boss-man-v2):
 
 - [`PRODUCT.md`](specs/boss-man-v2/PRODUCT.md) defines the intended user experience and behavioral contract.
 - [`TECH.md`](specs/boss-man-v2/TECH.md) proposes the architecture and implementation sequence.
 - [`UI.md`](specs/boss-man-v2/UI.md) defines the developer cockpit and evaluates existing dashboard foundations.
+- [`ROADMAP.md`](specs/boss-man-v2/ROADMAP.md) is the canonical local-first phase sequence and exposure/authentication boundary.
 - [`FOUNDATION.md`](specs/boss-man-v2/FOUNDATION.md) evaluates Agent of Empires against the specification and defines the fork/no-fork decision gate.
 - [`PHASE0.md`](specs/boss-man-v2/PHASE0.md) is the active feasibility program, shared fixture, hard-gate scorecard, evidence contract, and execution tracker.
 - [`PHASE0-RESULTS.md`](specs/boss-man-v2/PHASE0-RESULTS.md) is the evidence-linked owner checkpoint and remaining-gate audit.
