@@ -118,6 +118,8 @@ node ./phase0/scripts/probe-phase1-command-loop.mjs \
   /Users/ND139178/Documents/boss-man
 node ./phase0/scripts/probe-phase1-local-task-controls.mjs \
   /Users/ND139178/Documents/boss-man
+node ./phase0/scripts/probe-phase1-orchestrator-conversations.mjs \
+  /Users/ND139178/Documents/boss-man
 ```
 
 ## Current execution boundary

@@ -43,7 +43,7 @@ on 2026-07-17. The slice is ready for implementation.
 | Restart recovery | SQLite records immutable intent/completion/reconciliation receipts. Startup checks container identity/liveness, pauses verified idle runs, holds uncertain response/tool effects without replay, recovers checksum-valid snapshots, and recovers parent/provenance-valid Git commits without duplication. | The prototype conservatively stops the old container; true Pi RPC reattachment and host/Docker power-cycle coverage remain production work. |
 | Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
 | Developer cockpit | Product behavior and a task-first information architecture are specified. The loopback Phase 1 shell shows projects, orchestrator leases, the multi-project board, sessions, recent durable commands, context status, and terminal/attach positioning without a chat-first layout. It creates revision-bound tasks and schedules implementation/test/review agents from ready/backlog cards. | Task detail editing/dependencies/reconciliation, PTY/reconnect, diffs/tests/review/context inspectors, and optional trusted-LAN access without application auth remain. |
-| Orchestrator interaction | Approved product and technical specs define top-level topics, project conversations, structured conversation-to-task deltas, repository import, immutable source snapshots, and model-less conversation custody. D-039 through D-041 resolve durable topic, intake-lease, and source-lifecycle direction. | No orchestrator Pi planning session, topic/source schema, repository URL import, or Jira adapter is implemented yet. |
+| Orchestrator interaction | First-class topic and conversation projections, centrally assigned model policy, ordered owner turns/events, scoped system-intake/project leases, one-turn-per-conversation claiming, and no-replay lease-loss reconciliation are implemented behind local APIs. D-039 through D-042 govern the slice. | The managed Pi planning session, structured task-delta tools, conversation custody extension, repository import, source snapshots, and cockpit workspace remain. |
 
 ## Artifact and data layout
 
@@ -93,9 +93,9 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 
 ## Next steps
 
-1. **Phase 1 — orchestrator conversation substrate.** Add durable topic/project
-   conversations, structured task deltas, and model-less custody before
-   repository/source adapters.
+1. **Phase 1 — orchestrator Pi and task deltas.** Connect claimed durable
+   turns to a managed Pi planning session, narrow orchestrator tools,
+   provenance-linked task changes, and model-less custody.
 2. **Phase 1 — repository and source intake.** Add host-owned repository URL
    import plus immutable manual/Jira snapshots with no write-back.
 3. **Phase 1 — task detail and reconciliation.** Add description/acceptance

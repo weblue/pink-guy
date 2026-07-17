@@ -126,7 +126,8 @@ export class DirectControlPlane {
     databasePath, stateRoot, fixturePath, environment = process.env,
     runtimeImage = "boss-man-phase0:pi-0.80.9-rtk-0.42.3",
     dockerCommand = "docker", credentialProfile = null,
-    runtimeProvider = "boss-man-phase0", runtimeModel = "complete", runtimeOffline = true,
+    runtimeProvider = "boss-man-phase0", runtimeModel = "complete", runtimeThinking = "medium",
+    runtimeOffline = true,
     faultInjector = async () => undefined, enforceOrchestratorLease = false,
   }) {
     this.store = new Phase0Store(databasePath);
@@ -137,6 +138,7 @@ export class DirectControlPlane {
     this.dockerCommand = dockerCommand;
     this.runtimeProvider = runtimeProvider;
     this.runtimeModel = runtimeModel;
+    this.runtimeThinking = runtimeThinking;
     this.runtimeOffline = runtimeOffline;
     this.faultInjector = faultInjector;
     this.enforceOrchestratorLease = enforceOrchestratorLease;
@@ -686,6 +688,29 @@ export class DirectControlPlane {
       if (request.method === "GET" && url.pathname === "/api/projects") {
         return json(response, 200, { projects: this.store.projects() });
       }
+      if (request.method === "GET" && url.pathname === "/api/topics") {
+        return json(response, 200, {
+          topics: this.store.topics({ includeArchived: url.searchParams.get("archived") === "true" }),
+        });
+      }
+      if (request.method === "POST" && url.pathname === "/api/topics") {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.createTopic({
+          title: body.title,
+          ownerDescription: body.ownerDescription ?? null,
+          projectId: body.projectId ?? null,
+          idempotencyKey: request.headers["idempotency-key"],
+          modelProvider: body.modelProvider ?? this.runtimeProvider,
+          modelId: body.modelId ?? this.runtimeModel,
+          thinkingLevel: body.thinkingLevel ?? this.runtimeThinking,
+          modelPolicy: {
+            source: "control_plane_default",
+            billingClass: body.billingClass ?? "unknown",
+          },
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
       if (request.method === "GET" && url.pathname === "/api/sessions") {
         return json(response, 200, { sessions: this.store.sessions() });
       }
@@ -698,6 +723,54 @@ export class DirectControlPlane {
           commands: this.store.orchestratorCommands({
             projectId: url.searchParams.get("projectId"),
             limit,
+          }),
+        });
+      }
+      if (request.method === "GET" && url.pathname === "/api/orchestration/leases") {
+        return json(response, 200, { leases: this.store.orchestrationLeases() });
+      }
+      if (request.method === "POST" && url.pathname === "/api/orchestration/leases") {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        return json(response, 201, this.store.registerOrchestrationLease({
+          scopeType: body.scopeType,
+          scopeId: body.scopeId ?? null,
+          transport: body.transport,
+          endpoint: body.endpoint,
+          metadata: body.metadata ?? {},
+          leaseSeconds: body.leaseSeconds,
+        }));
+      }
+      if (request.method === "POST" && url.pathname === "/api/orchestration/leases/heartbeat") {
+        const body = await readBody(request);
+        return json(response, 200, this.store.heartbeatOrchestrationLease({
+          token: bearerToken(request),
+          leaseSeconds: body.leaseSeconds,
+        }));
+      }
+      if (request.method === "DELETE" && url.pathname === "/api/orchestration/leases/current") {
+        return json(response, 200, {
+          lease: this.store.releaseOrchestrationLease(bearerToken(request)),
+        });
+      }
+      if (request.method === "POST" && url.pathname === "/api/orchestration/turns/claim") {
+        const turn = this.store.claimConversationTurn(bearerToken(request));
+        if (!turn) {
+          response.writeHead(204);
+          return response.end();
+        }
+        return json(response, 200, { turn });
+      }
+
+      const completeTurn = url.pathname.match(/^\/api\/orchestration\/turns\/([^/]+)\/complete$/);
+      if (request.method === "POST" && completeTurn) {
+        const body = await readBody(request);
+        return json(response, 200, {
+          turn: this.store.completeConversationTurn({
+            token: bearerToken(request),
+            turnId: completeTurn[1],
+            state: body.state,
+            result: body.result ?? {},
           }),
         });
       }
@@ -757,6 +830,51 @@ export class DirectControlPlane {
           idempotencyKey: request.headers["idempotency-key"],
         });
         return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const topicDetail = url.pathname.match(/^\/api\/topics\/([^/]+)$/);
+      if (request.method === "GET" && topicDetail) {
+        const result = this.store.topicDetails(topicDetail[1]);
+        return result ? json(response, 200, result) : json(response, 404, { error: "not_found" });
+      }
+
+      const archiveTopic = url.pathname.match(/^\/api\/topics\/([^/]+)\/archive$/);
+      if (request.method === "POST" && archiveTopic) {
+        this.assertLocalOwnerProfile();
+        const result = this.store.archiveTopic({
+          topicId: archiveTopic[1],
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const conversationTurns = url.pathname.match(/^\/api\/conversations\/([^/]+)\/turns$/);
+      if (request.method === "GET" && conversationTurns) {
+        if (!this.store.getConversation(conversationTurns[1])) {
+          return json(response, 404, { error: "not_found" });
+        }
+        return json(response, 200, { turns: this.store.conversationTurns(conversationTurns[1]) });
+      }
+      if (request.method === "POST" && conversationTurns) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.submitConversationTurn({
+          conversationId: conversationTurns[1],
+          message: body.message,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const conversationEvents = url.pathname.match(/^\/api\/conversations\/([^/]+)\/events$/);
+      if (request.method === "GET" && conversationEvents) {
+        const after = url.searchParams.has("after") ? Number(url.searchParams.get("after")) : 0;
+        if (!Number.isInteger(after) || after < 0) {
+          throw Object.assign(new Error("event cursor must be a non-negative integer"), { code: "invalid_request" });
+        }
+        return json(response, 200, {
+          events: this.store.conversationEvents(conversationEvents[1], { after }),
+        });
       }
 
       const createTask = url.pathname.match(/^\/api\/projects\/([^/]+)\/tasks$/);

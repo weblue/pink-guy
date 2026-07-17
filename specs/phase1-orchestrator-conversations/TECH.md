@@ -1,6 +1,6 @@
 # Phase 1 orchestrator conversations and project intake
 
-Status: Approved for implementation
+Status: Implementation in progress — durable topic/conversation substrate landed
 
 Last updated: 2026-07-17
 
@@ -142,6 +142,12 @@ Initial local endpoints:
 - submit/cancel/resume orchestrator turns;
 - stream conversation events;
 - list structured turn mutations and linked tasks.
+
+The first substrate increment implements topic create/list/open/archive,
+conversation turn submit/list, ordered event listing with reconnect cursors,
+and scoped orchestration lease claim/complete routes. Repository/source
+endpoints, structured task mutation tools, and streaming transport remain the
+next increments. See [RESULTS.md](./RESULTS.md).
 
 The cockpit adds a prominent **New topic** action and an **Ask orchestrator**
 action within each project. The main topic/project workspace uses a

@@ -44,12 +44,14 @@ define the durable project-orchestrator command loop that began this phase.
 The completed local task-control slice is
 [`../phase1-local-task-controls/PRODUCT.md`](../phase1-local-task-controls/PRODUCT.md)
 and [`../phase1-local-task-controls/TECH.md`](../phase1-local-task-controls/TECH.md).
-The next proposed slice is
+The active conversation slice is
 [`../phase1-orchestrator-conversations/PRODUCT.md`](../phase1-orchestrator-conversations/PRODUCT.md)
 and
 [`../phase1-orchestrator-conversations/TECH.md`](../phase1-orchestrator-conversations/TECH.md);
 its durable topic/intake scope was approved as D-039 through D-041 on
-2026-07-17 and is ready for implementation.
+2026-07-17. Its additive topic/conversation store, local API, and scoped lease
+substrate are implemented; managed Pi turns, task deltas, intake adapters, and
+cockpit surfaces remain.
 
 Scope:
 
