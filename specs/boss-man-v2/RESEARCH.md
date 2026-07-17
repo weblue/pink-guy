@@ -142,7 +142,12 @@ The answer is currently nuanced and product-specific:
 
 - Anthropic's June 16, 2026 support update says a planned Agent SDK billing change was paused and that Agent SDK, `claude -p`, and third-party app usage continue to draw from subscription limits “for now.” See [Use the Claude Agent SDK with your Claude plan](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan).
 - Anthropic's [Claude Code legal and compliance documentation](https://code.claude.com/docs/en/legal-and-compliance) says subscription OAuth is intended for Claude Code and Claude.ai and that developers building products or services should use API keys rather than offer or route users' subscription credentials.
-- Most importantly for this project, current Pi [provider documentation](https://github.com/earendil-works/pi/blob/28df940f0d07b65284849a483be7b06e2ca046ee/packages/coding-agent/docs/providers.md#claude-promax) and [interactive-mode source](https://github.com/earendil-works/pi/blob/28df940f0d07b65284849a483be7b06e2ca046ee/packages/coding-agent/src/modes/interactive/interactive-mode.ts) display a specific warning that Anthropic subscription authentication used by this third-party harness draws from “extra usage” and is billed per token rather than Claude plan limits.
+- Most importantly for this project, Pi 0.80.9 was re-verified locally on
+  2026-07-17. Its installed provider documentation and
+  [upstream provider documentation](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/providers.md#claude-promax)
+  display a specific warning that Anthropic subscription authentication used
+  by this third-party harness draws from “extra usage” and is billed per token
+  rather than Claude plan limits.
 
 Operational conclusion: keep Claude only as an optional paid provider when using Pi. Do not design Boss Man v2 around Claude subscription capacity being included. Native Claude Code may still use the subscription, but native Claude Code is outside the Pi-only harness boundary. Re-verify policy before release because the official general policy and Pi-specific behavior have changed recently and are not perfectly aligned.
 

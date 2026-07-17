@@ -5,6 +5,10 @@ import { DatabaseSync } from "node:sqlite";
 
 const TASK_STATES = new Set(["backlog", "ready", "in_progress", "review", "blocked", "done"]);
 const RUN_PHASES = new Set(["implementation", "test", "review"]);
+const ORCHESTRATOR_COMMAND_KINDS = new Set(["start_task"]);
+const ORCHESTRATOR_COMMAND_TERMINAL_STATES = new Set([
+  "succeeded", "failed", "reconciliation_required", "cancelled",
+]);
 const CAPABILITY_ACTIONS = {
   worker: new Set([
     "read", "claim", "release", "progress", "block", "create_child", "request_review", "propose_complete",
@@ -37,6 +41,21 @@ function publicOrchestrator(row) {
   if (!row) return null;
   const { token_sha256: ignoredTokenHash, metadata_json: ignoredMetadataJson, ...visible } = row;
   return { ...visible, metadata: parseJson(row.metadata_json) ?? {} };
+}
+
+function publicOrchestratorCommand(row) {
+  if (!row) return null;
+  const {
+    request_sha256: ignoredRequestHash,
+    payload_json: ignoredPayloadJson,
+    result_json: ignoredResultJson,
+    ...visible
+  } = row;
+  return {
+    ...visible,
+    payload: parseJson(row.payload_json) ?? {},
+    result: parseJson(row.result_json),
+  };
 }
 
 export class Phase0Store {
@@ -106,6 +125,33 @@ export class Phase0Store {
         metadata_json TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS orchestrator_commands (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        id TEXT NOT NULL UNIQUE,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        task_id TEXT REFERENCES tasks(id),
+        orchestrator_id TEXT REFERENCES project_orchestrators(id),
+        kind TEXT NOT NULL,
+        phase TEXT NOT NULL,
+        state TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        result_json TEXT,
+        request_sha256 TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        claimed_at TEXT,
+        completed_at TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS orchestrator_command_events (
+        command_id TEXT NOT NULL REFERENCES orchestrator_commands(id),
+        sequence INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        orchestrator_id TEXT,
+        payload_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (command_id, sequence)
       );
       CREATE TABLE IF NOT EXISTS run_events (
         run_id TEXT NOT NULL REFERENCES runs(id),
@@ -375,6 +421,8 @@ export class Phase0Store {
       );
       CREATE UNIQUE INDEX IF NOT EXISTS one_active_orchestrator_per_project
         ON project_orchestrators(project_id) WHERE status='active';
+      CREATE INDEX IF NOT EXISTS orchestrator_commands_project_state
+        ON orchestrator_commands(project_id,state,sequence);
     `);
   }
 
@@ -411,6 +459,159 @@ export class Phase0Store {
     return this.getTask(taskId);
   }
 
+  createOwnerTask({
+    projectId,
+    title,
+    acceptanceCriteria = [],
+    revision,
+    idempotencyKey,
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    const normalizedTitle = typeof title === "string" ? title.trim() : "";
+    if (!normalizedTitle || normalizedTitle.length > 500 || normalizedTitle.includes("\0")) {
+      throw codedError("invalid_request", "task title must be between 1 and 500 characters");
+    }
+    if (
+      !Array.isArray(acceptanceCriteria) || acceptanceCriteria.length > 100
+      || acceptanceCriteria.some((item) => typeof item !== "string" || !item.trim() || item.length > 2000)
+    ) {
+      throw codedError("invalid_request", "acceptance criteria must be a list of non-empty strings");
+    }
+    if (!revision) throw codedError("invalid_request", "task repository revision is required");
+    if (!this.getProject(projectId)) throw codedError("not_found", `unknown project: ${projectId}`);
+    const normalizedCriteria = acceptanceCriteria.map((item) => item.trim());
+    const requestSha256 = sha256(JSON.stringify({
+      action: "create_task", projectId, title: normalizedTitle, acceptanceCriteria: normalizedCriteria,
+    }));
+    const prior = this.database.prepare("SELECT * FROM audit_events WHERE idempotency_key=?").get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256 || prior.type !== "task_created") {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different owner mutation");
+      }
+      return { replayed: true, task: this.parseAuditEvent(prior).current };
+    }
+    const id = randomUUID();
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`INSERT INTO tasks(
+        id,project_id,title,status,version,updated_at,revision,validation_passed,
+        merge_requested,acceptance_criteria_json
+      ) VALUES(?,?,?,'ready',1,?,?,0,0,?)`).run(
+        id, projectId, normalizedTitle, now, revision, JSON.stringify(normalizedCriteria),
+      );
+      const current = this.getTaskDetails(id);
+      this.database.prepare(`INSERT INTO task_events(
+        task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+        actor_role,run_id,task_version
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        id, "task_created", "local-owner", null, "ready",
+        JSON.stringify({ title: normalizedTitle, acceptanceCriteria: normalizedCriteria }),
+        idempotencyKey, now, "owner", null, 1,
+      );
+      this.database.prepare(`INSERT INTO audit_events(
+        task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+        idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        id, "task_created", "local-owner", "owner", null, null, "null", JSON.stringify(current),
+        JSON.stringify({ title: normalizedTitle, acceptanceCriteria: normalizedCriteria }),
+        idempotencyKey, requestSha256, now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return { replayed: false, task: this.getTaskDetails(id) };
+  }
+
+  scheduleOwnerTaskRun({ taskId, phase, idempotencyKey }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    if (!RUN_PHASES.has(phase)) throw codedError("invalid_request", `unsupported run phase: ${phase}`);
+    const task = this.getTask(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    const payload = { source: "local_owner" };
+    const commandRequest = {
+      projectId: task.project_id, taskId, kind: "start_task", phase, payload,
+    };
+    const commandRequestSha256 = sha256(JSON.stringify(commandRequest));
+    const priorCommand = this.database.prepare(
+      "SELECT * FROM orchestrator_commands WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (priorCommand) {
+      const priorAudit = this.database.prepare(
+        "SELECT * FROM audit_events WHERE idempotency_key=? AND type='task_scheduled'",
+      ).get(idempotencyKey);
+      if (priorCommand.request_sha256 !== commandRequestSha256 || !priorAudit) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different scheduling request");
+      }
+      return {
+        replayed: true,
+        task: this.parseAuditEvent(priorAudit).current,
+        command: publicOrchestratorCommand(priorCommand),
+      };
+    }
+    const orchestrator = this.activeProjectOrchestrator(task.project_id);
+    if (!orchestrator) {
+      throw codedError("orchestrator_unavailable", "project has no active orchestrator lease");
+    }
+    if (!["ready", "backlog"].includes(task.status) || task.assigned_worker) {
+      throw codedError("transition_denied", "only an unassigned ready or backlog task can be scheduled");
+    }
+    const commandId = randomUUID();
+    const actorId = `task-agent:${phase}:${commandId}`;
+    const now = this.clock();
+    const prior = this.getTaskDetails(taskId);
+    const auditRequestSha256 = sha256(JSON.stringify({ action: "schedule_task", taskId, phase }));
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`INSERT INTO orchestrator_commands(
+        id,project_id,task_id,orchestrator_id,kind,phase,state,payload_json,request_sha256,
+        idempotency_key,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,'queued',?,?,?,?,?)`).run(
+        commandId, task.project_id, taskId, orchestrator.id, "start_task", phase,
+        JSON.stringify(payload), commandRequestSha256, idempotencyKey, now, now,
+      );
+      const nextVersion = task.version + 1;
+      const changed = this.database.prepare(`UPDATE tasks SET
+        status='in_progress',assigned_worker=?,version=?,updated_at=?
+        WHERE id=? AND version=? AND status IN ('ready','backlog') AND assigned_worker IS NULL`).run(
+        actorId, nextVersion, now, taskId, task.version,
+      );
+      if (Number(changed.changes) !== 1) throw codedError("version_conflict", "task changed during scheduling");
+      const current = this.getTaskDetails(taskId);
+      this.appendOrchestratorCommandEvent(commandId, "queued", orchestrator.id, {
+        projectId: task.project_id, taskId, kind: "start_task", phase, source: "local_owner",
+      }, now);
+      this.database.prepare(`INSERT INTO task_events(
+        task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+        actor_role,run_id,task_version
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        taskId, "task_scheduled", "local-owner", task.status, "in_progress",
+        JSON.stringify({ phase, commandId, assignedWorker: actorId }),
+        idempotencyKey, now, "owner", null, nextVersion,
+      );
+      this.database.prepare(`INSERT INTO audit_events(
+        task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+        idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        taskId, "task_scheduled", "local-owner", "owner", null, null,
+        JSON.stringify(prior), JSON.stringify(current),
+        JSON.stringify({ phase, commandId, assignedWorker: actorId }),
+        idempotencyKey, auditRequestSha256, now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      replayed: false,
+      task: this.getTaskDetails(taskId),
+      command: this.orchestratorCommand(commandId),
+    };
+  }
+
   getTask(taskId) {
     return this.database.prepare("SELECT * FROM tasks WHERE id=?").get(taskId) ?? null;
   }
@@ -434,8 +635,23 @@ export class Phase0Store {
 
   expireOrchestratorLeases() {
     const now = this.clock();
-    this.database.prepare(`UPDATE project_orchestrators SET
-      status='expired',updated_at=? WHERE status='active' AND lease_expires_at<=?`).run(now, now);
+    const expired = this.database.prepare(
+      "SELECT id FROM project_orchestrators WHERE status='active' AND lease_expires_at<=? ORDER BY id",
+    ).all(now);
+    if (expired.length === 0) return [];
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      for (const { id } of expired) {
+        this.database.prepare(`UPDATE project_orchestrators SET
+          status='expired',updated_at=? WHERE id=? AND status='active'`).run(now, id);
+        this.reconcileClaimedCommands(id, "orchestrator_lease_expired", now);
+      }
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return expired.map(({ id }) => id);
   }
 
   registerProjectOrchestrator({
@@ -489,20 +705,39 @@ export class Phase0Store {
   }
 
   authorizeProjectOrchestrator(token, projectId) {
+    const row = this.authorizeActiveProjectOrchestrator(token);
+    if (row.project_id !== projectId) {
+      throw codedError("orchestrator_denied", "orchestrator lease is missing, expired, or outside project scope");
+    }
+    return row;
+  }
+
+  authorizeActiveProjectOrchestrator(token) {
     if (!token) throw codedError("orchestrator_denied", "orchestrator bearer token is required");
     this.expireOrchestratorLeases();
     const row = this.database.prepare(`SELECT * FROM project_orchestrators
-      WHERE token_sha256=? AND project_id=? AND status='active'`).get(sha256(token), projectId);
-    if (!row) throw codedError("orchestrator_denied", "orchestrator lease is missing, expired, or outside project scope");
+      WHERE token_sha256=? AND status='active'`).get(sha256(token));
+    if (!row) throw codedError("orchestrator_denied", "orchestrator lease is missing or expired");
     return { ...row, metadata: parseJson(row.metadata_json) ?? {} };
   }
 
   releaseProjectOrchestrator(token) {
     if (!token) throw codedError("orchestrator_denied", "orchestrator bearer token is required");
     const now = this.clock();
-    const result = this.database.prepare(`UPDATE project_orchestrators SET
-      status='released',updated_at=? WHERE token_sha256=? AND status='active'`).run(now, sha256(token));
-    if (Number(result.changes) !== 1) throw codedError("orchestrator_denied", "active orchestrator lease was not found");
+    const row = this.database.prepare(
+      "SELECT id FROM project_orchestrators WHERE token_sha256=? AND status='active'",
+    ).get(sha256(token));
+    if (!row) throw codedError("orchestrator_denied", "active orchestrator lease was not found");
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`UPDATE project_orchestrators SET
+        status='released',updated_at=? WHERE id=? AND status='active'`).run(now, row.id);
+      this.reconcileClaimedCommands(row.id, "orchestrator_lease_released", now);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   projectOrchestrator(id) {
@@ -523,6 +758,164 @@ export class Phase0Store {
     return this.database.prepare(`SELECT o.*,p.name project_name FROM project_orchestrators o
       JOIN projects p ON p.id=o.project_id ORDER BY p.name,o.created_at`).all()
       .map((row) => publicOrchestrator(row));
+  }
+
+  enqueueOrchestratorCommand({
+    projectId,
+    taskId,
+    kind = "start_task",
+    phase,
+    payload = {},
+    idempotencyKey,
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    if (!ORCHESTRATOR_COMMAND_KINDS.has(kind)) {
+      throw codedError("invalid_request", `unsupported orchestrator command: ${kind}`);
+    }
+    if (!RUN_PHASES.has(phase)) throw codedError("invalid_request", `unsupported run phase: ${phase}`);
+    const project = this.getProject(projectId);
+    if (!project) throw codedError("not_found", `unknown project: ${projectId}`);
+    const task = this.getTask(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    if (task.project_id !== projectId) {
+      throw codedError("orchestrator_denied", "task is outside the command project");
+    }
+    const request = { projectId, taskId, kind, phase, payload };
+    const requestSha256 = sha256(JSON.stringify(request));
+    const prior = this.database.prepare(
+      "SELECT * FROM orchestrator_commands WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different command");
+      }
+      return { replayed: true, command: publicOrchestratorCommand(prior) };
+    }
+    const orchestrator = this.activeProjectOrchestrator(projectId);
+    if (!orchestrator) {
+      throw codedError("orchestrator_unavailable", "project has no active orchestrator lease");
+    }
+    const id = randomUUID();
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`INSERT INTO orchestrator_commands(
+        id,project_id,task_id,orchestrator_id,kind,phase,state,payload_json,request_sha256,
+        idempotency_key,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,'queued',?,?,?,?,?)`).run(
+        id, projectId, taskId, orchestrator.id, kind, phase, JSON.stringify(payload),
+        requestSha256, idempotencyKey, now, now,
+      );
+      this.appendOrchestratorCommandEvent(id, "queued", orchestrator.id, {
+        projectId, taskId, kind, phase,
+      }, now);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return { replayed: false, command: this.orchestratorCommand(id) };
+  }
+
+  claimOrchestratorCommand(token) {
+    const orchestrator = this.authorizeActiveProjectOrchestrator(token);
+    const command = this.database.prepare(`SELECT * FROM orchestrator_commands
+      WHERE project_id=? AND state='queued' ORDER BY sequence LIMIT 1`).get(orchestrator.project_id);
+    if (!command) return null;
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const result = this.database.prepare(`UPDATE orchestrator_commands SET
+        state='claimed',orchestrator_id=?,claimed_at=?,updated_at=?
+        WHERE id=? AND state='queued'`).run(orchestrator.id, now, now, command.id);
+      if (Number(result.changes) !== 1) {
+        throw codedError("command_conflict", "orchestrator command was claimed concurrently");
+      }
+      this.appendOrchestratorCommandEvent(command.id, "claimed", orchestrator.id, {}, now);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return this.orchestratorCommand(command.id);
+  }
+
+  completeOrchestratorCommand({ token, commandId, state, result = {} }) {
+    if (!["succeeded", "failed"].includes(state)) {
+      throw codedError("invalid_request", "command completion state must be succeeded or failed");
+    }
+    const orchestrator = this.authorizeActiveProjectOrchestrator(token);
+    const command = this.database.prepare("SELECT * FROM orchestrator_commands WHERE id=?").get(commandId);
+    if (!command) throw codedError("not_found", `unknown orchestrator command: ${commandId}`);
+    if (command.project_id !== orchestrator.project_id || command.orchestrator_id !== orchestrator.id) {
+      throw codedError("orchestrator_denied", "orchestrator cannot complete a command outside its active lease");
+    }
+    if (command.state !== "claimed") {
+      if (ORCHESTRATOR_COMMAND_TERMINAL_STATES.has(command.state)) {
+        throw codedError("command_conflict", `orchestrator command is already ${command.state}`);
+      }
+      throw codedError("command_conflict", "orchestrator command must be claimed before completion");
+    }
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`UPDATE orchestrator_commands SET
+        state=?,result_json=?,completed_at=?,updated_at=? WHERE id=? AND state='claimed'`).run(
+        state, JSON.stringify(result), now, now, commandId,
+      );
+      this.appendOrchestratorCommandEvent(commandId, state, orchestrator.id, result, now);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return this.orchestratorCommand(commandId);
+  }
+
+  orchestratorCommand(id) {
+    return publicOrchestratorCommand(
+      this.database.prepare("SELECT * FROM orchestrator_commands WHERE id=?").get(id),
+    );
+  }
+
+  orchestratorCommands({ projectId = null, limit = 100 } = {}) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+      throw codedError("invalid_request", "command limit must be between 1 and 500");
+    }
+    const rows = projectId
+      ? this.database.prepare(`SELECT c.*,p.name project_name FROM orchestrator_commands c
+        JOIN projects p ON p.id=c.project_id WHERE c.project_id=?
+        ORDER BY c.sequence DESC LIMIT ?`).all(projectId, limit)
+      : this.database.prepare(`SELECT c.*,p.name project_name FROM orchestrator_commands c
+        JOIN projects p ON p.id=c.project_id ORDER BY c.sequence DESC LIMIT ?`).all(limit);
+    return rows.map((row) => publicOrchestratorCommand(row));
+  }
+
+  orchestratorCommandEvents(commandId) {
+    return this.database.prepare(`SELECT sequence,type,orchestrator_id,payload_json,created_at
+      FROM orchestrator_command_events WHERE command_id=? ORDER BY sequence`).all(commandId)
+      .map((row) => ({ ...row, payload: parseJson(row.payload_json) ?? {} }));
+  }
+
+  appendOrchestratorCommandEvent(commandId, type, orchestratorId, payload, now = this.clock()) {
+    const next = this.database.prepare(`SELECT COALESCE(MAX(sequence),0)+1 value
+      FROM orchestrator_command_events WHERE command_id=?`).get(commandId);
+    this.database.prepare(`INSERT INTO orchestrator_command_events(
+      command_id,sequence,type,orchestrator_id,payload_json,created_at
+    ) VALUES(?,?,?,?,?,?)`).run(commandId, Number(next.value), type, orchestratorId, JSON.stringify(payload), now);
+  }
+
+  reconcileClaimedCommands(orchestratorId, reason, now = this.clock()) {
+    const commands = this.database.prepare(`SELECT id FROM orchestrator_commands
+      WHERE orchestrator_id=? AND state='claimed' ORDER BY sequence`).all(orchestratorId);
+    for (const { id } of commands) {
+      const result = { reason, automaticReplay: false };
+      this.database.prepare(`UPDATE orchestrator_commands SET
+        state='reconciliation_required',result_json=?,completed_at=?,updated_at=?
+        WHERE id=? AND state='claimed'`).run(JSON.stringify(result), now, now, id);
+      this.appendOrchestratorCommandEvent(id, "reconciliation_required", orchestratorId, result, now);
+    }
+    return commands.map(({ id }) => id);
   }
 
   getTaskDetails(taskId) {

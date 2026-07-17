@@ -38,18 +38,38 @@ Phase 0 does not require application authentication because its runnable profile
 
 Purpose: make Boss Man useful for daily development on the host and, when explicitly enabled, a trusted LAN.
 
+Active slice: [`../phase1-local-control-loop/PRODUCT.md`](../phase1-local-control-loop/PRODUCT.md)
+and [`../phase1-local-control-loop/TECH.md`](../phase1-local-control-loop/TECH.md)
+define the durable project-orchestrator command loop that began this phase.
+The completed local task-control slice is
+[`../phase1-local-task-controls/PRODUCT.md`](../phase1-local-task-controls/PRODUCT.md)
+and [`../phase1-local-task-controls/TECH.md`](../phase1-local-task-controls/TECH.md).
+The next proposed slice is
+[`../phase1-orchestrator-conversations/PRODUCT.md`](../phase1-orchestrator-conversations/PRODUCT.md)
+and
+[`../phase1-orchestrator-conversations/TECH.md`](../phase1-orchestrator-conversations/TECH.md);
+its durable topic/intake scope was approved as D-039 through D-041 on
+2026-07-17 and is ready for implementation.
+
 Scope:
 
 - project-orchestrator command queue, scheduling, heartbeat-loss handling, and task-agent lifecycle;
+- topic/project orchestrator conversations as the primary task-ingress path,
+  including new-project discovery, repository intake, and read-only external
+  work-item snapshots;
 - usable project/task creation, editing, assignment, dependencies, attention queue, and phase selection;
 - persistent PTY with resize, reconnect, scrollback, and tmux/cmux attach information;
 - task workspace with diffs, tests, review, artifacts, context snapshots, decisions, and raw evidence;
 - host-owned checkpoint/commit operations and manual merge preparation;
-- local provider/model selection and current run/resource observability;
+- centrally assigned per-run provider/model selection and current run/resource
+  observability;
 - desktop browser tests and local smoke runbook;
 - explicit trusted-LAN listener profile with interface/CIDR validation and a clear “no application auth” warning.
 
-Exit: the owner can manage multiple repositories and complete an implementation → test → review workflow from the local cockpit without editing SQLite or calling internal probe helpers.
+Exit: the owner can start or reopen a scoped orchestrator conversation, turn a
+new idea or existing repository/ticket into observable tasks, manage multiple
+repositories, and complete an implementation → test → review workflow from
+the local cockpit without editing SQLite or calling internal probe helpers.
 
 ## Phase 2 — autonomy, recovery, and portability
 

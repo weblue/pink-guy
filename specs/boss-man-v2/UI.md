@@ -2,7 +2,7 @@
 
 Status: Draft for Phase 1 local-first product planning; direct-Pi foundation selected
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 ## Decision summary
 
@@ -26,13 +26,15 @@ AoE is not usable as a normal plugin or unchanged companion service for this spe
 
 ## Information architecture
 
-The application is organized around work state, not conversations.
+The application is organized around work state, not a conversation list.
+Scoped orchestrator conversations are the primary intake/control surface for
+creating that work.
 
 The diagram below is the C0-04 information-architecture wireframe. It defines placement and hierarchy, not final visual design. The served Phase 0 operator shell implements this three-region shape for projects, orchestrator leases, the task board, sessions, context status, and a terminal/attach placeholder. Detailed interaction wireframes listed at the end of this document remain Phase 1 design work.
 
 ```text
 ┌──────────────────┬────────────────────────────────────┬─────────────────────┐
-│ Projects / Work  │ Main work surface                  │ Inspector           │
+│ Topics / Projects│ Main work surface                  │ Inspector           │
 │                  │                                    │                     │
 │ Attention        │ Board / Overview / Changes         │ Task + dependencies │
 │ Active runs      │ Tests / Review / Artifacts         │ Session + model     │
@@ -46,6 +48,22 @@ The diagram below is the C0-04 information-architecture wireframe. It defines pl
 The left navigator answers “what needs attention?” The center answers “what am I doing or inspecting?” The right inspector answers “what state, evidence, and risk explain this work?” The bottom status surface answers “what runtime am I connected to?”
 
 Chat never occupies all three answers.
+
+### Topic and orchestrator intake
+
+- A global **New topic** action offers “New project/prototype” and “Existing
+  repository.”
+- Existing-repository intake accepts a remote URL or registered local
+  repository, optional owner description, and external work-item references.
+- A project-level **Ask orchestrator** action reopens the durable project
+  conversation to add, refine, split, or explain work.
+- The conversation shares the main surface with structured source,
+  assumption, question, decision, and task-change cards. The inspector shows
+  repository binding, source revisions, affected tasks, and readiness.
+- Orchestrator-created changes are navigable without reading prose: each turn
+  exposes created/updated/blocked tasks and links to their board/workspace.
+- Direct task creation remains available as a compact fast path and recovery
+  tool.
 
 ## Required desktop surfaces
 
@@ -122,8 +140,9 @@ Mobile prioritizes triage over a squeezed desktop replica:
 
 ## Chat containment rules
 
-1. The application never defaults to a blank chat composer.
-2. Starting work begins from a task or repository context, not a conversation list.
+1. The application never defaults globally to a blank chat composer.
+2. Starting work begins from a named topic or project-scoped orchestrator
+   conversation, never an identity-free global chat or a transcript list.
 3. Agent questions appear as attention items linked to the exact task and turn.
 4. Long tool output collapses into typed cards/artifacts instead of dominating the transcript.
 5. The conversation can be hidden without losing run controls, terminal access, diffs, tests, or review.
@@ -151,6 +170,8 @@ AoE is rejected if any of gates 1–5 or 9 fail. Even if all pass, the owner dec
 No Figma mock exists. Before implementation beyond the foundation spike, produce low-fidelity layouts for:
 
 - desktop fleet/attention dashboard;
+- new-topic and existing-repository orchestrator intake;
+- orchestrator conversation with structured task/source/decision changes;
 - task workspace with diff and inspector;
 - review and validation loop;
 - context snapshot/tree browser;

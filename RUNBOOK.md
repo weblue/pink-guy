@@ -1,8 +1,12 @@
 # Boss Man local development runbook
 
-Status: Phase 0 operator shell
+Status: Phase 1 local cockpit (first control-loop slice)
 
-The current application can be served locally for multi-project observability. The local-smoke profile intentionally has no application authentication and binds only to loopback. Trusted-LAN binding is Phase 1 work; authenticated SWAG/public access is Phase 3.
+The current application can be served locally for multi-project observability
+and durable project-orchestrator command delivery. The local-smoke profile
+intentionally has no application authentication and binds only to loopback.
+Trusted-LAN binding is later Phase 1 work; authenticated SWAG/public access is
+Phase 3.
 
 ## Prerequisites
 
@@ -45,6 +49,7 @@ curl --fail http://127.0.0.1:4310/api/health
 curl --fail http://127.0.0.1:4310/api/projects
 curl --fail http://127.0.0.1:4310/api/orchestrators
 curl --fail http://127.0.0.1:4310/api/board
+curl --fail http://127.0.0.1:4310/api/commands
 ```
 
 Stop the server with `Ctrl-C`.
@@ -59,13 +64,71 @@ node ./phase0/scripts/project-orchestrator.mjs \
   --repo /Users/ND139178/Documents/boss-man
 ```
 
-The process registers through the central API, keeps its in-memory bearer token private, heartbeats the lease, and releases it on a normal stop. A second orchestrator for the same project is rejected until the first lease is released or expires.
+The process registers through the central API, keeps its in-memory bearer token
+private, heartbeats the lease, polls for project-scoped commands, executes one
+at a time, and releases the lease on a normal stop. A second orchestrator for
+the same project is rejected until the first lease is released or expires.
+Use `--poll-ms` to change the local polling interval; the default is 1000 ms.
 
 For cmux, create or select a tmux-backed workspace and run the same command there. cmux/tmux and SSH are attach and process-management transports; they do not own durable Boss Man state.
 
+## Create and schedule phase-scoped work
+
+In the cockpit, use **Create task** to choose a project, provide a title and
+optional acceptance criteria, and add a `ready` task. On its board card,
+choose `implementation`, `test`, or `review` and select **Schedule**.
+
+Scheduling is one authoritative transaction: it assigns a phase-scoped task
+agent, moves the task to `in_progress`, and queues its `start_task` command.
+It fails without changing the task when the project has no active
+orchestrator.
+
+The equivalent API operation for creating a task is:
+
+```sh
+curl --fail-with-body \
+  --request POST \
+  --header 'Content-Type: application/json' \
+  --header 'Idempotency-Key: owner-task-001' \
+  --data '{"title":"Implement the task inspector","acceptanceCriteria":["The owner can inspect a fixed revision."]}' \
+  http://127.0.0.1:4310/api/projects/PROJECT_ID/tasks
+```
+
+Then atomically schedule it:
+
+```sh
+curl --fail-with-body \
+  --request POST \
+  --header 'Content-Type: application/json' \
+  --header 'Idempotency-Key: owner-schedule-001' \
+  --data '{"phase":"implementation"}' \
+  http://127.0.0.1:4310/api/tasks/TASK_ID/schedule
+```
+
+The project orchestrator calls the existing managed task-session operation.
+Success or failure is retained in `/api/commands`. If its lease is lost after
+claim, the command becomes `reconciliation_required`; it is not replayed
+automatically.
+
+Use the deterministic probes to test both control layers without starting a
+provider or task container:
+
+```sh
+node ./phase0/scripts/probe-phase1-command-loop.mjs \
+  /Users/ND139178/Documents/boss-man
+node ./phase0/scripts/probe-phase1-local-task-controls.mjs \
+  /Users/ND139178/Documents/boss-man
+```
+
 ## Current execution boundary
 
-The served Phase 0 shell shows projects, tasks, sessions, and project-orchestrator leases. The existing automated probes exercise real task claiming, Pi RPC, containers, worktrees, host Git checkpoints, RTK evidence, and context export. The shell does not yet provide full task controls because that product command surface belongs to Phase 1—not because local authentication is missing.
+The served Phase 1 shell shows projects, tasks, sessions, project-orchestrator
+leases, recent commands, and local create/schedule controls. The existing
+automated probes exercise real task claiming, Pi RPC, containers, worktrees,
+host Git checkpoints, RTK evidence, and context export. The shell does not yet
+provide task editing/dependencies, reconciliation actions, or a persistent
+PTY; those are the next local-product slices, not authentication
+prerequisites.
 
 To exercise the complete model-less C0-04 context path:
 

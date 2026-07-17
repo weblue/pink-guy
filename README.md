@@ -1,6 +1,19 @@
-# Boss Man v2 planning workspace
+# Boss Man v2
 
-This repository contains the planning baseline and executable Phase 0 feasibility work for Boss Man v2. The production application has not started, but Phase 0 is complete for the unauthenticated loopback-smoke profile and the central API/operator shell can be served using [`RUNBOOK.md`](RUNBOOK.md). Current code includes deterministic fixtures, Pi lifecycle/custody probes, a direct-Pi control-plane slice, project-orchestrator leases, task-policy and governed-memory contracts, atomic context export/import, a pinned task image, Git/credential/RTK probes, a disposable remote-edge test, and evidence manifests used to select the foundation.
+This repository contains the specification, selected direct-Pi foundation, and
+executable local application for Boss Man v2. Phase 0 is complete for the
+unauthenticated loopback-smoke profile. Phase 1 is in progress: the central API
+now has a durable project-orchestrator command loop with phase-scoped work,
+idempotent enqueue/claim/complete operations, lease-loss reconciliation, and
+cockpit visibility. The owner can also create tasks with acceptance criteria
+and atomically claim/schedule them from the board. Serve it using
+[`RUNBOOK.md`](RUNBOOK.md).
+
+Current code also includes deterministic fixtures, Pi lifecycle/custody
+probes, authoritative task policy, governed memory and FTS retrieval, atomic
+context export/import, a pinned task image, host-owned Git and credential
+boundaries, RTK evidence, and the Phase 0 manifests used to select the
+foundation.
 
 The design is organized under [`specs/boss-man-v2`](specs/boss-man-v2):
 
@@ -15,6 +28,13 @@ The design is organized under [`specs/boss-man-v2`](specs/boss-man-v2):
 - [`PHASE0-CLOSURE.md`](specs/boss-man-v2/PHASE0-CLOSURE.md) turns those conditions into the ordered implementation milestone before broad Phase 1 work.
 - [`RESEARCH.md`](specs/boss-man-v2/RESEARCH.md) records source inspection, current provider policy, comparable projects, and the memory/context-management landscape.
 - [`DECISIONS.md`](specs/boss-man-v2/DECISIONS.md) separates proposed decisions, assumptions, and questions that still need owner input.
+- [`phase1-local-control-loop`](specs/phase1-local-control-loop) defines and
+  verifies the first Phase 1 product slice.
+- [`phase1-local-task-controls`](specs/phase1-local-task-controls) defines and
+  verifies the local create/claim/schedule slice.
+- [`phase1-orchestrator-conversations`](specs/phase1-orchestrator-conversations)
+  drafts the next conversation-first topic, repository, and work-item intake
+  slice.
 
 The upstream source reviewed for this baseline was:
 
