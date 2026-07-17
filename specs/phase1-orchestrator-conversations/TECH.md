@@ -1,6 +1,6 @@
 # Phase 1 orchestrator conversations and project intake
 
-Status: Draft; durable-scope decisions require owner approval before implementation
+Status: Approved for implementation
 
 Last updated: 2026-07-17
 
@@ -236,18 +236,14 @@ conversation-to-board and context-export suite.
 - **Scope-transfer loss:** a validated model-less snapshot is mandatory before
   resuming the same conversation under a project orchestrator.
 
-## Decision gates
+## Resolved decisions
 
-1. **Topic data model:** approve a first-class pre-project topic rather than
+1. **Topic data model:** use a first-class pre-project topic rather than
    automatically creating a scratch repository or making projects
-   repository-optional. Recommended: approve first-class topics.
-2. **Unbound-topic execution:** approve one system-intake orchestrator lease
+   repository-optional. Approved as D-039 on 2026-07-17.
+2. **Unbound-topic execution:** use one system-intake orchestrator lease
    that hosts multiple topic conversations, then transfers a conversation to
-   the one project orchestrator after binding. Recommended: approve.
-3. **External source direction:** approve immutable, manually refreshed,
+   the one project orchestrator after binding. Approved as D-040 on 2026-07-17.
+3. **External source direction:** use immutable, manually refreshed,
    read-only snapshots for the first release; defer Jira write-back, webhooks,
-   and polling. Recommended: approve.
-
-Implementation must not begin until gates 1 and 2 are explicitly approved
-because they change durable identity and lifecycle boundaries.
-
+   and polling. Approved as D-041 on 2026-07-17.

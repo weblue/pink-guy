@@ -48,7 +48,8 @@ The next proposed slice is
 [`../phase1-orchestrator-conversations/PRODUCT.md`](../phase1-orchestrator-conversations/PRODUCT.md)
 and
 [`../phase1-orchestrator-conversations/TECH.md`](../phase1-orchestrator-conversations/TECH.md);
-its durable topic/intake scope requires owner approval before implementation.
+its durable topic/intake scope was approved as D-039 through D-041 on
+2026-07-17 and is ready for implementation.
 
 Scope:
 
