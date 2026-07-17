@@ -1,6 +1,6 @@
 # Boss Man v2 technical design
 
-Status: Draft for architecture review
+Status: Direct-Pi foundation approved; Phase 0 closure
 
 Last updated: 2026-07-16
 
@@ -11,7 +11,7 @@ This design is based on the following upstream revisions:
 - [`weblue/boss-man@59f8282`](https://github.com/weblue/boss-man/tree/59f8282654f9b4cea90f2ba830aa6d56106e25b4)
 - [`weblue/inspector-gadget@3df3938`](https://github.com/weblue/inspector-gadget/tree/3df39382ceb147aa411f9c578ef4131fc91912f2)
 - [`earendil-works/pi@v0.80.9`](https://github.com/earendil-works/pi/tree/2d16f92973230a7e095aa984f150ba8702784f50)
-- [`agent-of-empires@7803b25`](https://github.com/agent-of-empires/agent-of-empires/tree/7803b25451bc836ad40ad9ad9d5efad11de83764)
+- [`agent-of-empires@90855a5`](https://github.com/agent-of-empires/agent-of-empires/tree/90855a59360f46652786a49f54a56df002d8ef98)
 - [`svkozak/pi-acp@49d6ec8`](https://github.com/svkozak/pi-acp/tree/49d6ec804d40b52317d873360654054c5d2387a3)
 
 The current Boss Man already has a useful SQLite task graph and event history, an SSE-backed web UI, Docker/Sandcastle execution, and worktree-based runs. Its continuation mechanism starts a fresh harness process from a prompt assembled from a rolling LLM summary, recent turns, tasks, and memories. The raw events remain available, but they are not treated as a portable, versioned session artifact.
@@ -30,7 +30,7 @@ The Pi ecosystem now also contains several local memory extensions. [`pi-persist
 
 Build a Pi-native control plane that reuses the proven product concepts from Boss Man, but replace the execution, UI, task-authorization, and context seams instead of incrementally wrapping Sandcastle.
 
-Phase 0 compares two equal candidates: (A) a bounded Agent of Empires core fork running Pi through `pi-acp`, and (B) a direct Pi RPC control plane using SQLite, React, xterm.js, the Docker Engine API, and a host-owned Git service. `FOUNDATION.md` records the requirement-by-requirement assessment and the exact fork surface. Neither candidate is the default before the spike.
+Phase 0 compared two equal candidates: (A) a bounded Agent of Empires core fork running Pi through `pi-acp`, and (B) a direct Pi RPC control plane using SQLite, a task-first web cockpit, the Docker Engine API, and a host-owned Git service. The owner selected the direct-Pi foundation on 2026-07-16. `PHASE0-RESULTS.md` records the evidence and remaining closure gates; `ADR-FOUNDATION.md` records the accepted decision.
 
 Boss Man must have one lifecycle authority. An unchanged Agent of Empires daemon beside an independent Boss Man service is rejected because it duplicates session, worker, worktree, container, authentication, and Git state. AoE is selected only if its reusable runtime and cockpit value exceeds the demonstrated long-term cost of maintaining the necessary core fork; Pi JSONL remains authoritative session evidence in either path.
 
@@ -46,7 +46,7 @@ flowchart LR
     API --> ART["Artifact and context store"]
     API --> MEM["Governed memory + FTS5"]
     SUP --> D["Docker Engine"]
-    D --> C1["pi-acp / Pi RPC container"]
+    D --> C1["Pi RPC task container"]
     C1 --> EXT["Boss Man Pi extension"]
     C1 --> RTK["RTK filter + raw tee"]
     EXT -->|"capability API"| API
@@ -75,11 +75,11 @@ Responsibilities:
 - provider/model policy evaluation at safe boundaries;
 - artifact indexing and download.
 
-On the Agent of Empires path, extend its Rust service, SQLite event facilities, React web dashboard, and persistent worker model rather than adding a second service. Its supported plugin API does not expose session creation/control, prompt dispatch, transcript custody, worktree/container policy, arbitrary API routes, or a full board route, so a normal plugin is insufficient. The required core fork is justified only if it stays bounded and passes the upstream-sync rehearsal in `FOUNDATION.md`. On the direct path, Hono, React, and `better-sqlite3` remain reasonable continuity choices. `UI.md` defines the required cockpit independently of either stack.
+The selected direct path owns this API rather than delegating lifecycle to a second session manager. The closure implementation uses a small Node HTTP/SQLite seam to prove transactions; Hono, React, and a supported SQLite binding remain reasonable production choices after the closure gates. `UI.md` defines the required cockpit independently of the server framework.
 
 ### Run supervisor
 
-The supervisor creates one managed Pi process per active session/run inside a container. On the AoE candidate it uses a modified persistent structured worker and `pi-acp`; on the direct candidate it communicates with `pi --mode rpc`. Neither path treats terminal scraping as authoritative. It owns:
+The supervisor creates one managed Pi process per active session/run inside a container and communicates directly with `pi --mode rpc`. It never treats terminal scraping as authoritative. It owns:
 
 - container create/start/stop/inspect/remove;
 - Pi RPC requests, responses, and notifications;
@@ -119,7 +119,7 @@ The extension listens to `session_before_compact` and blocks automatic compactio
 
 ### RTK output layer
 
-Install a pinned, checksum-verified RTK binary and its Pi extension in the agent image. Disable telemetry by default. Configure RTK to retain complete raw command output while returning the filtered representation to Pi.
+Install a pinned, checksum-verified RTK binary and a small Boss Man Pi interception extension in the agent image. Disable telemetry by default. The extension executes each Bash command once, writes ephemeral raw output, runs the pinned RTK `log` filter, and returns filtered output to Pi. The daemon redacts and ingests both forms before deleting the ephemeral originals.
 
 For every intercepted command, record:
 
@@ -130,7 +130,7 @@ For every intercepted command, record:
 - RTK version/filter and reported savings;
 - whether filtering was bypassed or failed.
 
-Use `tee.mode = "always"` for managed runs because complete-session retention and auditability outweigh the disk savings of failure-only teeing. The artifact quota system handles growth. The UI provides the filtered result by default and one-click raw access. `rtk proxy` is the explicit diagnostic escape hatch.
+Use complete raw capture for managed runs because complete-session retention and auditability outweigh the disk savings of failure-only capture. The standalone contract retains `tee.mode = "always"`, but the selected container path uses the Boss Man wrapper: RTK 0.42.3's Linux tee behavior did not reliably emit a raw file for direct commands in the pinned image. The wrapper preserves single execution and makes ingestion explicit. RTK 0.42.3 also requires `max_files` and `max_file_size` during configuration deserialization, and the pinned image includes `make` because RTK's `make` rewrite still depends on that executable. The artifact quota system handles growth. The UI provides filtered output by default and one-click redacted raw access. `rtk proxy` remains the diagnostic escape hatch.
 
 Do not route control-plane-owned Git mutations through RTK. Tests and build commands may be filtered for agent context, but merge/review policy consumes their exit status plus raw evidence, not the summary alone.
 
@@ -285,7 +285,7 @@ Commit requests include a proposed message and evidence, but the platform genera
 
 ### Container runtime and credentials
 
-Replace Sandcastle with a narrow runtime adapter over the Docker Engine API. Only the control plane talks to Docker. Containers never receive the Docker socket.
+Replace Sandcastle with a narrow runtime adapter over Docker. Only the control plane talks to Docker. Containers never receive the Docker socket. The Phase 0 adapter uses the pinned Docker CLI as its transport to the local Engine; the runtime interface keeps a later direct Engine API transport replaceable.
 
 Default container policy:
 
@@ -300,14 +300,20 @@ Default container policy:
 
 On macOS, Docker Desktop or OrbStack can supply the Docker API. The adapter boundary should keep that choice replaceable.
 
-Pi OAuth refresh and concurrent access to shared auth state are a risk. The first implementation should never mount `~/.pi` read-write into multiple containers. Prototype one of:
+Pi OAuth refresh and concurrent access to shared auth state are a risk. The first implementation never mounts `~/.pi` read-write into containers. C0-02 selects a bounded version of the first option:
 
-1. a private per-session Pi home initialized from a host credential snapshot and reconciled under a lock; or
-2. a host credential broker that supplies short-lived provider credentials without exposing the canonical store.
+1. materialize a per-run read-only credential source from an owner-managed profile;
+2. copy it inside the container into a private writable Pi configuration directory;
+3. checksum the canonical source before and after the run and record the result;
+4. allow only one active run for an OAuth snapshot profile;
+5. discard private refresh mutations rather than silently reconciling them; and
+6. delete both materialized run copies after verifying the canonical source checksum.
+
+This path passed both the synthetic isolation proof and one bounded owner-authorized OpenAI Codex turn, including a Pi Bash tool call through managed RTK capture. It is still not a durable refresh strategy. Production must either add explicit locked reconciliation with conflict handling or introduce a host credential broker before parallel OAuth-backed runs are allowed. Direct API and prepaid gateway keys can use higher concurrency only when the owner profile explicitly permits it.
 
 Direct API and prepaid gateway keys are simpler to scope than consumer OAuth files. Secrets must be redacted before event/artifact persistence.
 
-The repository owns a versioned configuration contract: typed schema, documented environment variables, and redacted examples. Agents may add or validate this contract but never invent or persist real production values. Secret injection is a deployment concern owned by the human; run-scoped credentials are materialized only for the process that needs them and are excluded from context export and memory promotion.
+The repository owns a versioned configuration contract in `phase0/schemas/provider-profile.schema.json`, with a redacted example in `phase0/runtime/provider-profile.example.json`. Agents may add or validate this contract but never invent or persist real production values. Secret injection is a deployment concern owned by the human; run-scoped credentials are materialized only for the process that needs them and are excluded from context export, events, command artifacts, and memory promotion.
 
 Deployment code is an artifact, not standing deployment authority. Agents may build manifests and start disposable test instances, but must not alter long-lived launch services, SWAG, DNS, router rules, production secrets, or public exposure without explicit authorization for the named operation.
 
@@ -355,7 +361,7 @@ Primary routes:
 
 Task detail combines specification/readiness, state, dependencies, assignments, live session, Git changes, tests, independent review, artifacts, timeline, conversation, and an interactive workspace terminal. Session detail combines structured timeline, conversation, terminal, context tree/snapshots, injected-memory receipts, model history, RTK output provenance, and controls. The memory route exposes candidates, active/contested/stale records, governed diffs, and evidence links. The complete layout and candidate evaluation live in `UI.md`.
 
-The UI foundation spike compares Agent of Empires plus `pi-acp` with the direct cockpit. If AoE is selected, fork its web dashboard and persistent worker model within the boundary in `FOUNDATION.md`. Otherwise, use xterm.js for terminals and optionally launch code-server as a separately authenticated workspace application. Ghostty and cmux remain local clients rather than server dependencies.
+The direct cockpit is selected. Use xterm.js for terminals and optionally launch code-server as a separately authenticated workspace application. Agent of Empires remains a behavior and interaction reference only; Ghostty and cmux remain local clients rather than server dependencies.
 
 ## Critical sequences
 
@@ -404,6 +410,14 @@ If provider completion is ambiguous or a tool call was in flight, the last two s
 - Large event bodies live in content-addressed artifacts.
 - Server timestamps are authoritative; source timestamps are preserved separately.
 - Schema migrations are transactional and backed up before application.
+
+### Restart and side-effect ledger
+
+C0-03 adds an authoritative SQLite side-effect ledger beside the ordered run events. Container lifecycle, provider responses, tools, snapshot publication, and Git mutations receive a stable run/kind/idempotency identity, a request checksum, an intent record before execution, and an immutable completion or reconciliation receipt afterward. A repeated identity with different intent is rejected.
+
+On restart, the daemon does not infer health from a surviving parent container. It verifies the recorded container ID, image, run label, and liveness, then conservatively stops the prior container after classification. A run with no uncertain work becomes `paused`; a lost provider response or tool completion becomes `reconciliation_required` and is never replayed automatically. A snapshot may be completed from its durable path and expected checksum. A Git checkpoint may be completed from the recorded parent revision plus Boss Man task/run/workspace provenance trailers. Missing or conflicting evidence remains unresolved.
+
+This closes the Phase 0 restart gate without claiming in-flight Pi RPC process reattachment. Production resume starts from the retained native session at a safe boundary unless a future process manager can prove both worker identity and live stream ownership. The recovery UI must expose the uncertain effect and require an explicit resolution before continuation.
 
 ## Security model
 
@@ -540,7 +554,7 @@ The main integration agent owns schema definitions, migrations, shared generated
 ## Risks and unresolved constraints
 
 1. **Pi API stability:** RPC, session JSONL, and extension hooks can evolve. Pin a tested Pi version, wrap it behind adapters, and retain unknown event types.
-2. **OAuth concurrency:** shared consumer credentials may race or be invalid for isolated processes. Complete the credential spike before parallel runs.
+2. **OAuth concurrency:** single-run snapshot isolation and one live turn pass; parallel consumer OAuth remains disabled until locked refresh reconciliation or a host broker is approved.
 3. **Exactly-once side effects:** provider failure after a tool call cannot always be classified automatically. Prefer pause-and-reconcile over replay.
 4. **Git metadata isolation:** linked worktrees normally reference a shared common Git directory. Prove the mount design before promising strict Git custody.
 5. **Secret persistence:** raw tool results can contain credentials. Redaction must occur before durable event capture, while preserving evidence that redaction occurred.
@@ -558,4 +572,4 @@ The main integration agent owns schema definitions, migrations, shared generated
 
 ## Implementation gate
 
-Do not begin the main implementation until the owner decisions in `DECISIONS.md` are resolved and the equal-candidate Phase 0 exit criteria in `FOUNDATION.md` are agreed. Phase 0 may produce evidence and ADR alternatives, but the human owner makes the foundation/fork decision. The recommended decisions are intentionally recorded so review can be concrete rather than an open-ended design interview.
+The owner resolved the foundation ADR in favor of direct Pi on 2026-07-16. Begin with the bounded Phase 0 closure vertical slice: integrate task policy, runtime/Git/credentials, active recovery, governed context retrieval, and real owner authentication behind the selected daemon authority. Do not broaden into the production cockpit backlog until those candidate-level tests and the second clean ARM64 reproduction pass. Phase 0 evidence and conditions are summarized in `PHASE0-RESULTS.md`.

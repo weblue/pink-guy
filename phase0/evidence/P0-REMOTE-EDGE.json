@@ -1,0 +1,121 @@
+{
+  "schema_version": "1.0.0",
+  "test_id": "P0-REMOTE-EDGE",
+  "candidate": "neutral",
+  "evidence_kind": "runtime",
+  "status": "pass",
+  "source_versions": {
+    "node": "25.9.0",
+    "edge_contract": "boss-man-phase0-edge-v1",
+    "fixture": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "container_runtime": null
+  },
+  "sanitized_command": "node phase0/scripts/probe-remote-edge.mjs",
+  "exit_code": 0,
+  "started_at": "2026-07-16T23:25:11.633Z",
+  "ended_at": "2026-07-16T23:25:11.842Z",
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+  "assertions": [
+    {
+      "name": "SWAG-like outer Basic Auth and independent inner owner session are both enforced",
+      "passed": true,
+      "observed": {
+        "remote_without_outer": 401,
+        "remote_with_outer_only": 401,
+        "lan_outer_bypass_without_owner": 401
+      }
+    },
+    {
+      "name": "Host, Origin, forwarding-chain, direct-origin, cookie, and CSRF controls are enforced",
+      "passed": true,
+      "observed": {
+        "untrusted_host": 421,
+        "untrusted_origin": 403,
+        "client_forwarding_header": 400,
+        "direct_origin": 403,
+        "missing_csrf": 403,
+        "cookie": "__Host- prefix; Path=/; Secure; HttpOnly; SameSite=Strict"
+      }
+    },
+    {
+      "name": "authorized terminal WebSocket reconnect preserves identity and sequence",
+      "passed": true,
+      "observed": {
+        "first_status": 101,
+        "first_sequence": 1,
+        "reconnect_status": 101,
+        "reconnect_sequence": 2
+      }
+    },
+    {
+      "name": "structured events stream without proxy buffering",
+      "passed": true,
+      "observed": {
+        "sequences": [1, 2, 3],
+        "arrival_spread_ms": 181,
+        "buffering_disabled": true
+      }
+    },
+    {
+      "name": "bounded artifact upload and checksum-preserving download work through the edge",
+      "passed": true,
+      "observed": {
+        "accepted_bytes": 7000,
+        "upload_limit_bytes": 65536,
+        "oversized_status": 413,
+        "sha256": "bf0bda159184795a559415602a7ca839a0982e81b64f75ebecbe2d8400426f2a"
+      }
+    },
+    {
+      "name": "session revocation invalidates HTTP and WebSocket authorization",
+      "passed": true,
+      "observed": {
+        "revoke_status": 204,
+        "http_after_revoke": 401,
+        "websocket_after_revoke": 401,
+        "clearing_cookie_max_age": 0
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "phase0/scripts/probe-remote-edge.mjs",
+      "sha256": "4e7d6ed43f3e59c58ec948ca9a0ccf482f821c88ae9cc2879baca46d78369979",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/edge/swag/boss-man.subdomain.conf.example",
+      "sha256": "14904f5ae0a77f5f4284c5a4b0e83a7d4ea7956930eb0d31a49c95bea1d974a6",
+      "media_type": "text/plain",
+      "tracked": true
+    },
+    {
+      "path": "phase0/edge/operator-test.sh",
+      "sha256": "bb636f3bb01449083cb00434d7a02d64cc2a2e492274c6d1b908cd59e835f2dc",
+      "media_type": "application/x-sh",
+      "tracked": true
+    }
+  ],
+  "redactions": [
+    {
+      "class": "synthetic_owner_and_basic_credentials",
+      "count": 2
+    }
+  ],
+  "mappings": {
+    "product_requirements": ["PRODUCT 11.1", "PRODUCT 11.2", "PRODUCT 11.3", "PRODUCT 11.6", "PRODUCT 14.1", "PRODUCT 14.2", "PRODUCT 14.10"],
+    "technical_risks": ["TECH risk 12"],
+    "hard_gates": ["G-10"]
+  },
+  "limitations": [
+    "The disposable loopback proxy simulates TLS termination by asserting controlled HTTPS forwarding headers; it does not create certificates or alter the real SWAG server.",
+    "The inner login uses a synthetic in-memory passphrase and session table. Argon2id persistence, rate limiting, recovery bootstrap, and device management belong to the selected production foundation.",
+    "The Phase 0 upload limit is 64 KiB to keep the test bounded; the proposed inert SWAG example uses a separately reviewed 64 MiB deployment limit.",
+    "The proposed SWAG configuration and operator script are artifacts only and were not installed or run against production infrastructure."
+  ]
+}

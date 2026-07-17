@@ -1,6 +1,6 @@
 # Boss Man v2 decision log
 
-Status: Draft
+Status: Active decision log
 
 Last updated: 2026-07-16
 
@@ -41,6 +41,9 @@ This file separates owner direction, accepted working decisions, technical hypot
 | D-029 | Agents define a versioned secret/configuration contract with placeholders or references; the human supplies real values through deployment-owned secret storage. | Direction given | Keeps real credentials out of source, task text, model context, and durable artifacts while still making applications deployable. |
 | D-030 | Agents may build deployment manifests and perform bounded ephemeral deployment tests, but the human owns long-term deployment, DNS, proxy, router, production credentials, promotion, rollback, and ongoing operation unless explicitly delegated for a named task. | Direction given | Separates development validation from persistent external side effects and operational ownership. |
 | D-031 | RAG is a derived, governed retrieval layer for related tasks, memory, sessions, and artifacts—not the task store or memory authority. SQL and canonical records answer authoritative questions; FTS5 is the required baseline, and optional embeddings/vector indexes are rebuildable projections admitted only by measured benefit. | Accepted | Preserves exact task policy, provenance, model-less export, and recovery while allowing semantic discovery when lexical retrieval is insufficient. |
+| D-032 | Select the thin direct-Pi control plane as the v2 foundation; retain Agent of Empires as a UI/runtime reference rather than a fork or runtime dependency. | Accepted | Approved by the human owner on 2026-07-16. Phase 0 proves the direct seams independently and stops AoE because fixing lifecycle authority and Git custody while adding the product layer crosses storage, server, sandbox, and navigation cores. See `PHASE0-RESULTS.md` and `ADR-FOUNDATION.md`. |
+| D-033 | For the C0-02 proof and bounded live smoke, copy an owner-managed provider credential snapshot into private per-run Pi state, mount the source read-only, and limit OAuth profiles to one active run; do not reconcile refresh mutations automatically. | Validated Phase 0 decision | Synthetic isolation and one owner-authorized OpenAI Codex turn pass without exposing shared writable auth state. This is not approval of the production refresh design; parallel OAuth runs still require an owner-approved reconciliation or broker architecture. |
+| D-034 | After daemon loss, recover only side effects whose identity and completion are independently provable; pause verified idle runs and require explicit reconciliation for uncertain provider or tool effects instead of replaying them. | Validated Phase 0 decision | C0-03 proves container identity/liveness checks, native-byte preservation, checksum snapshot recovery, provenance Git recovery, and zero tool/commit duplication without claiming in-flight Pi RPC reattachment. |
 
 ## Recorded deployment assumptions
 
@@ -84,7 +87,6 @@ Agents may produce alternatives, prototypes, migration plans, threat models, and
 
 ## Explicitly deferred choices
 
-- Final adoption or rejection of an Agent of Empires product fork, pending the comparative foundation spike in `FOUNDATION.md`.
 - Detailed visual language and component library, pending low-fidelity UI layouts.
 - Docker Desktop versus OrbStack.
 - Final fallback model identifiers and automatic OpenRouter routing.

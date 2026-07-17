@@ -1,14 +1,16 @@
 # Boss Man v2 foundation assessment
 
-Status: Draft for owner review
+Status: Evaluation complete; superseded by `ADR-FOUNDATION.md`
+
+The owner selected the thin direct-Pi foundation on 2026-07-16. This document is retained as the historical candidate comparison and stop-rule record.
 
 Last verified: 2026-07-16
 
-Inspected Agent of Empires revision: [`7803b25451bc836ad40ad9ad9d5efad11de83764`](https://github.com/agent-of-empires/agent-of-empires/tree/7803b25451bc836ad40ad9ad9d5efad11de83764). The repository advertised v1.13.0 as its latest release at inspection time. Phase 0 execution is separately pinned in `PHASE0.md` so later upstream changes do not silently alter this assessment.
+Initial detailed inspection: [`7803b25451bc836ad40ad9ad9d5efad11de83764`](https://github.com/agent-of-empires/agent-of-empires/tree/7803b25451bc836ad40ad9ad9d5efad11de83764). Executable Phase 0 source probe: [`90855a59360f46652786a49f54a56df002d8ef98`](https://github.com/agent-of-empires/agent-of-empires/tree/90855a59360f46652786a49f54a56df002d8ef98). Pins prevent later upstream changes from silently altering the assessment.
 
 ## Current verdict
 
-Agent of Empires is a strong runtime and cockpit substrate, but it does not currently satisfy the Boss Man v2 product contract as an installed plugin or unchanged subordinate service.
+Agent of Empires is a strong runtime and cockpit substrate, but it does not currently satisfy the Boss Man v2 product contract as an installed plugin or unchanged subordinate service. The bounded Phase 0 candidate is stopped, and the owner selected the direct-Pi foundation on 2026-07-16 in `ADR-FOUNDATION.md`.
 
 It solves much of the expensive horizontal infrastructure: persistent agent processes, browser and TUI clients, mobile PWA behavior, real terminals, structured ACP rendering, worktrees, containers, diffs, artifacts, authentication, reverse-proxy protections, and active upstream maintenance. It does not solve the product's differentiating control-plane requirements: SQL task authority, dependency-aware board state, independent review and merge policy, human architecture gates, governed memory, deterministic Pi-native custody, restricted Git authority, or deployment boundaries.
 
@@ -90,11 +92,11 @@ If AoE wins the foundation spike, the fork should be designed for upstream intak
 - Perform an upstream-sync rehearsal during Phase 0, not after months of development. Record changed files, semantic conflicts, resolution time, and whether conflicts cluster in the ACP supervisor, session storage, server router, or container/worktree core.
 - Track a fork budget: most Boss Man behavior should live in new or clearly isolated files. If ordinary upstream releases repeatedly require reworking Boss Man's task schema, Pi custody, Git authority, or root navigation, the foundation has failed even if each merge is technically possible.
 
-An acceptable fork is one where AoE remains recognizable and updateable as the runtime substrate while Boss Man is a coherent product layer. An unacceptable fork is a rewrite that retains AoE's name and dependency graph but replaces its storage, supervisor, router, sandbox, and frontend shell simultaneously.
+An acceptable fork is one where AoE remains recognizable and updateable as the runtime substrate while Boss Man is a coherent product layer. An unacceptable fork is a rewrite that retains AoE's name and dependency graph but replaces its storage, supervisor, router, sandbox, and frontend shell simultaneously. The exact pinned-source probe found that Boss Man would have to mediate or replace durable lifecycle writers, writable Git mounts, server authority, and task-first navigation together; that crosses the Phase 0 stop rule.
 
 ## Phase 0 comparison
 
-Do not start the product by declaring AoE the winner. Build two deliberately small spikes against the same acceptance fixture.
+The comparison began with two deliberately small candidates against the same acceptance fixture. Results are recorded in `PHASE0-RESULTS.md`.
 
 ### Candidate A: bounded AoE product fork
 
@@ -123,8 +125,8 @@ Do not start the product by declaring AoE the winner. Build two deliberately sma
 
 If any of the first three conditions fail, use AoE as a source and UX reference under its MIT license rather than as the runtime foundation.
 
-## Recommendation now
+## Recommendation after Phase 0
 
-Change the working assumption from “fork AoE unless the spike fails” to “AoE and direct Pi are equal Phase 0 candidates.”
+The owner selected the thin direct-Pi control plane, subject to the retained integration conditions in `ADR-FOUNDATION.md`.
 
-AoE deserves serious consideration because rebuilding its polished terminal, structured session, mobile, diff, authentication, and recovery behavior would be expensive. Its missing pieces, however, are exactly Boss Man's core identity, and its present extension boundary cannot carry them. A fork is justified only if the spike proves those additions can remain a maintained product layer instead of becoming a rewrite of AoE's core.
+AoE remains a valuable UI/runtime reference because rebuilding its polished terminal, structured session, mobile, diff, authentication, and recovery behavior is expensive. Its missing pieces, however, are exactly Boss Man's core identity, and the pinned probe showed that its present extension and sandbox boundaries cannot carry them as an isolated product layer. A meaningful fork would be broad enough to own the project's long-term maintenance risk, so Phase 0 does not recommend it.

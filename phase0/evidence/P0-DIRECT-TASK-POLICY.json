@@ -1,0 +1,123 @@
+{
+  "schema_version": "1.0.0",
+  "test_id": "P0-DIRECT-TASK-POLICY",
+  "candidate": "direct_pi",
+  "evidence_kind": "runtime",
+  "status": "pass",
+  "source_versions": {
+    "node": "25.9.0",
+    "pi": "0.80.9",
+    "fixture": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+    "task_contract": "boss-man-direct-task-policy-v1"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "container_runtime": null
+  },
+  "sanitized_command": "node phase0/scripts/probe-direct-task-policy.mjs /absolute/generated-fixture",
+  "exit_code": 0,
+  "started_at": "2026-07-17T13:58:22Z",
+  "ended_at": "2026-07-17T13:58:23Z",
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+  "assertions": [
+    {
+      "name": "opaque capability tokens derive actor, role, task, run, action scope, and expiry from SQLite",
+      "passed": true,
+      "observed": {
+        "tokens_stored_as_sha256": true,
+        "task_reads_require_capability": true,
+        "client_supplied_actor_fields": false,
+        "unassigned_worker_rejected": true,
+        "capability_provenance_on_every_event": true
+      }
+    },
+    {
+      "name": "idempotency and optimistic concurrency are enforced at the real HTTP/store transaction boundary",
+      "passed": true,
+      "observed": {
+        "idempotent_replay_duplicated_event": false,
+        "mismatched_key_reuse_rejected": true,
+        "competing_commits": 1,
+        "competing_conflicts": 1
+      }
+    },
+    {
+      "name": "worker actions and child creation remain inside the assigned task scope",
+      "passed": true,
+      "observed": {
+        "progress_committed": true,
+        "child_parent": "phase0-task",
+        "unrelated_worker_http_status": 403
+      }
+    },
+    {
+      "name": "independent review is fixed to the current revision and implementer self-approval is rejected",
+      "passed": true,
+      "observed": {
+        "self_review_http_status": 403,
+        "stale_review_http_status": 409,
+        "approved_revision": "fixture-revision-2",
+        "reviewer": "reviewer-a"
+      }
+    },
+    {
+      "name": "only the owner resolves protected decisions and completion creates a merge request after every gate passes",
+      "passed": true,
+      "observed": {
+        "orchestrator_resolution_http_status": 403,
+        "completion_blocked_before_resolution": true,
+        "validation_passed": true,
+        "final_status": "done",
+        "merge_requested": true
+      }
+    },
+    {
+      "name": "one strictly ordered audit stream records every committed task mutation and no rejected attempt",
+      "passed": true,
+      "observed": {
+        "committed_events": 13,
+        "final_task_version": 14,
+        "sequence_contiguous": true
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "phase0/direct/store.mjs",
+      "sha256": "bed6102c9a300f4232111d5cc6b21dc386f56b2eb83f70a9585365798691f253",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/direct/control-plane.mjs",
+      "sha256": "c9816e667386057991810eab51964e173d57f9715403fc75438e6e2152d8b325",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/pi/boss-man-extension.ts",
+      "sha256": "4372ea17499c0dfe8b86ed4da725f5f876d1620c71341c8f21d7c04ca61019df",
+      "media_type": "text/typescript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/scripts/probe-direct-task-policy.mjs",
+      "sha256": "707ad372ce8f4cce910d4b0ef7c23baf09e566558772c9a44f0be2fec9c0b8cf",
+      "media_type": "text/javascript",
+      "tracked": true
+    }
+  ],
+  "redactions": [],
+  "mappings": {
+    "product_requirements": ["PRODUCT 3.3", "PRODUCT 3.4", "PRODUCT 3.5", "PRODUCT 3.6", "PRODUCT 3.7", "PRODUCT 3.8", "PRODUCT 8.3", "PRODUCT 8.4", "PRODUCT 9.5", "PRODUCT 9.7", "PRODUCT 9.8"],
+    "technical_risks": ["TECH risk 3", "TECH risk 10"],
+    "hard_gates": ["G-01", "G-08"]
+  },
+  "limitations": [
+    "This closes C0-01 and the selected candidate's G-08 transaction boundary. Container, Git, and synthetic credential integration now have separate C0-02 evidence; context, recovery, and authentication remain separate closure tasks.",
+    "Capability issuance is currently an internal daemon method. C0-05 must bind owner/orchestrator issuance and revocation to authenticated application sessions.",
+    "The same capability token is now delivered only to the pinned per-run container process; owner-authenticated issuance and broader revocation policy remain C0-05 work.",
+    "Node's built-in SQLite API remains experimental in the development runtime; the production binding and migration packaging decision remains open within the approved SQLite architecture."
+  ]
+}

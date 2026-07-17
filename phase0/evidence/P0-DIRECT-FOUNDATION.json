@@ -1,0 +1,170 @@
+{
+  "schema_version": "1.0.0",
+  "test_id": "P0-DIRECT-FOUNDATION",
+  "candidate": "direct_pi",
+  "evidence_kind": "runtime",
+  "status": "pass",
+  "source_versions": {
+    "pi": "@earendil-works/pi-coding-agent@0.80.9 (2d16f92973230a7e095aa984f150ba8702784f50)",
+    "node": "25.9.0",
+    "fixture": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "container_runtime": "Docker Desktop 27.3.1"
+  },
+  "sanitized_command": "node phase0/scripts/probe-direct-foundation.mjs <generated-fixture>",
+  "exit_code": 0,
+  "started_at": "2026-07-17T13:58:22Z",
+  "ended_at": "2026-07-17T13:58:27Z",
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+  "assertions": [
+    {
+      "name": "one daemon owns durable task, session, run, shell, and Pi lifecycle state",
+      "passed": true,
+      "observed": {
+        "authority": "direct_pi_daemon",
+        "durable_store": "SQLite WAL",
+        "session_process_owned_by_daemon": true,
+        "workspace_shell_owned_by_daemon": true,
+        "container_owned_by_daemon": true,
+        "container_image_id": "sha256:7669de2c3791c662a1f59094ad31ff018178de20e843d3485c5796d545688074"
+      }
+    },
+    {
+      "name": "task-first board API enforces idempotency and optimistic concurrency",
+      "passed": true,
+      "observed": {
+        "initial_state": "ready",
+        "claimed_state": "in_progress",
+        "task_reads_require_capability": true,
+        "idempotent_replay_duplicated_event": false,
+        "stale_write_http_status": 409
+      }
+    },
+    {
+      "name": "direct Pi RPC and persistent workspace shell emit a structured event subset",
+      "passed": true,
+      "observed": {
+        "provider_requests": 0,
+        "structured_event_count": 18,
+        "required_events_present": true,
+        "workspace_write_passed": true,
+        "container_pi_rpc": true,
+        "docker_socket_absent": true
+      }
+    },
+    {
+      "name": "upstream Pi loads the Boss Man capability tools without prompt-defined authorization",
+      "passed": true,
+      "observed": {
+        "registered_tools": [
+          "boss_review_submit",
+          "boss_task_block",
+          "boss_task_claim",
+          "boss_task_create_child",
+          "boss_task_get",
+          "boss_task_progress",
+          "boss_task_propose_complete",
+          "boss_task_request_review",
+          "boss_git_status",
+          "boss_git_diff",
+          "boss_git_checkpoint_request",
+          "boss_git_commit_request"
+        ],
+        "identity_source": "server-side hashed bearer capability",
+        "private_pi_fork": false
+      }
+    },
+    {
+      "name": "context custody manifests and native Pi session remain durable",
+      "passed": true,
+      "observed": {
+        "custody_manifest_count": 7,
+        "native_session_sha256": "47c7f22335338df2aba38fd16f7fdccf11da325333f0e1e9c51bd242e67ec2ef",
+        "native_session_changed_during_restart": false
+      }
+    },
+    {
+      "name": "restart reconciliation never reports an ambiguous prior process as healthy",
+      "passed": true,
+      "observed": {
+        "prior_state": "running",
+        "reconciled_state": "paused",
+        "container_identity_proven": true,
+        "container_removed": true,
+        "reconciliation_event": "run_reconciled_paused"
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "phase0/direct/store.mjs",
+      "sha256": "bed6102c9a300f4232111d5cc6b21dc386f56b2eb83f70a9585365798691f253",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/direct/rpc.mjs",
+      "sha256": "b1606ee9c4546685fa6f61c1d096a5fccb088629172fd00e7430c147d984ed60",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/direct/control-plane.mjs",
+      "sha256": "c9816e667386057991810eab51964e173d57f9715403fc75438e6e2152d8b325",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/scripts/probe-direct-foundation.mjs",
+      "sha256": "0eda135d7ac1253bd9bb986293afb5f245d76ecd248ae6abb8a5bc4d38a4126c",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/pi/boss-man-extension.ts",
+      "sha256": "4372ea17499c0dfe8b86ed4da725f5f876d1620c71341c8f21d7c04ca61019df",
+      "media_type": "text/typescript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/direct/runtime.mjs",
+      "sha256": "a4cdd25a07f2e9b4fe2db810478b78f67ce8638bf4e5f483ba9533933800dc61",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/pi/rtk-managed-extension.ts",
+      "sha256": "e750a26d0395bed322f9877290119e5e291eb5dbab6aa4440b7ce9edd4d5cfd6",
+      "media_type": "text/typescript",
+      "tracked": true
+    },
+    {
+      "path": "untracked:phase0/direct/native.pi-session.jsonl",
+      "sha256": "47c7f22335338df2aba38fd16f7fdccf11da325333f0e1e9c51bd242e67ec2ef",
+      "media_type": "application/x-ndjson",
+      "tracked": false
+    },
+    {
+      "path": "untracked:phase0/direct/boss-man.sqlite",
+      "sha256": "f8f548fa465b6c081ecea7573fc0eef92ba8c431428c0fa592d3cdc6556d9ae4",
+      "media_type": "application/vnd.sqlite3",
+      "tracked": false
+    }
+  ],
+  "redactions": [],
+  "mappings": {
+    "product_requirements": ["PRODUCT 1.3", "PRODUCT 3.3", "PRODUCT 4.1", "PRODUCT 4.3", "PRODUCT 5.4", "PRODUCT 10.1", "PRODUCT 11.5", "PRODUCT 13.1", "PRODUCT 13.3"],
+    "technical_risks": ["TECH risk 1", "TECH risk 3", "TECH risk 7"],
+    "hard_gates": ["G-01", "G-02", "G-07", "G-09"]
+  },
+  "limitations": [
+    "This is a deliberately minimal Phase 0 route and API, not the production cockpit or owner authentication system.",
+    "The deterministic in-process provider runs inside the task container and makes no network request; an owner-operated real-provider smoke is separate evidence.",
+    "Restart reconciliation proves the idle container identity and pauses the run before cleanup. In-flight Pi RPC process reattachment is not implemented in this prototype.",
+    "The deterministic in-process provider exercises real Pi RPC without network or credentials; remote provider transport is outside this result.",
+    "The prototype uses Node's built-in node:sqlite API, which is still marked experimental in Node 25.9.0. A selected production foundation must choose and pin its supported SQLite binding."
+  ]
+}

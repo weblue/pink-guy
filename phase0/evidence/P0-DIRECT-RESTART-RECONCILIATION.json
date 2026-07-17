@@ -1,0 +1,120 @@
+{
+  "schema_version": "1.0.0",
+  "test_id": "P0-DIRECT-RESTART-RECONCILIATION",
+  "candidate": "direct_pi",
+  "evidence_kind": "runtime",
+  "status": "pass",
+  "source_versions": {
+    "pi": "0.80.9",
+    "docker": "27.3.1",
+    "task_image": "sha256:7669de2c3791c662a1f59094ad31ff018178de20e843d3485c5796d545688074",
+    "fixture": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "container_runtime": "Docker Desktop 27.3.1"
+  },
+  "sanitized_command": "node phase0/scripts/probe-direct-restart-reconciliation.mjs /absolute/generated-fixture",
+  "exit_code": 0,
+  "started_at": "2026-07-17T13:58:22Z",
+  "ended_at": "2026-07-17T13:58:34Z",
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+  "assertions": [
+    {
+      "name": "an idle run preserves native Pi bytes and pauses only after recorded container identity and liveness are proven",
+      "passed": true,
+      "observed": {
+        "reconciled_state": "paused",
+        "container_inspection_available": true,
+        "container_identity_proven": true,
+        "container_removed_after_pause": true,
+        "native_session_sha256": "93a872fd84bcc71e08c7ee2e5a257bceef00c1bc3a0ddcf3f062bf8b7eab2fcd",
+        "native_session_changed": false
+      }
+    },
+    {
+      "name": "a completed but unreceipted provider response is never replayed or reported healthy",
+      "passed": true,
+      "observed": {
+        "run_state": "reconciliation_required",
+        "side_effect_state": "reconciliation_required",
+        "automatic_replay": false,
+        "native_session_sha256": "4b91bc2a461d9e3706b0253566b866f3205621e7db2338975bd57055265c9d98"
+      }
+    },
+    {
+      "name": "a completed but unreceipted workspace tool remains uncertain and executes exactly once",
+      "passed": true,
+      "observed": {
+        "side_effect_state": "reconciliation_required",
+        "execution_count": 1,
+        "automatic_replay": false
+      }
+    },
+    {
+      "name": "a snapshot with a durable matching checksum is recovered into one artifact receipt",
+      "passed": true,
+      "observed": {
+        "side_effect_state": "completed",
+        "reconciled_completion": true,
+        "indexed_artifact_count": 1
+      }
+    },
+    {
+      "name": "a host Git checkpoint committed before the daemon crash is recovered from parent and provenance identity without another commit",
+      "passed": true,
+      "observed": {
+        "side_effect_state": "completed",
+        "reconciled_completion": true,
+        "duplicate_commits": 0,
+        "operation_receipt_recovered": true,
+        "side_effect_receipt_count": 10
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "phase0/direct/store.mjs",
+      "sha256": "bed6102c9a300f4232111d5cc6b21dc386f56b2eb83f70a9585365798691f253",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/direct/runtime.mjs",
+      "sha256": "a4cdd25a07f2e9b4fe2db810478b78f67ce8638bf4e5f483ba9533933800dc61",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/direct/git-service.mjs",
+      "sha256": "58953c04800622cbf99452c2f7470a3a33418ae9d7ddaf8e7e5adee327978c7f",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/direct/control-plane.mjs",
+      "sha256": "c9816e667386057991810eab51964e173d57f9715403fc75438e6e2152d8b325",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/scripts/probe-direct-restart-reconciliation.mjs",
+      "sha256": "b9ce01ad7db65190ba860f73cf3cbd35b09b20dbcd50578c11a43bc422b5e3aa",
+      "media_type": "text/javascript",
+      "tracked": true
+    }
+  ],
+  "redactions": [],
+  "mappings": {
+    "product_requirements": ["PRODUCT 4.4", "PRODUCT 6.1", "PRODUCT 6.5", "PRODUCT 6.7", "PRODUCT 8.3"],
+    "technical_risks": ["TECH risk 3", "TECH risk 7"],
+    "hard_gates": ["G-07"]
+  },
+  "limitations": [
+    "The prototype does not claim in-flight Pi RPC process reattachment. A lost RPC authority pauses a verified idle run or requires reconciliation for uncertain provider/tool work.",
+    "The crash injector terminates daemon-owned RPC and shell clients while leaving the recorded container and durable state intact; it does not power-cycle Docker Desktop or the host.",
+    "Provider-response ambiguity is exercised with the deterministic provider. The earlier owner-authorized live-provider evidence remains a separate bounded transport proof.",
+    "Automatic retry or fallback remains prohibited for uncertain side effects."
+  ]
+}

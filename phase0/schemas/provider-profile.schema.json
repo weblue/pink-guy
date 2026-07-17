@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://boss-man.invalid/schemas/provider-profile.schema.json",
+  "title": "Boss Man provider credential profile reference",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "provider", "auth_type", "billing_mode", "source", "max_concurrent_runs"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+    "provider": { "type": "string", "minLength": 1 },
+    "auth_type": { "enum": ["oauth_snapshot", "api_key_file", "none"] },
+    "billing_mode": { "enum": ["subscription", "direct_api", "prepaid_gateway", "unknown"] },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": { "const": "host_file" },
+        "path": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "Absolute operator-owned path supplied outside source control. The referenced file contains the real secret; this document never does."
+        }
+      }
+    },
+    "max_concurrent_runs": { "type": "integer", "minimum": 1, "maximum": 64 },
+    "allow_refresh_reconciliation": { "type": "boolean", "default": false }
+  }
+}

@@ -1,0 +1,45 @@
+# Phase 0 artifact only. Do not install without owner review.
+# Replace every ALL_CAPS value during a separately authorized deployment.
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+
+    server_name BOSS_MAN_SUBDOMAIN.EXAMPLE.COM;
+
+    include /config/nginx/ssl.conf;
+
+    # Preserve the existing SWAG policy: LAN clients may bypass the outer gate,
+    # but Boss Man still requires its independent owner session.
+    satisfy any;
+    allow SWAG_LAN_CIDR;
+    deny all;
+    auth_basic "Boss Man edge";
+    auth_basic_user_file /config/nginx/.htpasswd-boss-man;
+
+    client_max_body_size 64m;
+
+    location / {
+        proxy_pass http://BOSS_MAN_MAC_LAN_IP:BOSS_MAN_PORT;
+        proxy_http_version 1.1;
+
+        # Overwrite, rather than append to, client-supplied forwarding headers.
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Forwarded "";
+
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_cache off;
+        add_header X-Accel-Buffering no always;
+
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 3600s;
+        proxy_read_timeout 3600s;
+    }
+}

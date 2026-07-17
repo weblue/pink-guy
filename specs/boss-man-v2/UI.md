@@ -1,6 +1,6 @@
 # Boss Man v2 developer cockpit
 
-Status: Draft for foundation spike
+Status: Draft for Phase 1 product planning; direct-Pi foundation selected
 
 Last updated: 2026-07-16
 
@@ -8,15 +8,15 @@ Last updated: 2026-07-16
 
 Do not revive the original chat-first dashboard and do not treat Ghostty or cmux as a web application foundation.
 
-Phase 0 compares an Agent of Empires core fork running Pi through `pi-acp` with a direct Pi RPC cockpit. AoE is the closest existing product match: an MIT-licensed Rust application with a responsive PWA, structured agent view, live terminal, diff review, persistent workers, worktrees, Docker/Podman/Apple Containers, reverse-proxy protections, HTTP API, and a capability-scoped plugin system.
+Phase 0 compared an Agent of Empires core fork running Pi through `pi-acp` with a direct Pi RPC cockpit and selected the direct-Pi foundation. AoE remains the closest existing product reference: an MIT-licensed Rust application with a responsive PWA, structured agent view, live terminal, diff review, persistent workers, worktrees, Docker/Podman/Apple Containers, reverse-proxy protections, HTTP API, and a capability-scoped plugin system.
 
-AoE is not usable as a normal plugin or unchanged companion service for this spec. Its supported plugin surface cannot own session lifecycle, task/control APIs, transcript custody, containers/worktrees, or an arbitrary full board route; a companion backend would duplicate authority. `FOUNDATION.md` defines the only meaningful AoE option—a bounded core fork—and the equal-candidate decision gates. The direct candidate builds the strict cockpit below with mature components such as xterm.js and an optional code-server workspace link.
+AoE is not usable as a normal plugin or unchanged companion service for this spec. Its supported plugin surface cannot own session lifecycle, task/control APIs, transcript custody, containers/worktrees, or an arbitrary full board route; a companion backend would duplicate authority. `FOUNDATION.md` retains the bounded core-fork comparison and decision gates that led to rejection. The selected direct-Pi foundation will build the strict cockpit below with mature components such as xterm.js and an optional code-server workspace link.
 
 ## Why the obvious alternatives are insufficient
 
 | Candidate | Useful parts | Material mismatch | Disposition |
 |---|---|---|---|
-| [Agent of Empires](https://github.com/agent-of-empires/agent-of-empires) + [`pi-acp`](https://github.com/svkozak/pi-acp) | Pi support, PWA, structured ACP view, terminal, diffs, session fleet, persistent workers, worktrees, containers, reverse-proxy security, MIT | No SQL agile task graph or model-less pre-compaction bundle contract; supported plugins cannot add the required control plane/full route; Git and credential defaults conflict with Boss Man custody | Equal Phase 0 core-fork candidate |
+| [Agent of Empires](https://github.com/agent-of-empires/agent-of-empires) + [`pi-acp`](https://github.com/svkozak/pi-acp) | Pi support, PWA, structured ACP view, terminal, diffs, session fleet, persistent workers, worktrees, containers, reverse-proxy security, MIT | No SQL agile task graph or model-less pre-compaction bundle contract; supported plugins cannot add the required control plane/full route; Git and credential defaults conflict with Boss Man custody | Rejected as the foundation; retained as a UI/runtime reference |
 | [Lumbergh](https://github.com/voglster/lumbergh) | Clean web terminal, Git views, file browser, PWA, MIT, easy React/FastAPI codebase | Claude/tmux-centric, TinyDB, no container authority, manager chat emphasis, limited security story | UI reference and possible component source |
 | [Coder](https://coder.com/docs/user-guides/workspace-access) | Mature remote workspaces, web terminal, code-server, SSH, port forwarding | Adds a second heavyweight workspace/provisioning control plane and Postgres; no Pi task/context semantics | Optional external workspace integration, not Boss Man core |
 | [xterm.js](https://github.com/xtermjs/xterm.js) + code-server | Proven web terminal and full browser IDE; maximum semantic control | Requires Boss Man to build the session shell, reconnection, layout, auth, diff, and mobile UX | Fallback foundation |

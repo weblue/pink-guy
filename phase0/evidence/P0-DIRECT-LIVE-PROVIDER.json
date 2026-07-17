@@ -1,0 +1,118 @@
+{
+  "schema_version": "1.0.0",
+  "test_id": "P0-DIRECT-LIVE-PROVIDER",
+  "candidate": "direct_pi",
+  "evidence_kind": "runtime",
+  "status": "pass",
+  "source_versions": {
+    "pi": "0.80.9",
+    "rtk": "0.42.3",
+    "provider": "openai-codex",
+    "model": "gpt-5.4-mini",
+    "task_image": "sha256:7669de2c3791c662a1f59094ad31ff018178de20e843d3485c5796d545688074",
+    "fixture": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "container_runtime": "Docker Desktop 27.3.1"
+  },
+  "sanitized_command": "node phase0/scripts/probe-direct-live-provider.mjs /absolute/generated-fixture <owner-auth-path> openai-codex gpt-5.4-mini",
+  "exit_code": 0,
+  "started_at": "2026-07-17T13:18:38.210Z",
+  "ended_at": "2026-07-17T13:18:44.047Z",
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+  "assertions": [
+    {
+      "name": "the owner-authorized OpenAI Codex route completes a real turn inside the recorded task container",
+      "passed": true,
+      "observed": {
+        "provider": "openai-codex",
+        "model": "gpt-5.4-mini",
+        "completion_marker_present": true,
+        "recorded_container_matched_live_container": true,
+        "docker_socket_absent": true
+      }
+    },
+    {
+      "name": "a real Pi Bash tool call passes through managed RTK capture and artifact ingestion",
+      "passed": true,
+      "observed": {
+        "bash_marker_present_in_native_session": true,
+        "rtk_raw_redacted_artifact": true,
+        "rtk_filtered_artifact": true,
+        "rtk_receipt": true,
+        "command_executed_once": true
+      }
+    },
+    {
+      "name": "the live OAuth snapshot does not change the canonical source or survive in run copies",
+      "passed": true,
+      "observed": {
+        "delivery_mode": "readonly_source_to_private_run_copy",
+        "canonical_checksum_unchanged": true,
+        "private_run_copies_removed": true,
+        "credential_material_printed_or_checked_in": false
+      }
+    },
+    {
+      "name": "normal stop removes the live task container and records credential verification",
+      "passed": true,
+      "observed": {
+        "container_removed_after_stop": true,
+        "credential_verification_receipt": true
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "git:bbc95b6:phase0/direct/control-plane.mjs",
+      "sha256": "7458b8ff7a5fcf77e1716f81282b0d0321e21dc0e102b0027b451aa713f4c75b",
+      "media_type": "text/javascript",
+      "tracked": false
+    },
+    {
+      "path": "phase0/direct/credentials.mjs",
+      "sha256": "a9fd169a55377596e3fb0d3370ed012c785fa3ff3d14c85783f11f751e2ba91d",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "git:bbc95b6:phase0/direct/runtime.mjs",
+      "sha256": "b5786c942b59783156ce2b3911d452a669af5b1226a01a1ec86689aa285686fa",
+      "media_type": "text/javascript",
+      "tracked": false
+    },
+    {
+      "path": "phase0/direct/artifacts.mjs",
+      "sha256": "98e08451f020ef9d1611bca04611a1225c1367554ed8e52a96b0d891a59076fc",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/pi/rtk-managed-extension.ts",
+      "sha256": "e750a26d0395bed322f9877290119e5e291eb5dbab6aa4440b7ce9edd4d5cfd6",
+      "media_type": "text/typescript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/scripts/probe-direct-live-provider.mjs",
+      "sha256": "ac0a7632747eef513bbe6ca34696b0c282653326ce592e1b08f5bec750008b74",
+      "media_type": "text/javascript",
+      "tracked": true
+    }
+  ],
+  "redactions": [],
+  "mappings": {
+    "product_requirements": ["PRODUCT 6.3", "PRODUCT 7.3", "PRODUCT 7.6", "PRODUCT 10.1", "PRODUCT 10.4", "PRODUCT 12.1", "PRODUCT 12.3"],
+    "technical_risks": ["TECH risk 2", "TECH risk 5", "TECH risk 8", "TECH risk 13"],
+    "hard_gates": ["G-01", "G-04", "G-06"]
+  },
+  "limitations": [
+    "The changed control-plane and runtime source artifacts are pinned to commit bbc95b6 because this bounded live-provider request was not repeated for C0-03; deterministic candidate regressions cover the later recovery changes.",
+    "This was one owner-authorized subscription-backed turn, not a concurrency, refresh, rate-limit, credit-exhaustion, or provider-fallback test.",
+    "Private OAuth refresh mutations are discarded; parallel OAuth-backed runs remain disabled until locked reconciliation or a host broker is approved.",
+    "The task container had bridge networking for the provider and control-plane paths; production egress policy remains open.",
+    "Provider response bodies and credential contents are intentionally absent from this checked-in manifest."
+  ]
+}

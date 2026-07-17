@@ -1,0 +1,106 @@
+{
+  "schema_version": "1.0.0",
+  "test_id": "P0-AOE-FOUNDATION-STOP",
+  "candidate": "aoe",
+  "evidence_kind": "inspection",
+  "status": "fail",
+  "source_versions": {
+    "agent_of_empires": "90855a59360f46652786a49f54a56df002d8ef98",
+    "agent_of_empires_version": "1.13.0",
+    "rust": "1.95.0"
+  },
+  "host": {
+    "os": "macOS 15.7.7",
+    "architecture": "arm64",
+    "container_runtime": null
+  },
+  "sanitized_command": "node phase0/scripts/probe-aoe-foundation.mjs /absolute/pinned-aoe-checkout && cargo check --locked",
+  "exit_code": 0,
+  "started_at": "2026-07-16T23:51:52Z",
+  "ended_at": "2026-07-16T23:54:36Z",
+  "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
+  "assertions": [
+    {
+      "name": "the exact pinned upstream source builds without local modification",
+      "passed": true,
+      "observed": {
+        "commit": "90855a59360f46652786a49f54a56df002d8ef98",
+        "command": "cargo check --locked",
+        "duration": "2m44s",
+        "dirty_files": 0
+      }
+    },
+    {
+      "name": "one daemon is the sole durable lifecycle writer",
+      "passed": false,
+      "observed": {
+        "cli_storage_update_calls_in_inspected_session_paths": 24,
+        "server_storage_update_calls_in_inspected_session_paths": 9,
+        "result": "CLI and daemon both mutate durable session storage"
+      }
+    },
+    {
+      "name": "task containers cannot write shared Git metadata",
+      "passed": false,
+      "observed": {
+        "writable_main_repository_mount_seams": 3,
+        "result": "worktree resolution mounts the main repository and its Git metadata read-write"
+      }
+    },
+    {
+      "name": "the supported extension surface can add Boss Man authority as a bounded product layer",
+      "passed": false,
+      "observed": {
+        "session_routes_in_server_router": 21,
+        "task_routes_in_server_router": 0,
+        "plugin_task_git_worktree_or_lifecycle_capabilities": 0,
+        "required_core_seams": ["storage", "server_router", "sandbox_mounts", "task_first_navigation"]
+      }
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "phase0/scripts/probe-aoe-foundation.mjs",
+      "sha256": "89d5721a4b987ab443a4d04418160c606ab100e707a8022a9516208fd39357ba",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "/absolute/pinned-aoe/src/session/container_config.rs",
+      "sha256": "c63bb88c270db00fd1351fc130bee0e4c671d3a7493c56dcc8cf8d4756044912",
+      "media_type": "text/x-rust",
+      "tracked": false
+    },
+    {
+      "path": "/absolute/pinned-aoe/src/cli/session.rs",
+      "sha256": "b300d8a3bcd20d009ef4ff9d039f29c3dc39e23f25ffd643c1ad9dde11e1953e",
+      "media_type": "text/x-rust",
+      "tracked": false
+    },
+    {
+      "path": "/absolute/pinned-aoe/src/server/mod.rs",
+      "sha256": "d6a81d405c131b32e8ce75645576379c784f4385224a1927039871780d761259",
+      "media_type": "text/x-rust",
+      "tracked": false
+    },
+    {
+      "path": "/absolute/pinned-aoe/aoe-plugin-api/src/capability.rs",
+      "sha256": "1bdbcaa6b41729c8835ddd9081e740c23864de271c9c399277224442d764b11d",
+      "media_type": "text/x-rust",
+      "tracked": false
+    }
+  ],
+  "redactions": [],
+  "mappings": {
+    "product_requirements": ["PRODUCT 3", "PRODUCT 7", "PRODUCT 8", "PRODUCT 11"],
+    "technical_risks": ["TECH risk 4", "TECH risk 10"],
+    "hard_gates": ["G-01", "G-05"]
+  },
+  "limitations": [
+    "This is reproducible exact-source stop evidence, not a runtime attempt to implement the Boss Man core fork; inspection evidence cannot be counted as a positive runtime hard-gate pass.",
+    "The candidate is stopped under the Phase 0 breadth rule: satisfying the missing invariants requires coordinated changes to storage authority, server routes, sandbox Git mounts, and top-level task navigation rather than an isolated module or supported plugin.",
+    "Because the candidate stopped before a Boss Man patch branch was created, there was no meaningful fork patch to rebase; the upstream-sync rehearsal was not run and is not represented as passing evidence.",
+    "Upstream Pi and pi-acp custody probes pass independently, so the stop does not imply that AoE or its ACP adapter is generally broken.",
+    "No upstream fork, patch, push, deployment, or production credential was created."
+  ]
+}
