@@ -113,7 +113,7 @@
     },
     {
       "path": "phase0/direct/control-plane.mjs",
-      "sha256": "b121025a04db874068a06ee2a677d04b953f16b5c398f84d81c3f33bf4f00f12",
+      "sha256": "d2a1ec73ce931caf8f99796c5d82d888b6c6175ecec4606fb259ce8c3bf44f31",
       "media_type": "text/javascript",
       "tracked": true
     },
@@ -161,7 +161,7 @@
     "hard_gates": ["G-01", "G-02", "G-07", "G-09"]
   },
   "limitations": [
-    "This is a deliberately minimal Phase 0 route and API, not the production cockpit or owner authentication system.",
+    "This is a deliberately minimal loopback Phase 0 route and API, not the Phase 1 cockpit. Remote owner authentication is intentionally deferred to Phase 3.",
     "The deterministic in-process provider runs inside the task container and makes no network request; an owner-operated real-provider smoke is separate evidence.",
     "Restart reconciliation proves the idle container identity and pauses the run before cleanup. In-flight Pi RPC process reattachment is not implemented in this prototype.",
     "The deterministic in-process provider exercises real Pi RPC without network or credentials; remote provider transport is outside this result.",

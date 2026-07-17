@@ -1,12 +1,12 @@
 # Boss Man v2 Phase 0 closure plan
 
-Status: Implementation active
+Status: Complete for the local-smoke profile
 
 Foundation: Thin direct-Pi control plane
 
 ## Objective
 
-Turn the independently passing Phase 0 contracts into one daemon-owned vertical slice. This milestone closes the remaining hard-gate uncertainty; it is not a production UI build or deployment.
+Turn the independently passing Phase 0 contracts into one central-authority vertical slice and prove that it can be run and inspected locally. This milestone is not a production UI build or remote deployment.
 
 ## Execution order
 
@@ -45,21 +45,20 @@ Exit: crash tests lose no native session, duplicate no completed side effect, an
 
 Exit: a resumed session and a bundle-mode child consume checksum-bound artifacts and receipts without transcript injection or model-assisted export.
 
-### C0-05 Real owner authentication through the edge contract
+### C0-05 Local serve and operator smoke
 
-- Implement the single-owner passphrase verifier, rate limiting, secure device sessions, CSRF, revocation, and recovery/bootstrap boundary.
-- Run the real direct application through the disposable SWAG-style proxy suite.
-- Keep the checked-in SWAG configuration inert; do not change DNS, router, home-server, or long-lived deployment state.
+- Provide one exact command that starts the central API and task-first operator shell on loopback.
+- Register multiple repositories and one leased daemon/tmux orchestrator per project through the central API.
+- Render projects, orchestrator state, the task board, sessions, context capability, and terminal/attach positioning.
+- Run a browser smoke and verify that no application authentication is required in the loopback-only profile.
 
-Exit: HTTP, WebSocket, streaming, artifact, reconnect, Host/Origin, outer/inner auth, CSRF, and revocation cases pass against the selected application.
+Exit: a local owner can start, inspect, and stop the application using the checked-in runbook; the listener is loopback-only and the browser surface loads without errors.
 
-### C0-06 Reproduction and owner checkpoint
+### Work moved out of Phase 0
 
-- Reproduce the fixture, task image, and closure suite on a second clean ARM64 host.
-- Publish final candidate-level hard-gate manifests and update the scorecard from partial/component to pass or fail.
-- Review disk/resource measurements and explicitly choose initial concurrency limits for the 64 GB M1 Max host.
-
-Exit: every still-applicable direct-Pi hard gate has candidate-level evidence, the working tree is reproducible, and the owner authorizes Phase 1.
+- Second-host reproduction, migration rehearsal, and measured concurrency limits move to Phase 2.
+- SWAG integration and application authentication move to Phase 3.
+- The standalone remote-edge probe remains retained evidence, but G-10 is not a local Phase 0 exit gate.
 
 ## Progress
 
@@ -71,18 +70,20 @@ The concise current capability and artifact inventory is maintained in `CURRENT-
 | C0-02 runtime/Git/credentials/RTK | Completed | `P0-DIRECT-RUNTIME-GIT-RTK` proves the synthetic isolation/custody path; `P0-DIRECT-LIVE-PROVIDER` proves one owner-authorized OpenAI Codex turn and Pi Bash→RTK artifact path without changing the canonical credential or retaining run copies |
 | C0-03 restart reconciliation | Completed | `P0-DIRECT-RESTART-RECONCILIATION`: intent/completion receipts, verified-idle pause, uncertain response/tool hold, checksum snapshot recovery, and provenance Git recovery with no replay |
 | C0-04 context and retrieval | Completed | `P0-DIRECT-CONTEXT-CUSTODY`: atomic 11-file bundle, native-byte and future-entry preservation, scoped FTS receipt/exclusions, canonical clean-store rebuild, transcript-free Pi bundle child, and one-project-orchestrator lease enforcement with no provider/network use |
-| C0-05 owner authentication | Pending | Disposable edge contract passes; real application auth pending |
-| C0-06 second-host reproduction | Pending | Runs after the integrated closure suite |
+| C0-05 local serve/operator smoke | Completed | `RUNBOOK.md`, localhost central API, one active project-orchestrator lease, rendered six-column board, and browser smoke with no console warnings |
+| Remote authentication | Moved to Phase 3 | Disposable edge contract remains evidence; real SWAG/auth work is intentionally deferred |
+| Second-host reproduction | Moved to Phase 2 | Portability and resource measurements no longer block local cockpit development |
 
 ## Sequencing
 
-C0-04 joins the already-proven native custody and governed FTS primitives through one authoritative context path and is complete. C0-05 is next. C0-06 runs last.
+Phase 0 is complete for the local-smoke profile. `ROADMAP.md` is now the canonical sequence: Phase 1 local cockpit, Phase 2 autonomy/recovery/portability, and Phase 3 authenticated remote access.
 
 The integration owner controls schema changes and final merges. Each implementation task includes unit tests for isolated policy/serialization behavior and integration tests at daemon, container, Git, custody, or edge boundaries as appropriate.
 
 ## Explicitly out of scope
 
 - production SWAG, DNS, router, launch-service, or secret deployment;
+- application authentication in local or trusted-LAN profiles;
 - automatic OpenRouter failover;
 - semantic/vector memory;
 - broad cockpit visual polish;

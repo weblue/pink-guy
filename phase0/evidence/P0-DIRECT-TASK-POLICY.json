@@ -91,7 +91,7 @@
     },
     {
       "path": "phase0/direct/control-plane.mjs",
-      "sha256": "b121025a04db874068a06ee2a677d04b953f16b5c398f84d81c3f33bf4f00f12",
+      "sha256": "d2a1ec73ce931caf8f99796c5d82d888b6c6175ecec4606fb259ce8c3bf44f31",
       "media_type": "text/javascript",
       "tracked": true
     },
@@ -115,9 +115,9 @@
     "hard_gates": ["G-01", "G-08"]
   },
   "limitations": [
-    "This closes C0-01 and the selected candidate's G-08 transaction boundary. Container, Git, and synthetic credential integration now have separate C0-02 evidence; context, recovery, and authentication remain separate closure tasks.",
-    "Capability issuance is currently an internal daemon method. C0-05 must bind owner/orchestrator issuance and revocation to authenticated application sessions.",
-    "The same capability token is now delivered only to the pinned per-run container process; owner-authenticated issuance and broader revocation policy remain C0-05 work.",
+    "This closes C0-01 and the selected candidate's G-08 transaction boundary. Container, Git, synthetic credential, context, and recovery integration now have separate closure evidence.",
+    "Capability issuance is currently an internal daemon method. Phase 1 must expose safe local operator/orchestrator issuance and revocation; Phase 3 later binds remote issuance to authenticated owner sessions or API keys.",
+    "The same capability token is now delivered only to the pinned per-run container process. Broader local revocation UX remains Phase 1 work and does not require application authentication on loopback.",
     "Node's built-in SQLite API remains experimental in the development runtime; the production binding and migration packaging decision remains open within the approved SQLite architecture."
   ]
 }

@@ -6,7 +6,7 @@ Last updated: 2026-07-16
 
 ## Summary
 
-Boss Man v2 is a single-owner, remote-first control plane for planning, running, observing, handing off, and resuming software-development work performed by Pi agents on an always-on Mac.
+Boss Man v2 is a single-owner control plane for planning, running, observing, handing off, and resuming software-development work performed by Pi agents on an always-on Mac. Implementation is local-first; authenticated remote access is a later delivery phase.
 
 The product is harness-specific and model-provider agnostic: Pi is the only supported agent harness, while each session may use any model provider supported by the configured Pi installation. The web dashboard is the primary interface. Chat remains available inside tasks and sessions, but is not the application's organizing metaphor.
 
@@ -34,7 +34,7 @@ Existing session managers solve much of the terminal-fleet problem. Boss Man v2 
 4. Preserve complete session evidence and artifacts without an LLM.
 5. Retain useful project knowledge as governed, inspectable memory without confusing it with raw session evidence.
 6. Resume or fork work across Pi sessions and model providers with an explicit context contract.
-7. Remain usable remotely through an authenticated developer cockpit served at a dedicated HTTPS subdomain, with SSH as a recovery path.
+7. Become usable remotely through a later authenticated developer cockpit served at a dedicated HTTPS subdomain, with SSH as a recovery path, without making that edge a prerequisite for local development.
 8. Degrade clearly and recoverably when a model is rate-limited, unavailable, or out of credit.
 9. Keep the first deployment understandable and maintainable by one owner on one Mac.
 
@@ -288,21 +288,27 @@ The selected mode is visible before the child starts and remains part of its pro
 
 ### 11. Remote operation
 
-11.1 The primary web service is served through the existing SWAG reverse proxy at a dedicated HTTPS subdomain.
+11.1 Local-first releases support an explicit loopback profile with no application authentication. The listener binds only to loopback and clearly identifies that exposure mode.
 
-11.2 WebSockets, streaming responses, uploads, downloads, secure cookies, and reconnects work through the proxy without exposing the Boss Man origin directly to the public internet.
+11.2 Phase 1 may add an explicit trusted-LAN profile with no application authentication. It binds to a selected private interface, restricts accepted source networks to configured private CIDRs, displays a persistent warning, and is never enabled implicitly.
 
-11.3 The first release supports one human owner account. It does not expose unauthenticated terminal or mutation access merely because SWAG terminates TLS.
+11.3 Loopback and trusted-LAN classification comes from the configured listener and host/network policy, not from arbitrary forwarded headers. Public wildcard binding is rejected unless the authenticated remote profile is configured.
 
-11.4 SSH remains a separate operator recovery path. The existing private key is never uploaded to Boss Man, copied into agent containers, or used as web authentication.
+11.4 Authenticated remote access is a later phase. Its primary web service is served through the existing SWAG reverse proxy at a dedicated HTTPS subdomain, without exposing the Boss Man origin directly to the public internet.
 
-11.5 A host restart restores the control plane, reconstructs run state, and marks processes that cannot be recovered instead of assuming they are still active.
+11.5 The remote profile supports one human owner and requires either an owner session or API key for every request, including terminal, streaming, artifact, and mutation routes. SWAG Basic Auth may remain as an independent outer gate.
 
-11.6 SWAG's conditional Basic Auth is an outer non-local access gate, not Boss Man's application identity. Boss Man always enforces its own owner session, including for local clients for which SWAG does not present a Basic Auth challenge.
+11.6 Password mode stores an Argon2id verifier locally on the Boss Man host and issues Secure/HttpOnly/SameSite device sessions. API-key mode stores only a local key hash and accepts the raw key through the `Authorization` header. Secrets do not enter Git, task/context records, or logs.
 
-11.7 The existing key-only SSH service on the home server at public port 315 is the default remote recovery entry point. From there, operators use the home server as a `ProxyJump` bastion to the Boss Man Mac over the LAN.
+11.7 Browser `localStorage` is not the default credential store. Password login uses an HttpOnly cookie; API clients use an OS keychain, protected secret file/environment, or session-scoped memory. Persisting a bearer key in browser `localStorage` requires an explicit convenience/security choice.
 
-11.8 Opening a second public router port directly to the Mac is not part of the first release. It requires a separate human network decision and hardening review; ordinary Cloudflare-proxied DNS/HTTP configuration is not assumed to proxy raw SSH.
+11.8 WebSockets, streaming responses, uploads, downloads, Host/Origin validation, CSRF protection where cookies are used, rate limiting, rotation/revocation, and reconnect behavior work through the remote proxy.
+
+11.9 SSH remains a separate operator recovery path. The existing public port 315 terminates on the home server and provides `ProxyJump` access to the Boss Man Mac over the LAN. The private key is never uploaded to Boss Man or copied into agent containers.
+
+11.10 A host restart restores the control plane, reconstructs run state, and marks processes that cannot be recovered instead of assuming they are still active.
+
+11.11 Opening a second public router port directly to the Mac remains deferred and requires a separate human network and hardening decision.
 
 ### 12. Provider policy and spend
 
@@ -330,7 +336,7 @@ The selected mode is visible before the child starts and remains part of its pro
 
 ### 14. First usable release boundary
 
-14.1 One owner can register a repository and create a sufficiently clear task from the proxied web UI.
+14.1 One owner can register a repository and create a sufficiently clear task from the local web UI.
 
 14.2 The owner can start a Pi session in an isolated worktree and container and use both structured session controls and an interactive workspace terminal.
 
@@ -348,4 +354,4 @@ The selected mode is visible before the child starts and remains part of its pro
 
 14.9 The owner can inspect active and proposed project memory, trace every injected item to evidence, and rebuild model-less search after deleting the derived index.
 
-14.10 The repository contains a complete, redacted configuration and secret contract plus testable deployment manifests. The release process stops before mutating long-lived SWAG, router, DNS, host-service, or production-secret state unless the owner separately authorizes deployment.
+14.10 The repository contains a complete local configuration contract and smoke runbook. Phase 3 adds the redacted remote secret contract and deployment manifests. No phase mutates long-lived SWAG, router, DNS, host-service, or production-secret state unless the owner separately authorizes deployment.

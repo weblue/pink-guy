@@ -2,7 +2,7 @@
 
 Status: Phase 0 operator shell
 
-The current application can be served locally for multi-project observability. It is not yet approved for LAN or public exposure: C0-05 must add the real single-owner application session before SWAG proxies to it.
+The current application can be served locally for multi-project observability. The local-smoke profile intentionally has no application authentication and binds only to loopback. Trusted-LAN binding is Phase 1 work; authenticated SWAG/public access is Phase 3.
 
 ## Prerequisites
 
@@ -36,6 +36,8 @@ node ./phase0/scripts/serve-direct.mjs \
 
 Open [http://127.0.0.1:4310](http://127.0.0.1:4310). The central API binds to `127.0.0.1` intentionally. Runtime state is stored under the selected `--state` directory and retained across restarts.
 
+No password or API key is required in this profile. Do not change the listener to `0.0.0.0` as a shortcut. Phase 1 will add an explicit private-interface/CIDR-aware trusted-LAN profile.
+
 Useful checks:
 
 ```sh
@@ -63,7 +65,7 @@ For cmux, create or select a tmux-backed workspace and run the same command ther
 
 ## Current execution boundary
 
-The served C0-04 shell shows projects, tasks, sessions, and project-orchestrator leases. The existing automated probes exercise real task claiming, Pi RPC, containers, worktrees, host Git checkpoints, RTK evidence, and context export. The served shell does not yet issue owner capabilities or provide full task controls because unauthenticated mutation would conflict with C0-05.
+The served Phase 0 shell shows projects, tasks, sessions, and project-orchestrator leases. The existing automated probes exercise real task claiming, Pi RPC, containers, worktrees, host Git checkpoints, RTK evidence, and context export. The shell does not yet provide full task controls because that product command surface belongs to Phase 1—not because local authentication is missing.
 
 To exercise the complete model-less C0-04 context path:
 
@@ -77,9 +79,9 @@ The context probe uses no provider, network request, embedding, or vector index.
 
 To exercise the container path, first build the pinned image and then run the direct probes described in [`phase0/README.md`](phase0/README.md).
 
-## Intended remote connection
+## Later remote connection
 
-The first-release primary path remains:
+The Phase 3 primary path remains:
 
 ```text
 remote browser -> HTTPS Boss Man subdomain -> home-server SWAG -> Boss Man Mac central API
@@ -91,4 +93,6 @@ The recovery path remains:
 SSH client -> home-server port 315 -> ProxyJump over LAN -> Boss Man Mac -> tmux/cmux project process
 ```
 
-Long-lived SWAG, DNS, router, launch-service, and production-secret changes remain human deployment actions. Do not point SWAG at the C0-04 localhost server.
+Phase 3 will require a locally configured server-side password verifier or API-key hash for requests through the remote profile. Password login should produce an HttpOnly session; browser `localStorage` is not the default place for a bearer key.
+
+Long-lived SWAG, DNS, router, launch-service, and production-secret changes remain human deployment actions. Do not point SWAG at the current loopback server.

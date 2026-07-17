@@ -4,7 +4,7 @@ This directory contains architecture-neutral fixtures, schemas, and scripts used
 
 The current capability map, data inventory, open questions, and closure sequence are summarized in [`specs/boss-man-v2/CURRENT-STATE.md`](../specs/boss-man-v2/CURRENT-STATE.md).
 
-For the first localhost serve, multi-repository registration, and one-project-orchestrator-per-project workflow, use [`RUNBOOK.md`](../RUNBOOK.md).
+For the unauthenticated loopback smoke, multi-repository registration, and one-project-orchestrator-per-project workflow, use [`RUNBOOK.md`](../RUNBOOK.md). `specs/boss-man-v2/ROADMAP.md` moves trusted-LAN work to Phase 1 and authenticated SWAG access to Phase 3.
 
 Tracked files must contain no real credentials, native user sessions, provider responses, or unredacted runtime logs. Disposable outputs belong outside the repository and are referenced by redacted manifests plus SHA-256 checksums.
 

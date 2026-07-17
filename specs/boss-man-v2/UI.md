@@ -1,6 +1,6 @@
 # Boss Man v2 developer cockpit
 
-Status: Draft for Phase 1 product planning; direct-Pi foundation selected
+Status: Draft for Phase 1 local-first product planning; direct-Pi foundation selected
 
 Last updated: 2026-07-16
 

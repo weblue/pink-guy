@@ -1,6 +1,6 @@
 # Boss Man v2 current state
 
-Status: Phase 0 closure active
+Status: Phase 0 local closure complete
 
 Last updated: 2026-07-17
 
@@ -8,13 +8,13 @@ Branch: `codex/c0-04-context-custody`
 
 ## Current position
 
-The thin direct-Pi foundation is selected. C0-01 through C0-04 are complete. The central API now stores one active orchestrator lease per project, records task-agent phases, atomically exports native Pi plus task/memory/artifact/Git context, rebuilds FTS from canonical records in a clean store, and creates transcript-free bundle children. A localhost operator shell and exact runbook provide the first serve path. C0-05 and C0-06 remain open. This is an executable control-plane prototype and evidence program, not yet the production cockpit or long-lived deployment.
+The thin direct-Pi foundation is selected and Phase 0 is complete for the local-smoke profile. The central API stores one active orchestrator lease per project, records task-agent phases, atomically exports native Pi plus task/memory/artifact/Git context, rebuilds FTS from canonical records in a clean store, and creates transcript-free bundle children. A loopback-only operator shell and exact runbook provide the first serve path without application authentication. `ROADMAP.md` now moves the usable local cockpit to Phase 1, reliability/portability to Phase 2, and SWAG/authenticated remote access to Phase 3.
 
 ## Capability map
 
 | Area | Current capability | Remaining boundary |
 |---|---|---|
-| Authority and tasks | One central Node API owns the SQLite task projection, capability-scoped mutations, audit events, review, protected decisions, validation, merge-request records, and per-project orchestrator leases. It rejects a second active orchestrator for a project and records each task-agent run as implementation, test, or review. | The Phase 0 project-orchestrator process currently proves registration/heartbeat only; scheduling/command consumption, owner-authenticated issuance, and actual merge/rebase/push remain. |
+| Authority and tasks | One central Node API owns the SQLite task projection, capability-scoped mutations, audit events, review, protected decisions, validation, merge-request records, and per-project orchestrator leases. It rejects a second active orchestrator for a project and records each task-agent run as implementation, test, or review. | The Phase 0 project-orchestrator process currently proves registration/heartbeat only; scheduling/command consumption and local operator capability issuance are Phase 1. Actual merge/rebase/push is Phase 2. |
 | Pi sessions | Upstream Pi runs in RPC mode inside the recorded task container. Native JSONL lifecycle, model-less resume/import, child provenance, blocking pre-compaction custody, one owner-authorized OpenAI Codex turn, native-byte preservation, and C0-04 bundle-child consumption pass. | True in-flight RPC reattachment and production session controls remain. |
 | Containers | The daemon creates, inspects, stops, and removes pinned Linux/ARM64 containers with a non-root user, read-only root, resource limits, minimal mounts, and no Docker socket. Restart reconciliation proves recorded ID, image, label, and liveness before cleanup. | True process reattachment and explicit production egress policy remain. Containers are damage containment, not a malicious-code boundary. |
 | Git and workspaces | The daemon creates a worktree; the container edits files without usable shared Git metadata. Capability routes expose host-generated status/diff and idempotent host-owned checkpoint/commit requests with provenance trailers. A commit made immediately before daemon loss is recovered from parent/provenance identity without duplication. | Checkpoint-versus-final-commit policy, actual merge/rebase/push, conflicts, and worktree cleanup remain. |
@@ -23,14 +23,15 @@ The thin direct-Pi foundation is selected. C0-01 through C0-04 are complete. The
 | Context custody | One atomic 11-file bundle retains native Pi bytes and unknown entry types, the selected branch, task/audit/context items, decisions, canonical and selected memory, complete retrieval receipt, artifacts, Git state, manifest, and checksums. Clean import and transcript-free bundle children use no model or network. | Production deletion/quota/backup UX and the final supervisor-to-blocking-compaction handoff remain. |
 | Memory and retrieval | The canonical memory/evidence schema and FTS5 projection are integrated into the central SQLite store. Eligibility is filtered before BM25 rank; receipts retain filters, scores, revisions, source refs, exclusions, excerpt checksums, and token use. A clean import rebuilds FTS from canonical JSON. | Semantic/vector retrieval remains deferred and rebuildable. Promotion UI and production mutation policy remain. |
 | Restart recovery | SQLite records immutable intent/completion/reconciliation receipts. Startup checks container identity/liveness, pauses verified idle runs, holds uncertain response/tool effects without replay, recovers checksum-valid snapshots, and recovers parent/provenance-valid Git commits without duplication. | The prototype conservatively stops the old container; true Pi RPC reattachment and host/Docker power-cycle coverage remain production work. |
-| Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | C0-05 must run the real direct application and single-owner session through that contract. No production SWAG, DNS, router, or launch-service mutation is authorized. |
-| Developer cockpit | Product behavior and a task-first information architecture are specified. The first localhost operator shell shows projects, orchestrator leases, the multi-project board, sessions, context status, and terminal/attach positioning without a chat-first layout. | This is a static Phase 0 shell, not the production cockpit. Owner auth, mutations, PTY/reconnect, diffs/tests/review/context inspectors, and browser-IDE integration remain. |
+| Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
+| Developer cockpit | Product behavior and a task-first information architecture are specified. The first loopback operator shell shows projects, orchestrator leases, the multi-project board, sessions, context status, and terminal/attach positioning without a chat-first layout. | This is a static Phase 0 shell. Phase 1 adds local mutations, PTY/reconnect, diffs/tests/review/context inspectors, and optional trusted-LAN access without application auth. |
 
 ## Artifact and data layout
 
 ```text
 specs/boss-man-v2/
   PRODUCT.md, TECH.md, UI.md       desired behavior and architecture
+  ROADMAP.md                       canonical local-first delivery sequence
   ADR-FOUNDATION.md, DECISIONS.md accepted direction and decision history
   PHASE0*.md, FOUNDATION.md        research contract, results, and closure plan
   CURRENT-STATE.md                 current capability/inventory index
@@ -64,9 +65,9 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 
 ## Next steps
 
-1. **C0-05 — real owner auth and edge integration.** Implement the single-owner application session, CSRF/rate limits/revocation/recovery, then rerun the disposable SWAG contract against the actual application.
-2. **C0-06 — clean-host reproduction and owner checkpoint.** Rebuild and rerun the closure suite on a second ARM64 host, measure resources, choose initial concurrency, and obtain owner approval for Phase 1.
-3. **Phase 1 — production cockpit and orchestrator command loop.** Implement the task-first remote UI, project-orchestrator scheduling/commands, persistent PTY/reconnect, diffs/tests/review/context/artifact surfaces, and optional browser IDE link.
+1. **Phase 1 — useful local-first cockpit.** Implement the project-orchestrator command loop, local task controls, persistent PTY/reconnect, and diff/test/review/context/artifact surfaces.
+2. **Phase 2 — autonomy, recovery, and portability.** Add merge/rebase/push, recovery UX, retention/backup, resource limits, and second-host reproduction.
+3. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally configured password verifier or API-key hash after the local product is mature.
 
 ## Questions exposed by implementation
 
@@ -92,6 +93,8 @@ Still open, but assigned to explicit gates rather than blocking current work:
 - **Network policy:** which provider/control-plane destinations are allowed and how egress is enforced and displayed.
 - **Retention operations:** deletion semantics, quotas, backup destination, encryption, and storage-pressure behavior while honoring retain-until-delete.
 - **Production dependencies:** supported SQLite binding and migrations, web/PTY/diff components, and whether a credential broker creates a Compose-worthy service boundary.
-- **Reproduction:** which second clean ARM64 host will close P0-00/C0-06.
+- **Reproduction:** which second clean ARM64 host will be used for Phase 2 portability validation.
 - **Provider fallback:** manual safe-boundary switching comes first; automatic OpenRouter routing and paid-spend policy remain deferred.
 - **Project orchestration:** the command queue/protocol, reconciliation of an orchestrator process loss, per-project task concurrency, and global host-pressure limits remain to be specified and measured.
+- **Trusted LAN:** the selected private interface/CIDR configuration and host-firewall enforcement need a Phase 1 design before binding beyond loopback.
+- **Remote credential UX:** Phase 3 must choose password-session mode, API-key mode, or both. Browser `localStorage` persistence remains an explicit convenience/security decision, not the default.

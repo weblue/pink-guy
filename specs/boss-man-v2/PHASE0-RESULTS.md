@@ -1,6 +1,6 @@
 # Boss Man v2 Phase 0 results
 
-Status: Foundation selected; closure gates active
+Status: Foundation selected; local-smoke closure complete
 
 Evidence date: 2026-07-17
 
@@ -10,7 +10,7 @@ Phase 0 now has an executable direct-Pi control-plane slice and reusable contrac
 
 The bounded Agent of Empires candidate is stopped. At the pinned revision, AoE has competing durable lifecycle writers and deliberately mounts the main repository plus shared Git metadata read-write so agents can use Git. Its supported plugin capabilities cannot introduce the required task/Git/session authority. Correcting those constraints while adding the task database, board route, policy, memory, and task-first navigation is a core product fork across the storage, server, sandbox, and frontend seams, not a bounded product layer.
 
-This checkpoint does not claim that every direct-Pi hard gate is closed. The owner accepted the direct-Pi foundation and its documented integration conditions on 2026-07-16. Broad Phase 1 work remains blocked until the independent contracts are transactionally integrated into the selected candidate and the second-host reproduction is complete.
+The owner accepted the direct-Pi foundation and its documented integration conditions on 2026-07-16. The integrated local contracts and operator-shell smoke now close Phase 0 for loopback development. Public-edge/authentication evidence and second-host reproduction remain valuable, but the revised roadmap moves them to Phase 3 and Phase 2 respectively; neither blocks local Phase 1 work.
 
 ## Evidence inventory
 
@@ -21,7 +21,7 @@ This checkpoint does not claim that every direct-Pi hard gate is closed. The own
 | `P0-PI-ACP-0031-CONTRACT` | Pass | Upstream `pi-acp` reaches required Pi seams | Does not repair AoE authority or Git custody |
 | `P0-DIRECT-FOUNDATION` | Pass | One daemon owns SQLite task/session/run state and a recorded pinned container running Pi RPC plus the workspace shell; it ingests events/custody and safely pauses verified idle state after restart | Deterministic provider only; production auth remains open |
 | `P0-TASK-POLICY` | Pass | Assignment scope, independent review, protected human decision, completion gate | Retained as the in-memory reference baseline for the integrated proof below |
-| `P0-DIRECT-TASK-POLICY` | Pass | Hashed bearer capabilities and the full worker/reviewer/orchestrator/owner policy pass through the direct HTTP/SQLite transaction and ordered audit stream | Container delivery now passes in C0-02; owner-authenticated issuance remains C0-05 work |
+| `P0-DIRECT-TASK-POLICY` | Pass | Hashed bearer capabilities and the full worker/reviewer/orchestrator/owner policy pass through the direct HTTP/SQLite transaction and ordered audit stream | Local operator issuance/UI belongs to Phase 1; remote owner authentication belongs to Phase 3 |
 | `P0-RUNTIME-GIT-RTK` | Pass | Pinned ARM64 task image, restricted mounts, host Git checkpoint, credential isolation, RTK raw/redacted evidence | Foundation-neutral reference contract retained for comparison |
 | `P0-DIRECT-RUNTIME-GIT-RTK` | Pass | The selected daemon owns the container record, credential materialization/lock, host Git capabilities, provenance checkpoint, and RTK artifact receipts | Synthetic reference contract complemented by the live evidence below |
 | `P0-DIRECT-LIVE-PROVIDER` | Pass | Owner-authorized OpenAI Codex turn, Pi Bash→RTK interception, canonical credential immutability, run-copy deletion, and container cleanup through the selected daemon | One bounded turn; no parallel refresh, rate-limit, or fallback claim |
@@ -46,11 +46,11 @@ This checkpoint does not claim that every direct-Pi hard gate is closed. The own
 | G-07 restart recovery | Pass | Not run | Restart proves recorded container identity before cleanup, preserves native Pi bytes, pauses idle state, recovers checksum/provenance-verifiable snapshot and Git effects, and never replays uncertain provider/tool work. |
 | G-08 task/policy | Pass | Not run | Direct HTTP/SQLite capability transactions enforce assignment, concurrency, fixed-revision independent review, owner decisions, validation, completion, and merge requests. |
 | G-09 model-less portability | Pass | Bridge-only | The selected direct path atomically combines native Pi, canonical task/memory, artifacts, Git, checksums, retrieval receipts, clean-store FTS rebuild, and transcript-free bundle children without a model or network request. |
-| G-10 public edge | Component | Contract only | The origin contract passes; the selected application's real owner session must run through it. |
+| G-10 public edge | Deferred | Contract only | The disposable origin/auth contract passes, but the real application path is a Phase 3 remote-profile gate rather than a local Phase 0 gate. |
 
 ## Scoring decision
 
-The Phase 0 contract permits numeric scoring only after every hard gate passes. Neither candidate qualifies, so publishing weighted totals would create false precision.
+The original Phase 0 contract permitted numeric scoring only after every hard gate passed. The foundation was selected directionally before the roadmap separated local delivery from public-edge delivery, so retroactively publishing a weighted score would create false precision.
 
 The directional comparison is nevertheless decisive:
 
@@ -59,10 +59,7 @@ The directional comparison is nevertheless decisive:
 
 ## Recorded decision
 
-The human owner selected the thin direct-Pi control plane as the Boss Man v2 foundation on 2026-07-16, with AoE retained as a UI/runtime reference rather than a dependency. C0-01 through C0-04 are complete. The remaining checkpoints before production use are:
-
-1. run the real owner authentication implementation through the remote-edge suite; and
-2. reproduce the fixture and task image on a second clean ARM64 environment.
+The human owner selected the thin direct-Pi control plane as the Boss Man v2 foundation on 2026-07-16, with AoE retained as a UI/runtime reference rather than a dependency. C0-01 through C0-05 are complete under the revised local-smoke closure. Work now proceeds to the Phase 1 local cockpit. Second-host reproduction is Phase 2; real owner authentication and SWAG integration are Phase 3.
 
 ## Compose decision
 

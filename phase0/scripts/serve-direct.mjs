@@ -66,7 +66,7 @@ const url = `http://127.0.0.1:${address.port}`;
 process.stdout.write(`Boss Man central API is serving at ${url}
 State: ${stateRoot}
 Projects: ${repositories.length}
-Exposure: localhost only (no owner authentication in C0-04)
+Exposure: localhost only (local smoke profile; no application authentication)
 Execution: register one project-orchestrator lease through the central API before starting a task session
 Stop: Ctrl-C
 `);

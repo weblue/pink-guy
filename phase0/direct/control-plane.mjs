@@ -66,7 +66,7 @@ h1,h2,h3,p{margin:.1rem 0 .65rem}h1{font-size:1rem;color:#8ce99a}h2{font-size:.8
 .terminal{min-height:10rem;background:#07090b;color:#99e9f2;padding:.75rem;white-space:pre-wrap}
 @media(max-width:1050px){main{grid-template-columns:1fr}.inspector{order:3}}@media(max-width:700px){#board{grid-template-columns:1fr}}
 </style>
-<header><div><strong>Boss Man</strong> <span class="tag">Phase 0 operator shell</span></div><span class="warn">localhost only · owner auth arrives in C0-05</span></header>
+<header><div><strong>Boss Man</strong> <span class="tag">Phase 0 operator shell</span></div><span class="warn">localhost only · no auth in local smoke profile</span></header>
 <main>
   <aside class="stack"><section class="panel"><h2>Projects</h2><div id="projects"></div></section>
   <section class="panel"><h2>Project orchestrators</h2><div id="orchestrators"></div></section></aside>
