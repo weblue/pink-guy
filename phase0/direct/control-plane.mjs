@@ -66,7 +66,7 @@ h1,h2,h3,p{margin:.1rem 0 .65rem}h1{font-size:1rem;color:#8ce99a}h2{font-size:.8
 .terminal{min-height:10rem;background:#07090b;color:#99e9f2;padding:.75rem;white-space:pre-wrap}
 @media(max-width:1050px){main{grid-template-columns:1fr}.inspector{order:3}}@media(max-width:700px){#board{grid-template-columns:1fr}}
 </style>
-<header><div><strong>Boss Man</strong> <span class="tag">Phase 0 operator shell</span></div><span class="warn">localhost only · no auth in local smoke profile</span></header>
+<header><div><strong>Boss Man</strong> <span class="tag">Phase 1 local cockpit</span></div><span class="warn">localhost only · no auth in local smoke profile</span></header>
 <main>
   <aside class="stack"><section class="panel"><h2>Projects</h2><div id="projects"></div></section>
   <section class="panel"><h2>Project orchestrators</h2><div id="orchestrators"></div></section></aside>
@@ -75,15 +75,17 @@ h1,h2,h3,p{margin:.1rem 0 .65rem}h1{font-size:1rem;color:#8ce99a}h2{font-size:.8
 tmux/cmux and SSH remain attach transports.
 Project orchestrators own execution; this API owns durable state.</div></div></section>
   <aside class="stack inspector"><section class="panel"><h2>Sessions</h2><div id="sessions"></div></section>
+  <section class="panel"><h2>Recent commands</h2><div id="commands"></div></section>
   <section class="panel"><h2>Context custody</h2><p>Atomic native Pi, task, memory, artifact, Git, and retrieval receipts.</p><p class="muted">Select/export controls are API-first in C0-04; the full inspector is Phase 1.</p></section></aside>
 </main>
 <script>
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 const row=(title,detail)=>'<div class="row"><strong>'+esc(title)+'</strong><div class="muted">'+esc(detail)+'</div></div>';
-Promise.all(['/api/projects','/api/orchestrators','/api/sessions','/api/board'].map(u=>fetch(u).then(r=>r.json()))).then(([projects,orchestrators,sessions,board])=>{
+Promise.all(['/api/projects','/api/orchestrators','/api/sessions','/api/board','/api/commands?limit=20'].map(u=>fetch(u).then(r=>r.json()))).then(([projects,orchestrators,sessions,board,commands])=>{
  document.querySelector('#projects').innerHTML=projects.projects.map(p=>row(p.name,p.repository_path+' · '+p.task_count+' tasks')).join('')||'<p class="muted">No projects</p>';
  document.querySelector('#orchestrators').innerHTML=orchestrators.orchestrators.map(o=>row(o.project_name,o.transport+' · '+o.status+' · '+o.endpoint)).join('')||'<p class="muted">No active leases</p>';
  document.querySelector('#sessions').innerHTML=sessions.sessions.map(s=>row(s.id,s.project_id+' · '+(s.latest_run_state||s.state))).join('')||'<p class="muted">No sessions yet</p>';
+ document.querySelector('#commands').innerHTML=commands.commands.map(c=>row(c.kind+' · '+c.phase,c.project_name+' · '+c.task_id+' · '+c.state)).join('')||'<p class="muted">No commands yet</p>';
  for(const [state,tasks] of Object.entries(board.columns)){const c=document.createElement('section');c.className='column';c.innerHTML='<h3>'+esc(state.replaceAll('_',' '))+'</h3>';for(const task of tasks){const t=document.createElement('article');t.className='task';t.innerHTML='<strong>'+esc(task.title)+'</strong><div class="muted">'+esc(task.project_id)+' · v'+esc(task.version)+'</div>';c.append(t)}document.querySelector('#board').append(c)}
 }).catch(error=>document.querySelector('.terminal').textContent+='\\nUI load failed: '+error.message);
 </script></html>`;
@@ -649,6 +651,15 @@ export class DirectControlPlane {
       if (request.method === "GET" && url.pathname === "/api/orchestrators") {
         return json(response, 200, { orchestrators: this.store.projectOrchestrators() });
       }
+      if (request.method === "GET" && url.pathname === "/api/commands") {
+        const limit = url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : 100;
+        return json(response, 200, {
+          commands: this.store.orchestratorCommands({
+            projectId: url.searchParams.get("projectId"),
+            limit,
+          }),
+        });
+      }
       if (request.method === "POST" && url.pathname === "/api/orchestrators") {
         const body = await readBody(request);
         return json(response, 201, this.store.registerProjectOrchestrator({
@@ -669,6 +680,41 @@ export class DirectControlPlane {
       if (request.method === "DELETE" && url.pathname === "/api/orchestrators/lease") {
         this.store.releaseProjectOrchestrator(bearerToken(request));
         return json(response, 200, { released: true });
+      }
+      if (request.method === "POST" && url.pathname === "/api/orchestrators/commands/claim") {
+        const command = this.store.claimOrchestratorCommand(bearerToken(request));
+        if (!command) {
+          response.writeHead(204);
+          return response.end();
+        }
+        return json(response, 200, { command });
+      }
+
+      const completeCommand = url.pathname.match(/^\/api\/orchestrators\/commands\/([^/]+)\/complete$/);
+      if (request.method === "POST" && completeCommand) {
+        const body = await readBody(request);
+        return json(response, 200, {
+          command: this.store.completeOrchestratorCommand({
+            token: bearerToken(request),
+            commandId: completeCommand[1],
+            state: body.state,
+            result: body.result ?? {},
+          }),
+        });
+      }
+
+      const queueCommand = url.pathname.match(/^\/api\/projects\/([^/]+)\/commands$/);
+      if (request.method === "POST" && queueCommand) {
+        const body = await readBody(request);
+        const result = this.store.enqueueOrchestratorCommand({
+          projectId: queueCommand[1],
+          taskId: body.taskId,
+          kind: body.kind ?? "start_task",
+          phase: body.phase,
+          payload: body.payload ?? {},
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
       }
 
       const taskDetail = url.pathname.match(/^\/api\/tasks\/([^/]+)$/);
@@ -772,7 +818,7 @@ export class DirectControlPlane {
     } catch (error) {
       const status = error.code === "not_found" ? 404
         : ["capability_denied", "self_approval_denied", "orchestrator_denied"].includes(error.code) ? 403
-          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict"].includes(error.code) ? 409
+          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict"].includes(error.code) ? 409
             : 400;
       return json(response, status, { error: error.code ?? "request_failed", message: error.message });
     }

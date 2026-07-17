@@ -38,6 +38,10 @@ Phase 0 does not require application authentication because its runnable profile
 
 Purpose: make Boss Man useful for daily development on the host and, when explicitly enabled, a trusted LAN.
 
+Active slice: [`../phase1-local-control-loop/PRODUCT.md`](../phase1-local-control-loop/PRODUCT.md)
+and [`../phase1-local-control-loop/TECH.md`](../phase1-local-control-loop/TECH.md)
+define the durable project-orchestrator command loop that begins this phase.
+
 Scope:
 
 - project-orchestrator command queue, scheduling, heartbeat-loss handling, and task-agent lifecycle;

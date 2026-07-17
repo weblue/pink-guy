@@ -6,6 +6,18 @@ The current capability map, data inventory, open questions, and closure sequence
 
 For the unauthenticated loopback smoke, multi-repository registration, and one-project-orchestrator-per-project workflow, use [`RUNBOOK.md`](../RUNBOOK.md). `specs/boss-man-v2/ROADMAP.md` moves trusted-LAN work to Phase 1 and authenticated SWAG access to Phase 3.
 
+The selected foundation continues to live under this directory while Phase 1
+stabilizes its production module boundaries. The first Phase 1 command-loop
+probe is:
+
+```sh
+node ./phase0/scripts/probe-phase1-command-loop.mjs \
+  /absolute/path/to/git-repository
+```
+
+It uses a temporary central API and deterministic fake execution endpoint. It
+makes no provider request and starts no task container.
+
 Tracked files must contain no real credentials, native user sessions, provider responses, or unredacted runtime logs. Disposable outputs belong outside the repository and are referenced by redacted manifests plus SHA-256 checksums.
 
 ## Create the acceptance fixture
