@@ -459,6 +459,159 @@ export class Phase0Store {
     return this.getTask(taskId);
   }
 
+  createOwnerTask({
+    projectId,
+    title,
+    acceptanceCriteria = [],
+    revision,
+    idempotencyKey,
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    const normalizedTitle = typeof title === "string" ? title.trim() : "";
+    if (!normalizedTitle || normalizedTitle.length > 500 || normalizedTitle.includes("\0")) {
+      throw codedError("invalid_request", "task title must be between 1 and 500 characters");
+    }
+    if (
+      !Array.isArray(acceptanceCriteria) || acceptanceCriteria.length > 100
+      || acceptanceCriteria.some((item) => typeof item !== "string" || !item.trim() || item.length > 2000)
+    ) {
+      throw codedError("invalid_request", "acceptance criteria must be a list of non-empty strings");
+    }
+    if (!revision) throw codedError("invalid_request", "task repository revision is required");
+    if (!this.getProject(projectId)) throw codedError("not_found", `unknown project: ${projectId}`);
+    const normalizedCriteria = acceptanceCriteria.map((item) => item.trim());
+    const requestSha256 = sha256(JSON.stringify({
+      action: "create_task", projectId, title: normalizedTitle, acceptanceCriteria: normalizedCriteria,
+    }));
+    const prior = this.database.prepare("SELECT * FROM audit_events WHERE idempotency_key=?").get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256 || prior.type !== "task_created") {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different owner mutation");
+      }
+      return { replayed: true, task: this.parseAuditEvent(prior).current };
+    }
+    const id = randomUUID();
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`INSERT INTO tasks(
+        id,project_id,title,status,version,updated_at,revision,validation_passed,
+        merge_requested,acceptance_criteria_json
+      ) VALUES(?,?,?,'ready',1,?,?,0,0,?)`).run(
+        id, projectId, normalizedTitle, now, revision, JSON.stringify(normalizedCriteria),
+      );
+      const current = this.getTaskDetails(id);
+      this.database.prepare(`INSERT INTO task_events(
+        task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+        actor_role,run_id,task_version
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        id, "task_created", "local-owner", null, "ready",
+        JSON.stringify({ title: normalizedTitle, acceptanceCriteria: normalizedCriteria }),
+        idempotencyKey, now, "owner", null, 1,
+      );
+      this.database.prepare(`INSERT INTO audit_events(
+        task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+        idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        id, "task_created", "local-owner", "owner", null, null, "null", JSON.stringify(current),
+        JSON.stringify({ title: normalizedTitle, acceptanceCriteria: normalizedCriteria }),
+        idempotencyKey, requestSha256, now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return { replayed: false, task: this.getTaskDetails(id) };
+  }
+
+  scheduleOwnerTaskRun({ taskId, phase, idempotencyKey }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    if (!RUN_PHASES.has(phase)) throw codedError("invalid_request", `unsupported run phase: ${phase}`);
+    const task = this.getTask(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    const payload = { source: "local_owner" };
+    const commandRequest = {
+      projectId: task.project_id, taskId, kind: "start_task", phase, payload,
+    };
+    const commandRequestSha256 = sha256(JSON.stringify(commandRequest));
+    const priorCommand = this.database.prepare(
+      "SELECT * FROM orchestrator_commands WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (priorCommand) {
+      const priorAudit = this.database.prepare(
+        "SELECT * FROM audit_events WHERE idempotency_key=? AND type='task_scheduled'",
+      ).get(idempotencyKey);
+      if (priorCommand.request_sha256 !== commandRequestSha256 || !priorAudit) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different scheduling request");
+      }
+      return {
+        replayed: true,
+        task: this.parseAuditEvent(priorAudit).current,
+        command: publicOrchestratorCommand(priorCommand),
+      };
+    }
+    const orchestrator = this.activeProjectOrchestrator(task.project_id);
+    if (!orchestrator) {
+      throw codedError("orchestrator_unavailable", "project has no active orchestrator lease");
+    }
+    if (!["ready", "backlog"].includes(task.status) || task.assigned_worker) {
+      throw codedError("transition_denied", "only an unassigned ready or backlog task can be scheduled");
+    }
+    const commandId = randomUUID();
+    const actorId = `task-agent:${phase}:${commandId}`;
+    const now = this.clock();
+    const prior = this.getTaskDetails(taskId);
+    const auditRequestSha256 = sha256(JSON.stringify({ action: "schedule_task", taskId, phase }));
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`INSERT INTO orchestrator_commands(
+        id,project_id,task_id,orchestrator_id,kind,phase,state,payload_json,request_sha256,
+        idempotency_key,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,'queued',?,?,?,?,?)`).run(
+        commandId, task.project_id, taskId, orchestrator.id, "start_task", phase,
+        JSON.stringify(payload), commandRequestSha256, idempotencyKey, now, now,
+      );
+      const nextVersion = task.version + 1;
+      const changed = this.database.prepare(`UPDATE tasks SET
+        status='in_progress',assigned_worker=?,version=?,updated_at=?
+        WHERE id=? AND version=? AND status IN ('ready','backlog') AND assigned_worker IS NULL`).run(
+        actorId, nextVersion, now, taskId, task.version,
+      );
+      if (Number(changed.changes) !== 1) throw codedError("version_conflict", "task changed during scheduling");
+      const current = this.getTaskDetails(taskId);
+      this.appendOrchestratorCommandEvent(commandId, "queued", orchestrator.id, {
+        projectId: task.project_id, taskId, kind: "start_task", phase, source: "local_owner",
+      }, now);
+      this.database.prepare(`INSERT INTO task_events(
+        task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+        actor_role,run_id,task_version
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        taskId, "task_scheduled", "local-owner", task.status, "in_progress",
+        JSON.stringify({ phase, commandId, assignedWorker: actorId }),
+        idempotencyKey, now, "owner", null, nextVersion,
+      );
+      this.database.prepare(`INSERT INTO audit_events(
+        task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+        idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        taskId, "task_scheduled", "local-owner", "owner", null, null,
+        JSON.stringify(prior), JSON.stringify(current),
+        JSON.stringify({ phase, commandId, assignedWorker: actorId }),
+        idempotencyKey, auditRequestSha256, now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      replayed: false,
+      task: this.getTaskDetails(taskId),
+      command: this.orchestratorCommand(commandId),
+    };
+  }
+
   getTask(taskId) {
     return this.database.prepare("SELECT * FROM tasks WHERE id=?").get(taskId) ?? null;
   }

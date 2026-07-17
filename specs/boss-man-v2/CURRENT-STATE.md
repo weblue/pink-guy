@@ -1,6 +1,6 @@
 # Boss Man v2 current state
 
-Status: Phase 1 in progress — local control loop implemented
+Status: Phase 1 in progress — local control loop and task scheduling implemented
 
 Last updated: 2026-07-17
 
@@ -15,13 +15,15 @@ project orchestrator claim them in FIFO order, retain structured terminal
 results, and hold claimed work for explicit reconciliation after lease loss.
 The project-orchestrator process now consumes `start_task` commands through the
 existing managed task-session boundary. The loopback cockpit shows recent
-command state without becoming chat-first.
+command state without becoming chat-first. The owner can now create a
+revision-bound task with acceptance criteria and atomically assign/schedule
+one explicit agent phase from the board.
 
 ## Capability map
 
 | Area | Current capability | Remaining boundary |
 |---|---|---|
-| Authority and tasks | One central Node API owns the SQLite task projection, capability-scoped mutations, audit events, review, protected decisions, validation, merge-request records, and per-project orchestrator leases. Its durable FIFO command lifecycle supports idempotent enqueue, project-scoped single claim, structured success/failure, and no-replay reconciliation after lease expiry/release. The project-orchestrator consumes `start_task` commands and preserves implementation/test/review phase scope. | Local task create/edit/claim controls, dependency scheduling, stop/reconcile commands, and attention UX remain Phase 1. Actual merge/rebase/push is Phase 2. |
+| Authority and tasks | One central Node API owns the SQLite task projection, capability-scoped agent mutations, audited loopback-owner task creation/scheduling, review, protected decisions, validation, merge-request records, and per-project orchestrator leases. Scheduling atomically assigns the task, moves it to `in_progress`, and queues one phase-scoped command. The durable FIFO command lifecycle supports idempotent enqueue, project-scoped single claim, structured success/failure, and no-replay reconciliation after lease expiry/release. | Task description/criteria editing, dependencies, stop/reconcile commands, and attention UX remain Phase 1. Actual merge/rebase/push is Phase 2. |
 | Pi sessions | Upstream Pi runs in RPC mode inside the recorded task container. Native JSONL lifecycle, model-less resume/import, child provenance, blocking pre-compaction custody, one owner-authorized OpenAI Codex turn, native-byte preservation, and C0-04 bundle-child consumption pass. | True in-flight RPC reattachment and production session controls remain. |
 | Containers | The daemon creates, inspects, stops, and removes pinned Linux/ARM64 containers with a non-root user, read-only root, resource limits, minimal mounts, and no Docker socket. Restart reconciliation proves recorded ID, image, label, and liveness before cleanup. | True process reattachment and explicit production egress policy remain. Containers are damage containment, not a malicious-code boundary. |
 | Git and workspaces | The daemon creates a worktree; the container edits files without usable shared Git metadata. Capability routes expose host-generated status/diff and idempotent host-owned checkpoint/commit requests with provenance trailers. A commit made immediately before daemon loss is recovered from parent/provenance identity without duplication. | Checkpoint-versus-final-commit policy, actual merge/rebase/push, conflicts, and worktree cleanup remain. |
@@ -31,7 +33,7 @@ command state without becoming chat-first.
 | Memory and retrieval | The canonical memory/evidence schema and FTS5 projection are integrated into the central SQLite store. Eligibility is filtered before BM25 rank; receipts retain filters, scores, revisions, source refs, exclusions, excerpt checksums, and token use. A clean import rebuilds FTS from canonical JSON. | Semantic/vector retrieval remains deferred and rebuildable. Promotion UI and production mutation policy remain. |
 | Restart recovery | SQLite records immutable intent/completion/reconciliation receipts. Startup checks container identity/liveness, pauses verified idle runs, holds uncertain response/tool effects without replay, recovers checksum-valid snapshots, and recovers parent/provenance-valid Git commits without duplication. | The prototype conservatively stops the old container; true Pi RPC reattachment and host/Docker power-cycle coverage remain production work. |
 | Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
-| Developer cockpit | Product behavior and a task-first information architecture are specified. The loopback Phase 1 shell shows projects, orchestrator leases, the multi-project board, sessions, recent durable commands, context status, and terminal/attach positioning without a chat-first layout. | Local mutations, PTY/reconnect, diffs/tests/review/context inspectors, and optional trusted-LAN access without application auth remain. |
+| Developer cockpit | Product behavior and a task-first information architecture are specified. The loopback Phase 1 shell shows projects, orchestrator leases, the multi-project board, sessions, recent durable commands, context status, and terminal/attach positioning without a chat-first layout. It creates revision-bound tasks and schedules implementation/test/review agents from ready/backlog cards. | Task detail editing/dependencies/reconciliation, PTY/reconnect, diffs/tests/review/context inspectors, and optional trusted-LAN access without application auth remain. |
 
 ## Artifact and data layout
 
@@ -45,6 +47,9 @@ specs/boss-man-v2/
 
 specs/phase1-local-control-loop/
   PRODUCT.md, TECH.md, RESULTS.md  first Phase 1 behavior, design, and verification
+
+specs/phase1-local-task-controls/
+  PRODUCT.md, TECH.md, RESULTS.md  local create/assign/schedule behavior and proof
 
 phase0/
   baseline/                        artifact retention policy and source manifest
@@ -75,9 +80,9 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 
 ## Next steps
 
-1. **Phase 1 — next local task-control slice.** Add task creation/editing,
-   acceptance criteria, local claim/start actions, phase selection, and command
-   state to the task workspace.
+1. **Phase 1 — task detail and reconciliation.** Add description/acceptance
+   editing, dependencies, activity, command failure detail, and explicit owner
+   reconciliation actions.
 2. **Phase 1 — terminal and workspace surfaces.** Add a persistent
    PTY/reconnect path, then diff/test/review/context/artifact inspectors.
 3. **Phase 2 — autonomy, recovery, and portability.** Add merge/rebase/push, recovery UX, retention/backup, resource limits, and second-host reproduction.

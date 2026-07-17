@@ -5,7 +5,9 @@ executable local application for Boss Man v2. Phase 0 is complete for the
 unauthenticated loopback-smoke profile. Phase 1 is in progress: the central API
 now has a durable project-orchestrator command loop with phase-scoped work,
 idempotent enqueue/claim/complete operations, lease-loss reconciliation, and
-cockpit visibility. Serve it using [`RUNBOOK.md`](RUNBOOK.md).
+cockpit visibility. The owner can also create tasks with acceptance criteria
+and atomically claim/schedule them from the board. Serve it using
+[`RUNBOOK.md`](RUNBOOK.md).
 
 Current code also includes deterministic fixtures, Pi lifecycle/custody
 probes, authoritative task policy, governed memory and FTS retrieval, atomic
@@ -28,6 +30,8 @@ The design is organized under [`specs/boss-man-v2`](specs/boss-man-v2):
 - [`DECISIONS.md`](specs/boss-man-v2/DECISIONS.md) separates proposed decisions, assumptions, and questions that still need owner input.
 - [`phase1-local-control-loop`](specs/phase1-local-control-loop) defines and
   verifies the first Phase 1 product slice.
+- [`phase1-local-task-controls`](specs/phase1-local-task-controls) defines and
+  verifies the local create/claim/schedule slice.
 
 The upstream source reviewed for this baseline was:
 

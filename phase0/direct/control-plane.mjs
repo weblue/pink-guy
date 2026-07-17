@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import { createServer } from "node:http";
 import { access, chmod, copyFile, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import { RtkArtifactIngestor } from "./artifacts.mjs";
 import { ContextCustodyService } from "./context-service.mjs";
@@ -15,6 +17,7 @@ import { Phase0Store } from "./store.mjs";
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const extensionDirectory = resolve(moduleDirectory, "../pi");
 const rtkConfiguration = resolve(moduleDirectory, "../runtime/rtk-config.toml");
+const execFileAsync = promisify(execFile);
 
 function sha256(content) {
   return createHash("sha256").update(content).digest("hex");
@@ -51,6 +54,19 @@ function bearerToken(request) {
   return value?.startsWith("Bearer ") ? value.slice("Bearer ".length) : null;
 }
 
+async function repositoryRevision(repositoryPath) {
+  try {
+    const { stdout } = await execFileAsync("git", ["-C", repositoryPath, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    });
+    return stdout.trim();
+  } catch (error) {
+    throw Object.assign(new Error(`cannot resolve project Git revision: ${error.stderr ?? error.message}`), {
+      code: "git_operation_failed",
+    });
+  }
+}
+
 const BOARD_HTML = `<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Boss Man operator shell</title>
@@ -64,11 +80,20 @@ h1,h2,h3,p{margin:.1rem 0 .65rem}h1{font-size:1rem;color:#8ce99a}h2{font-size:.8
 #board{display:grid;grid-template-columns:repeat(6,minmax(9rem,1fr));gap:.55rem;overflow:auto}.column{min-height:12rem}
 .task,.row{background:#192129;padding:.55rem;border-radius:.3rem;margin-top:.45rem}.task{border-left:3px solid #5c7cfa}
 .terminal{min-height:10rem;background:#07090b;color:#99e9f2;padding:.75rem;white-space:pre-wrap}
+form{display:grid;gap:.45rem}input,textarea,select,button{font:inherit;color:inherit;background:#0c1116;border:1px solid #384552;border-radius:.3rem;padding:.45rem}
+textarea{min-height:5rem;resize:vertical}button{cursor:pointer;background:#244a36;border-color:#3b7d57}button:disabled{opacity:.55;cursor:wait}
+.controls{display:flex;gap:.35rem;margin-top:.55rem}.controls select{min-width:0;flex:1}.status{min-height:1.2rem;margin-top:.45rem}
 @media(max-width:1050px){main{grid-template-columns:1fr}.inspector{order:3}}@media(max-width:700px){#board{grid-template-columns:1fr}}
 </style>
 <header><div><strong>Boss Man</strong> <span class="tag">Phase 1 local cockpit</span></div><span class="warn">localhost only · no auth in local smoke profile</span></header>
 <main>
   <aside class="stack"><section class="panel"><h2>Projects</h2><div id="projects"></div></section>
+  <section class="panel"><h2>Create task</h2><form id="create-task">
+    <select id="task-project" required aria-label="Project"></select>
+    <input id="task-title" required maxlength="500" placeholder="Task title">
+    <textarea id="task-criteria" placeholder="Acceptance criteria, one per line"></textarea>
+    <button type="submit">Create ready task</button>
+  </form><div id="mutation-status" class="status muted" aria-live="polite"></div></section>
   <section class="panel"><h2>Project orchestrators</h2><div id="orchestrators"></div></section></aside>
   <section class="stack"><div class="panel"><h2>Task board</h2><div id="board"></div></div>
   <div class="panel"><h2>Terminal / session attach</h2><div class="terminal">$ Central API ready
@@ -81,13 +106,19 @@ Project orchestrators own execution; this API owns durable state.</div></div></s
 <script>
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 const row=(title,detail)=>'<div class="row"><strong>'+esc(title)+'</strong><div class="muted">'+esc(detail)+'</div></div>';
+const key=prefix=>prefix+'-'+(globalThis.crypto?.randomUUID?.()||Date.now()+'-'+Math.random());
+const request=async(url,options={})=>{const response=await fetch(url,options);const body=await response.json();if(!response.ok)throw new Error(body.message||body.error||('HTTP '+response.status));return body};
+const status=(message,error=false)=>{const target=document.querySelector('#mutation-status');target.textContent=message;target.className='status '+(error?'warn':'good')};
 Promise.all(['/api/projects','/api/orchestrators','/api/sessions','/api/board','/api/commands?limit=20'].map(u=>fetch(u).then(r=>r.json()))).then(([projects,orchestrators,sessions,board,commands])=>{
  document.querySelector('#projects').innerHTML=projects.projects.map(p=>row(p.name,p.repository_path+' · '+p.task_count+' tasks')).join('')||'<p class="muted">No projects</p>';
+ document.querySelector('#task-project').innerHTML=projects.projects.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>').join('');
  document.querySelector('#orchestrators').innerHTML=orchestrators.orchestrators.map(o=>row(o.project_name,o.transport+' · '+o.status+' · '+o.endpoint)).join('')||'<p class="muted">No active leases</p>';
  document.querySelector('#sessions').innerHTML=sessions.sessions.map(s=>row(s.id,s.project_id+' · '+(s.latest_run_state||s.state))).join('')||'<p class="muted">No sessions yet</p>';
  document.querySelector('#commands').innerHTML=commands.commands.map(c=>row(c.kind+' · '+c.phase,c.project_name+' · '+c.task_id+' · '+c.state)).join('')||'<p class="muted">No commands yet</p>';
- for(const [state,tasks] of Object.entries(board.columns)){const c=document.createElement('section');c.className='column';c.innerHTML='<h3>'+esc(state.replaceAll('_',' '))+'</h3>';for(const task of tasks){const t=document.createElement('article');t.className='task';t.innerHTML='<strong>'+esc(task.title)+'</strong><div class="muted">'+esc(task.project_id)+' · v'+esc(task.version)+'</div>';c.append(t)}document.querySelector('#board').append(c)}
+ for(const [state,tasks] of Object.entries(board.columns)){const c=document.createElement('section');c.className='column';c.innerHTML='<h3>'+esc(state.replaceAll('_',' '))+'</h3>';for(const task of tasks){const t=document.createElement('article');t.className='task';t.innerHTML='<strong>'+esc(task.title)+'</strong><div class="muted">'+esc(task.project_id)+' · v'+esc(task.version)+'</div>'+((state==='ready'||state==='backlog')?'<div class="controls"><select aria-label="Agent phase"><option>implementation</option><option>test</option><option>review</option></select><button data-schedule="'+esc(task.id)+'">Schedule</button></div>':'');c.append(t)}document.querySelector('#board').append(c)}
 }).catch(error=>document.querySelector('.terminal').textContent+='\\nUI load failed: '+error.message);
+document.querySelector('#create-task').addEventListener('submit',async event=>{event.preventDefault();const button=event.submitter;button.disabled=true;try{const project=document.querySelector('#task-project').value;const title=document.querySelector('#task-title').value;const acceptanceCriteria=document.querySelector('#task-criteria').value.split('\\n').map(v=>v.trim()).filter(Boolean);await request('/api/projects/'+encodeURIComponent(project)+'/tasks',{method:'POST',headers:{'content-type':'application/json','idempotency-key':key('create-task')},body:JSON.stringify({title,acceptanceCriteria})});status('Task created. Reloading…');location.reload()}catch(error){status(error.message,true);button.disabled=false}});
+document.querySelector('#board').addEventListener('click',async event=>{const button=event.target.closest('button[data-schedule]');if(!button)return;button.disabled=true;try{const phase=button.parentElement.querySelector('select').value;await request('/api/tasks/'+encodeURIComponent(button.dataset.schedule)+'/schedule',{method:'POST',headers:{'content-type':'application/json','idempotency-key':key('schedule-task')},body:JSON.stringify({phase})});status('Task scheduled. Reloading…');location.reload()}catch(error){status(error.message,true);button.disabled=false}});
 </script></html>`;
 
 export class DirectControlPlane {
@@ -118,6 +149,15 @@ export class DirectControlPlane {
     this.reconciledRunIds = [];
     this.recoveryResults = [];
     this.recoveryChecked = false;
+    this.exposureProfile = null;
+  }
+
+  assertLocalOwnerProfile() {
+    if (this.exposureProfile !== "local_smoke") {
+      throw Object.assign(new Error("local owner mutations require the loopback local-smoke profile"), {
+        code: "local_operator_denied",
+      });
+    }
   }
 
   gitService(repositoryPath) {
@@ -621,6 +661,7 @@ export class DirectControlPlane {
       this.server.listen(port, host, resolvePromise);
     });
     const address = this.server.address();
+    this.exposureProfile = ["127.0.0.1", "::1", "localhost"].includes(host) ? "local_smoke" : "unsupported";
     this.internalOrigin = `http://${address.address === "::" ? "127.0.0.1" : address.address}:${address.port}`;
     this.containerOrigin = `http://host.docker.internal:${address.port}`;
     return this.server.address();
@@ -705,6 +746,7 @@ export class DirectControlPlane {
 
       const queueCommand = url.pathname.match(/^\/api\/projects\/([^/]+)\/commands$/);
       if (request.method === "POST" && queueCommand) {
+        this.assertLocalOwnerProfile();
         const body = await readBody(request);
         const result = this.store.enqueueOrchestratorCommand({
           projectId: queueCommand[1],
@@ -712,6 +754,34 @@ export class DirectControlPlane {
           kind: body.kind ?? "start_task",
           phase: body.phase,
           payload: body.payload ?? {},
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const createTask = url.pathname.match(/^\/api\/projects\/([^/]+)\/tasks$/);
+      if (request.method === "POST" && createTask) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const project = this.store.getProject(createTask[1]);
+        if (!project) throw Object.assign(new Error(`unknown project: ${createTask[1]}`), { code: "not_found" });
+        const result = this.store.createOwnerTask({
+          projectId: project.id,
+          title: body.title,
+          acceptanceCriteria: body.acceptanceCriteria ?? [],
+          revision: await repositoryRevision(project.repository_path),
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const scheduleTask = url.pathname.match(/^\/api\/tasks\/([^/]+)\/schedule$/);
+      if (request.method === "POST" && scheduleTask) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.scheduleOwnerTaskRun({
+          taskId: scheduleTask[1],
+          phase: body.phase,
           idempotencyKey: request.headers["idempotency-key"],
         });
         return json(response, result.replayed ? 200 : 201, result);
@@ -817,7 +887,7 @@ export class DirectControlPlane {
       return json(response, 404, { error: "not_found" });
     } catch (error) {
       const status = error.code === "not_found" ? 404
-        : ["capability_denied", "self_approval_denied", "orchestrator_denied"].includes(error.code) ? 403
+        : ["capability_denied", "self_approval_denied", "orchestrator_denied", "local_operator_denied"].includes(error.code) ? 403
           : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict"].includes(error.code) ? 409
             : 400;
       return json(response, status, { error: error.code ?? "request_failed", message: error.message });

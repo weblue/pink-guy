@@ -40,7 +40,10 @@ Purpose: make Boss Man useful for daily development on the host and, when explic
 
 Active slice: [`../phase1-local-control-loop/PRODUCT.md`](../phase1-local-control-loop/PRODUCT.md)
 and [`../phase1-local-control-loop/TECH.md`](../phase1-local-control-loop/TECH.md)
-define the durable project-orchestrator command loop that begins this phase.
+define the durable project-orchestrator command loop that began this phase.
+The next active slice is
+[`../phase1-local-task-controls/PRODUCT.md`](../phase1-local-task-controls/PRODUCT.md)
+and [`../phase1-local-task-controls/TECH.md`](../phase1-local-task-controls/TECH.md).
 
 Scope:
 

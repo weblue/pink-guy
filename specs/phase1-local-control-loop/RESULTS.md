@@ -44,8 +44,7 @@ The two container-backed regression probes used the pinned ARM64 image
 
 ## Remaining Phase 1 boundary
 
-This slice proves delivery, not the complete local workflow. A ready task is
-not automatically claimed when a command is queued. The next slice must add
-owner-facing task creation/edit/claim/start controls and make those mutations
-atomic with scheduling. Persistent PTY and task workspace inspectors follow.
-
+The follow-up `phase1-local-task-controls` slice now creates tasks and
+atomically assigns/starts ready work from the cockpit. Task detail editing,
+dependencies, reconciliation controls, persistent PTY, and workspace
+inspectors remain.

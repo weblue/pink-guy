@@ -13,10 +13,12 @@ probe is:
 ```sh
 node ./phase0/scripts/probe-phase1-command-loop.mjs \
   /absolute/path/to/git-repository
+node ./phase0/scripts/probe-phase1-local-task-controls.mjs \
+  /absolute/path/to/git-repository
 ```
 
-It uses a temporary central API and deterministic fake execution endpoint. It
-makes no provider request and starts no task container.
+They use temporary central APIs and a deterministic fake execution endpoint.
+They make no provider request and start no task container.
 
 Tracked files must contain no real credentials, native user sessions, provider responses, or unredacted runtime logs. Disposable outputs belong outside the repository and are referenced by redacted manifests plus SHA-256 checksums.
 

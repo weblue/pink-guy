@@ -72,43 +72,63 @@ Use `--poll-ms` to change the local polling interval; the default is 1000 ms.
 
 For cmux, create or select a tmux-backed workspace and run the same command there. cmux/tmux and SSH are attach and process-management transports; they do not own durable Boss Man state.
 
-## Queue phase-scoped work
+## Create and schedule phase-scoped work
 
-For an existing `in_progress` task assigned through the capability boundary,
-queue a run through its project:
+In the cockpit, use **Create task** to choose a project, provide a title and
+optional acceptance criteria, and add a `ready` task. On its board card,
+choose `implementation`, `test`, or `review` and select **Schedule**.
+
+Scheduling is one authoritative transaction: it assigns a phase-scoped task
+agent, moves the task to `in_progress`, and queues its `start_task` command.
+It fails without changing the task when the project has no active
+orchestrator.
+
+The equivalent API operation for creating a task is:
 
 ```sh
 curl --fail-with-body \
   --request POST \
   --header 'Content-Type: application/json' \
-  --header 'Idempotency-Key: owner-command-001' \
-  --data '{"taskId":"TASK_ID","kind":"start_task","phase":"implementation"}' \
-  http://127.0.0.1:4310/api/projects/PROJECT_ID/commands
+  --header 'Idempotency-Key: owner-task-001' \
+  --data '{"title":"Implement the task inspector","acceptanceCriteria":["The owner can inspect a fixed revision."]}' \
+  http://127.0.0.1:4310/api/projects/PROJECT_ID/tasks
 ```
 
-The allowed phases are `implementation`, `test`, and `review`. The project
-orchestrator claims the command and calls the existing managed task-session
-operation. Success or failure is retained in `/api/commands`. If its lease is
-lost after claim, the command becomes `reconciliation_required`; it is not
-replayed automatically.
+Then atomically schedule it:
 
-The first slice intentionally does not auto-claim a ready task. Until the next
-Phase 1 task-control slice lands, use the deterministic protocol probe to test
-the full queue without starting a provider or task container:
+```sh
+curl --fail-with-body \
+  --request POST \
+  --header 'Content-Type: application/json' \
+  --header 'Idempotency-Key: owner-schedule-001' \
+  --data '{"phase":"implementation"}' \
+  http://127.0.0.1:4310/api/tasks/TASK_ID/schedule
+```
+
+The project orchestrator calls the existing managed task-session operation.
+Success or failure is retained in `/api/commands`. If its lease is lost after
+claim, the command becomes `reconciliation_required`; it is not replayed
+automatically.
+
+Use the deterministic probes to test both control layers without starting a
+provider or task container:
 
 ```sh
 node ./phase0/scripts/probe-phase1-command-loop.mjs \
+  /Users/ND139178/Documents/boss-man
+node ./phase0/scripts/probe-phase1-local-task-controls.mjs \
   /Users/ND139178/Documents/boss-man
 ```
 
 ## Current execution boundary
 
 The served Phase 1 shell shows projects, tasks, sessions, project-orchestrator
-leases, and recent commands. The existing automated probes exercise real task
-claiming, Pi RPC, containers, worktrees, host Git checkpoints, RTK evidence,
-and context export. The shell does not yet provide task create/edit/claim
-controls or a persistent PTY; those are the next local-product slices, not
-authentication prerequisites.
+leases, recent commands, and local create/schedule controls. The existing
+automated probes exercise real task claiming, Pi RPC, containers, worktrees,
+host Git checkpoints, RTK evidence, and context export. The shell does not yet
+provide task editing/dependencies, reconciliation actions, or a persistent
+PTY; those are the next local-product slices, not authentication
+prerequisites.
 
 To exercise the complete model-less C0-04 context path:
 
