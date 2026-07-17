@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 
 export class PiRpcProcess {
-  constructor({ command = "pi", args, cwd, env, onEvent = () => {} }) {
-    this.child = spawn(command, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+  constructor({ child = null, command = "pi", args, cwd, env, onEvent = () => {} }) {
+    this.child = child ?? spawn(command, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
     this.onEvent = onEvent;
     this.messages = [];
     this.waiters = [];
@@ -77,8 +77,8 @@ export class PiRpcProcess {
 }
 
 export class WorkspaceShell {
-  constructor({ cwd, env }) {
-    this.child = spawn("/bin/sh", [], { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+  constructor({ child = null, command = "/bin/sh", args = [], cwd, env }) {
+    this.child = child ?? spawn(command, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
     this.buffer = "";
     this.waiters = new Map();
     this.child.stdout.setEncoding("utf8");
@@ -115,7 +115,7 @@ export class WorkspaceShell {
           resolve(value);
         },
       });
-      this.child.stdin.write(`${command}\nprintf '${marker}%s\\n' $?\n`);
+      this.child.stdin.write(`(\n${command}\n)\n__boss_man_status=$?\nprintf '${marker}%s\\n' "$__boss_man_status"\n`);
     });
   }
 

@@ -119,7 +119,7 @@ The extension listens to `session_before_compact` and blocks automatic compactio
 
 ### RTK output layer
 
-Install a pinned, checksum-verified RTK binary and its Pi extension in the agent image. Disable telemetry by default. Configure RTK to retain complete raw command output while returning the filtered representation to Pi.
+Install a pinned, checksum-verified RTK binary and a small Boss Man Pi interception extension in the agent image. Disable telemetry by default. The extension executes each Bash command once, writes ephemeral raw output, runs the pinned RTK `log` filter, and returns filtered output to Pi. The daemon redacts and ingests both forms before deleting the ephemeral originals.
 
 For every intercepted command, record:
 
@@ -130,7 +130,7 @@ For every intercepted command, record:
 - RTK version/filter and reported savings;
 - whether filtering was bypassed or failed.
 
-Use `tee.mode = "always"` for managed runs because complete-session retention and auditability outweigh the disk savings of failure-only teeing. RTK 0.42.3 also requires explicit `max_files` and `max_file_size` fields during configuration deserialization, so the pinned image supplies those fields rather than relying on the abbreviated upstream example. The artifact quota system handles growth. The UI provides the filtered result by default and one-click raw access. `rtk proxy` is the explicit diagnostic escape hatch.
+Use complete raw capture for managed runs because complete-session retention and auditability outweigh the disk savings of failure-only capture. The standalone contract retains `tee.mode = "always"`, but the selected container path uses the Boss Man wrapper: RTK 0.42.3's Linux tee behavior did not reliably emit a raw file for direct commands in the pinned image. The wrapper preserves single execution and makes ingestion explicit. RTK 0.42.3 also requires `max_files` and `max_file_size` during configuration deserialization, and the pinned image includes `make` because RTK's `make` rewrite still depends on that executable. The artifact quota system handles growth. The UI provides filtered output by default and one-click redacted raw access. `rtk proxy` remains the diagnostic escape hatch.
 
 Do not route control-plane-owned Git mutations through RTK. Tests and build commands may be filtered for agent context, but merge/review policy consumes their exit status plus raw evidence, not the summary alone.
 
@@ -285,7 +285,7 @@ Commit requests include a proposed message and evidence, but the platform genera
 
 ### Container runtime and credentials
 
-Replace Sandcastle with a narrow runtime adapter over the Docker Engine API. Only the control plane talks to Docker. Containers never receive the Docker socket.
+Replace Sandcastle with a narrow runtime adapter over Docker. Only the control plane talks to Docker. Containers never receive the Docker socket. The Phase 0 adapter uses the pinned Docker CLI as its transport to the local Engine; the runtime interface keeps a later direct Engine API transport replaceable.
 
 Default container policy:
 
@@ -300,14 +300,20 @@ Default container policy:
 
 On macOS, Docker Desktop or OrbStack can supply the Docker API. The adapter boundary should keep that choice replaceable.
 
-Pi OAuth refresh and concurrent access to shared auth state are a risk. The first implementation should never mount `~/.pi` read-write into multiple containers. Prototype one of:
+Pi OAuth refresh and concurrent access to shared auth state are a risk. The first implementation never mounts `~/.pi` read-write into containers. C0-02 selects a bounded version of the first option:
 
-1. a private per-session Pi home initialized from a host credential snapshot and reconciled under a lock; or
-2. a host credential broker that supplies short-lived provider credentials without exposing the canonical store.
+1. materialize a per-run read-only credential source from an owner-managed profile;
+2. copy it inside the container into a private writable Pi configuration directory;
+3. checksum the canonical source before and after the run and record the result;
+4. allow only one active run for an OAuth snapshot profile;
+5. discard private refresh mutations rather than silently reconciling them; and
+6. delete both materialized run copies after verifying the canonical source checksum.
+
+This is sufficient for a bounded live smoke and synthetic isolation proof, not yet a durable refresh strategy. Production must either add explicit locked reconciliation with conflict handling or introduce a host credential broker before parallel OAuth-backed runs are allowed. Direct API and prepaid gateway keys can use higher concurrency only when the owner profile explicitly permits it.
 
 Direct API and prepaid gateway keys are simpler to scope than consumer OAuth files. Secrets must be redacted before event/artifact persistence.
 
-The repository owns a versioned configuration contract: typed schema, documented environment variables, and redacted examples. Agents may add or validate this contract but never invent or persist real production values. Secret injection is a deployment concern owned by the human; run-scoped credentials are materialized only for the process that needs them and are excluded from context export and memory promotion.
+The repository owns a versioned configuration contract in `phase0/schemas/provider-profile.schema.json`, with a redacted example in `phase0/runtime/provider-profile.example.json`. Agents may add or validate this contract but never invent or persist real production values. Secret injection is a deployment concern owned by the human; run-scoped credentials are materialized only for the process that needs them and are excluded from context export, events, command artifacts, and memory promotion.
 
 Deployment code is an artifact, not standing deployment authority. Agents may build manifests and start disposable test instances, but must not alter long-lived launch services, SWAG, DNS, router rules, production secrets, or public exposure without explicit authorization for the named operation.
 

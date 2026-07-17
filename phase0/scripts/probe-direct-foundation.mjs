@@ -92,10 +92,13 @@ assert(started.status === 201, `session start failed: ${JSON.stringify(started.v
 const { session, run } = started.value;
 assert(session.state === "idle" && run.state === "running", "durable session/run records are invalid");
 const managed = authority.sessions.get(session.id);
-const registeredTools = JSON.parse(await readFile(managed.env.BOSS_MAN_EXTENSION_EVIDENCE_PATH, "utf8"));
-assert(registeredTools.tools.length === 8 && registeredTools.tools.every((name) => name.startsWith("boss_")), "Pi did not register the Boss Man capability tools");
+const registeredTools = JSON.parse(await readFile(managed.extensionEvidencePath, "utf8"));
+assert(registeredTools.tools.length === 12 && registeredTools.tools.every((name) => name.startsWith("boss_")), "Pi did not register the Boss Man capability tools");
+const container = await managed.runtime.inspect();
+assert(container.running && container.id === run.container_id, "Pi run is not owned by its recorded container");
+assert(!container.mounts.some((item) => item.destination === "/var/run/docker.sock"), "task container received the Docker socket");
 
-const shellProof = join(fixture, ".boss-man-shell-proof");
+const shellProof = join(managed.workspace.workspace_path, ".boss-man-shell-proof");
 const shell = await request(`/api/sessions/${session.id}/shell`, {
   method: "POST",
   body: { command: "printf 'persistent-shell-ok' > .boss-man-shell-proof && pwd" },
@@ -138,6 +141,8 @@ const result = {
   pi_capability_tools: registeredTools.tools,
   durable_session_and_run: true,
   direct_pi_rpc: true,
+  container_owned_pi_rpc: true,
+  container_image_id: run.image_id,
   structured_event_count: prompted.value.events.length,
   persistent_workspace_shell: true,
   custody_manifest_count: artifacts.length,

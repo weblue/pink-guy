@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.0.0",
+  "id": "chatgpt-primary",
+  "provider": "openai-codex",
+  "auth_type": "oauth_snapshot",
+  "billing_mode": "subscription",
+  "source": {
+    "kind": "host_file",
+    "path": "/operator-owned/path/outside-this-repository/pi-auth.json"
+  },
+  "max_concurrent_runs": 1,
+  "allow_refresh_reconciliation": false
+}
+

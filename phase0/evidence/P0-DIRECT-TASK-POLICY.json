@@ -85,19 +85,19 @@
   "artifacts": [
     {
       "path": "phase0/direct/store.mjs",
-      "sha256": "04963e231bbff04d91ffae54bf758e97f607717ce0a1f58b47ac5bef541e6dcb",
+      "sha256": "e7f367ba4cc59fb5964a7f5c36e576dd8c7781179bd7012be6386dc9bcc3936f",
       "media_type": "text/javascript",
       "tracked": true
     },
     {
       "path": "phase0/direct/control-plane.mjs",
-      "sha256": "9dbc93202672149d9234944df5c27791c03b90af22db9141faae3e5c53c38e7e",
+      "sha256": "3896ba55bbf929cc7ba80a810d96432f57c97b05c7e7007ae8e55b2241caaf74",
       "media_type": "text/javascript",
       "tracked": true
     },
     {
       "path": "phase0/pi/boss-man-extension.ts",
-      "sha256": "e53d4bbb3a53dce0f33fc2bf8295a56adb8d77576506ac8358fa78b1ee98a5fe",
+      "sha256": "4372ea17499c0dfe8b86ed4da725f5f876d1620c71341c8f21d7c04ca61019df",
       "media_type": "text/typescript",
       "tracked": true
     },
@@ -115,9 +115,9 @@
     "hard_gates": ["G-01", "G-08"]
   },
   "limitations": [
-    "This closes C0-01 and the selected candidate's G-08 transaction boundary. Container, Git, credential, context, recovery, and authentication integration remain separate closure tasks.",
+    "This closes C0-01 and the selected candidate's G-08 transaction boundary. Container, Git, and synthetic credential integration now have separate C0-02 evidence; context, recovery, and authentication remain separate closure tasks.",
     "Capability issuance is currently an internal daemon method. C0-05 must bind owner/orchestrator issuance and revocation to authenticated application sessions.",
-    "The capability token is delivered to the host Pi process environment in this slice. C0-02 moves it into the pinned per-run container and verifies mount/process isolation.",
+    "The same capability token is now delivered only to the pinned per-run container process; owner-authenticated issuance and broader revocation policy remain C0-05 work.",
     "Node's built-in SQLite API remains experimental in the development runtime; the production binding and migration packaging decision remains open within the approved SQLite architecture."
   ]
 }

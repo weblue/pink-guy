@@ -51,6 +51,33 @@ async function act(toolCallId: string, action: string, payload: JsonObject, sign
   });
 }
 
+async function gitRead(operation: "status" | "diff", signal?: AbortSignal): Promise<JsonObject> {
+  const configuration = configured();
+  return request(`/api/tasks/${encodeURIComponent(configuration.taskId)}/git/${operation}`, {
+    signal,
+    headers: { authorization: `Bearer ${configuration.capabilityToken}` },
+  });
+}
+
+async function gitMutate(
+  toolCallId: string,
+  operation: "checkpoint" | "commit",
+  payload: JsonObject,
+  signal?: AbortSignal,
+): Promise<JsonObject> {
+  const configuration = configured();
+  return request(`/api/tasks/${encodeURIComponent(configuration.taskId)}/git/${operation}`, {
+    method: "POST",
+    signal,
+    headers: {
+      authorization: `Bearer ${configuration.capabilityToken}`,
+      "content-type": "application/json",
+      "idempotency-key": `pi-tool:${toolCallId}`,
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 function result(value: JsonObject) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
@@ -153,6 +180,56 @@ export default function bossManExtension(pi: ExtensionAPI): void {
         disposition: params.disposition,
         findings: params.findings,
       }, signal));
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_git_status",
+    label: "Inspect Boss Man workspace status",
+    description: "Read host-authoritative Git status for this run without granting writable Git metadata to the container.",
+    promptSnippet: "Inspect the assigned workspace through the host Git service",
+    parameters: Type.Object({}),
+    async execute(_toolCallId, _params, signal) {
+      return result(await gitRead("status", signal));
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_git_diff",
+    label: "Inspect Boss Man workspace diff",
+    description: "Read the complete host-generated workspace diff for the current revision.",
+    promptSnippet: "Inspect the assigned workspace diff through the host Git service",
+    parameters: Type.Object({}),
+    async execute(_toolCallId, _params, signal) {
+      return result(await gitRead("diff", signal));
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_git_checkpoint_request",
+    label: "Request Boss Man Git checkpoint",
+    description: "Ask the host Git service to stage assigned-workspace changes and create a provenance-linked checkpoint.",
+    promptSnippet: "Request a host-owned checkpoint after a coherent implementation increment",
+    parameters: Type.Object({
+      message: Type.String({ minLength: 1 }),
+      evidence: Type.Array(Type.String()),
+    }),
+    async execute(toolCallId, params, signal) {
+      return result(await gitMutate(toolCallId, "checkpoint", { message: params.message, evidence: params.evidence }, signal));
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_git_commit_request",
+    label: "Request Boss Man Git commit",
+    description: "Ask the host Git service to create a provenance-linked commit; the agent never receives commit or merge authority.",
+    promptSnippet: "Request a host-owned commit after validation",
+    parameters: Type.Object({
+      message: Type.String({ minLength: 1 }),
+      evidence: Type.Array(Type.String()),
+    }),
+    async execute(toolCallId, params, signal) {
+      return result(await gitMutate(toolCallId, "commit", { message: params.message, evidence: params.evidence }, signal));
     },
   });
 

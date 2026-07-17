@@ -19,10 +19,11 @@ This checkpoint does not claim that every direct-Pi hard gate is closed. The own
 | `P0-BASELINE` | Pass | Deterministic fixture, checksums, artifact policy, sanitized command runner | Second clean ARM64 reproduction outstanding |
 | Pi lifecycle/custody/resume/child probes | Pass | Native JSONL custody, exact resume/import, blocking compaction export, child provenance | Harness-level evidence, not candidate integration |
 | `P0-PI-ACP-0031-CONTRACT` | Pass | Upstream `pi-acp` reaches required Pi seams | Does not repair AoE authority or Git custody |
-| `P0-DIRECT-FOUNDATION` | Pass | One daemon owns its SQLite task/session/run state, Pi RPC, shell, events, custody ingestion, orphan reconciliation | Host subprocess and component slice; no production auth/container reconciliation |
+| `P0-DIRECT-FOUNDATION` | Pass | One daemon owns SQLite task/session/run state and a recorded pinned container running Pi RPC plus the workspace shell; it ingests events/custody and marks ambiguous restart state orphaned | Deterministic provider only; active side-effect reconciliation and production auth remain open |
 | `P0-TASK-POLICY` | Pass | Assignment scope, independent review, protected human decision, completion gate | Retained as the in-memory reference baseline for the integrated proof below |
 | `P0-DIRECT-TASK-POLICY` | Pass | Hashed bearer capabilities and the full worker/reviewer/orchestrator/owner policy pass through the direct HTTP/SQLite transaction and ordered audit stream | Owner-authenticated issuance and container delivery remain C0-05/C0-02 work |
-| `P0-RUNTIME-GIT-RTK` | Pass | Pinned ARM64 task image, restricted mounts, host Git checkpoint, credential isolation, RTK raw/redacted evidence | Shared mechanic not yet invoked by either candidate daemon |
+| `P0-RUNTIME-GIT-RTK` | Pass | Pinned ARM64 task image, restricted mounts, host Git checkpoint, credential isolation, RTK raw/redacted evidence | Foundation-neutral reference contract retained for comparison |
+| `P0-DIRECT-RUNTIME-GIT-RTK` | Pass | The selected daemon owns the container record, credential materialization/lock, host Git capabilities, provenance checkpoint, and RTK artifact receipts | Synthetic credential/provider proof; owner-operated live Pi auth smoke remains |
 | `P0-REMOTE-EDGE` | Pass | Host/Origin/forwarding, outer+inner auth, cookies, CSRF, WebSocket reconnect, streaming, uploads, revocation | Disposable synthetic proxy/auth; no SWAG deployment |
 | `P0-MEMORY-FTS` | Pass | Canonical SQL plus model-less scoped FTS, receipts, deletion/rebuild, adversarial cases | Standalone benchmark not wired into candidate context assembly |
 | `P0-AOE-FOUNDATION-STOP` | Fail/stop | Exact pinned source builds, but conflicts with G-01/G-05 and requires a broad core fork | Source-level stop evidence; no fork patch existed to rebase |
@@ -33,12 +34,12 @@ This checkpoint does not claim that every direct-Pi hard gate is closed. The own
 
 | Gate | Direct Pi | AoE | Decision consequence |
 |---|---|---|---|
-| G-01 one authority | Partial | Fail/stop | Direct owns its slice; task container/Git operations still need to enter the same transaction boundary. AoE CLI and daemon both mutate durable session storage. |
+| G-01 one authority | Pass | Fail/stop | The direct daemon now creates and records the task container, Pi RPC, shell, workspace, capability, credential lease, host Git operations, and artifact receipts. AoE CLI and daemon both mutate durable session storage. |
 | G-02 native custody | Pass | Bridge-only | Direct consumes native Pi custody. ACP translation passes independently, but no AoE product layer was built. |
 | G-03 compaction barrier | Pass | Bridge-only | Upstream Pi and `pi-acp` both reach the blocking hook without private forks. |
 | G-04 upstream bridge | Pass | Pass at adapter seam | No private Pi or `pi-acp` fork is required. |
-| G-05 Git custody | Component | Fail/stop | Shared host-owned checkpoint passes. AoE's sandbox path mounts main Git metadata read-write. |
-| G-06 credentials | Component | Not run | Shared concurrent run-scoped isolation passes; direct-daemon delivery remains to be wired. |
+| G-05 Git custody | Pass | Fail/stop | The direct daemon exposes status/diff/checkpoint/commit-request capabilities; the container can edit files but cannot use the shared Git metadata. AoE's sandbox path mounts main Git metadata read-write. |
+| G-06 credentials | Pass (synthetic) | Not run | The direct daemon mounts a per-run synthetic source read-only, copies it to private writable Pi state, enforces a one-run OAuth lease, verifies the canonical checksum, deletes both run copies, and persists no canaries. The owner live-auth smoke is an additional operational checkpoint. |
 | G-07 restart recovery | Partial | Not run | Direct marks a deliberately interrupted run orphaned; active side-effect/container reconciliation remains. |
 | G-08 task/policy | Pass | Not run | Direct HTTP/SQLite capability transactions enforce assignment, concurrency, fixed-revision independent review, owner decisions, validation, completion, and merge requests. |
 | G-09 model-less portability | Component | Bridge-only | Native import/export and independent FTS rebuild both pass; one governed context path still must combine them. |
@@ -58,7 +59,7 @@ The directional comparison is nevertheless decisive:
 The human owner selected the thin direct-Pi control plane as the Boss Man v2 foundation on 2026-07-16, with AoE retained as a UI/runtime reference rather than a dependency. The decision retains these required integration gaps before production use:
 
 1. transact task policy with the authoritative SQLite store;
-2. make task-container, credential, and host-Git requests daemon capabilities;
+2. complete the owner-operated live Pi authentication smoke for the integrated task-container, credential, and host-Git capability path;
 3. reconcile active containers and side-effect receipts after restart;
 4. combine native custody and governed FTS through one context receipt path;
 5. run the real owner authentication implementation through the remote-edge suite; and
@@ -66,4 +67,4 @@ The human owner selected the thin direct-Pi control plane as the Boss Man v2 fou
 
 ## Compose decision
 
-Do not add `compose.phase0.yml`. There is no fixed multi-service boundary: SQLite is embedded, Pi and workspace shells are supervised subprocesses, task containers are per-run daemon resources, and the proxy is a disposable contract test. Add Compose only if a later fixed service such as a credential broker or separately deployed control plane is intentionally selected.
+Do not add `compose.phase0.yml`. There is no fixed multi-service boundary: SQLite is embedded, Pi and workspace shells run inside per-run daemon-created task containers, and the proxy is a disposable contract test. Add Compose only if a later fixed service such as a credential broker or separately deployed control plane is intentionally selected.

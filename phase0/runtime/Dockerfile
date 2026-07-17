@@ -5,7 +5,7 @@ ARG RTK_VERSION=0.42.3
 ARG RTK_SHA256=2b7fa09d06f8dbf334c55482fad2e7ce4a1f8564bc9ed1f65d9f5992db8e5527
 
 RUN apt-get update \
-    && apt-get install --yes --no-install-recommends ca-certificates curl git \
+    && apt-get install --yes --no-install-recommends ca-certificates curl git make \
     && rm -rf /var/lib/apt/lists/*
 
 RUN npm install --global "@earendil-works/pi-coding-agent@${PI_VERSION}"

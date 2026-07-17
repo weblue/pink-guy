@@ -5,10 +5,19 @@ import { DatabaseSync } from "node:sqlite";
 
 const TASK_STATES = new Set(["backlog", "ready", "in_progress", "review", "blocked", "done"]);
 const CAPABILITY_ACTIONS = {
-  worker: new Set(["read", "claim", "release", "progress", "block", "create_child", "request_review", "propose_complete"]),
-  reviewer: new Set(["read", "submit_review"]),
-  orchestrator: new Set(["read", "set_revision", "record_validation", "add_decision_gate", "complete", "reopen"]),
-  owner: new Set(["read", "add_decision_gate", "resolve_decision", "complete", "reopen"]),
+  worker: new Set([
+    "read", "claim", "release", "progress", "block", "create_child", "request_review", "propose_complete",
+    "git_status", "git_diff", "git_checkpoint_request", "git_commit_request",
+  ]),
+  reviewer: new Set(["read", "submit_review", "git_status", "git_diff"]),
+  orchestrator: new Set([
+    "read", "set_revision", "record_validation", "add_decision_gate", "complete", "reopen",
+    "git_status", "git_diff", "git_checkpoint_request", "git_commit_request",
+  ]),
+  owner: new Set([
+    "read", "add_decision_gate", "resolve_decision", "complete", "reopen",
+    "git_status", "git_diff", "git_checkpoint_request", "git_commit_request",
+  ]),
 };
 
 function parseJson(value) {
@@ -96,6 +105,44 @@ export class Phase0Store {
         created_at TEXT NOT NULL,
         UNIQUE(session_id, path, sha256)
       );
+      CREATE TABLE IF NOT EXISTS workspaces (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL REFERENCES tasks(id),
+        run_id TEXT NOT NULL UNIQUE,
+        repository_path TEXT NOT NULL,
+        workspace_path TEXT NOT NULL UNIQUE,
+        branch TEXT NOT NULL UNIQUE,
+        state TEXT NOT NULL,
+        base_revision TEXT NOT NULL,
+        git_marker_sha256 TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS git_operations (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+        task_id TEXT NOT NULL REFERENCES tasks(id),
+        run_id TEXT NOT NULL,
+        capability_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        request_sha256 TEXT NOT NULL,
+        prior_revision TEXT NOT NULL,
+        new_revision TEXT NOT NULL,
+        status TEXT NOT NULL,
+        metadata_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS credential_runs (
+        run_id TEXT PRIMARY KEY,
+        profile_id TEXT NOT NULL,
+        auth_type TEXT NOT NULL,
+        billing_mode TEXT NOT NULL,
+        delivery_mode TEXT NOT NULL,
+        canonical_unchanged INTEGER,
+        created_at TEXT NOT NULL,
+        verified_at TEXT
+      );
       CREATE TABLE IF NOT EXISTS capabilities (
         id TEXT PRIMARY KEY,
         token_sha256 TEXT NOT NULL UNIQUE,
@@ -176,6 +223,10 @@ export class Phase0Store {
     this.ensureColumn("task_events", "actor_role", "TEXT");
     this.ensureColumn("task_events", "run_id", "TEXT");
     this.ensureColumn("task_events", "task_version", "INTEGER");
+    this.ensureColumn("runs", "container_id", "TEXT");
+    this.ensureColumn("runs", "image_id", "TEXT");
+    this.ensureColumn("runs", "workspace_id", "TEXT");
+    this.ensureColumn("runs", "credential_profile", "TEXT");
   }
 
   ensureColumn(table, column, definition) {
@@ -484,10 +535,12 @@ export class Phase0Store {
     return this.database.prepare("SELECT * FROM sessions WHERE id=?").get(id) ?? null;
   }
 
-  createRun({ id = randomUUID(), sessionId, processId, shellProcessId }) {
+  createRun({ id = randomUUID(), sessionId, processId, shellProcessId, containerId = null, imageId = null, workspaceId = null, credentialProfile = null }) {
     this.database
-      .prepare("INSERT INTO runs(id,session_id,state,process_id,shell_process_id,started_at) VALUES(?,?,?,?,?,?)")
-      .run(id, sessionId, "running", processId, shellProcessId, this.clock());
+      .prepare(`INSERT INTO runs(
+        id,session_id,state,process_id,shell_process_id,started_at,container_id,image_id,workspace_id,credential_profile
+      ) VALUES(?,?,?,?,?,?,?,?,?,?)`)
+      .run(id, sessionId, "running", processId, shellProcessId, this.clock(), containerId, imageId, workspaceId, credentialProfile);
     return this.getRun(id);
   }
 
@@ -537,5 +590,58 @@ export class Phase0Store {
 
   artifacts(sessionId) {
     return this.database.prepare("SELECT * FROM artifacts WHERE session_id=? ORDER BY created_at,path").all(sessionId);
+  }
+
+  recordWorkspace({ id, taskId, runId, repositoryPath, workspacePath, branch, baseRevision, gitMarkerSha256 }) {
+    const now = this.clock();
+    this.database.prepare(`INSERT INTO workspaces(
+      id,task_id,run_id,repository_path,workspace_path,branch,state,base_revision,git_marker_sha256,created_at,updated_at
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+      id, taskId, runId, repositoryPath, workspacePath, branch, "active", baseRevision, gitMarkerSha256, now, now,
+    );
+    return this.getWorkspace(id);
+  }
+
+  getWorkspace(id) {
+    return this.database.prepare("SELECT * FROM workspaces WHERE id=?").get(id) ?? null;
+  }
+
+  workspaceForRun(runId) {
+    return this.database.prepare("SELECT * FROM workspaces WHERE run_id=?").get(runId) ?? null;
+  }
+
+  findGitOperation(idempotencyKey) {
+    const row = this.database.prepare("SELECT * FROM git_operations WHERE idempotency_key=?").get(idempotencyKey);
+    return row ? { ...row, metadata: parseJson(row.metadata_json) } : null;
+  }
+
+  recordGitOperation({
+    id, workspaceId, taskId, runId, capabilityId, kind, idempotencyKey, requestSha256,
+    priorRevision, newRevision, metadata = {},
+  }) {
+    this.database.prepare(`INSERT INTO git_operations(
+      id,workspace_id,task_id,run_id,capability_id,kind,idempotency_key,request_sha256,
+      prior_revision,new_revision,status,metadata_json,created_at
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      id, workspaceId, taskId, runId, capabilityId, kind, idempotencyKey, requestSha256,
+      priorRevision, newRevision, "committed", JSON.stringify(metadata), this.clock(),
+    );
+    return this.findGitOperation(idempotencyKey);
+  }
+
+  recordCredentialRun({ runId, profileId, authType, billingMode }) {
+    this.database.prepare(`INSERT INTO credential_runs(
+      run_id,profile_id,auth_type,billing_mode,delivery_mode,created_at
+    ) VALUES(?,?,?,?,?,?)`).run(runId, profileId, authType, billingMode, "readonly_source_to_private_run_copy", this.clock());
+  }
+
+  verifyCredentialRun(runId, canonicalUnchanged) {
+    this.database.prepare("UPDATE credential_runs SET canonical_unchanged=?,verified_at=? WHERE run_id=?")
+      .run(canonicalUnchanged ? 1 : 0, this.clock(), runId);
+  }
+
+  credentialRun(runId) {
+    const row = this.database.prepare("SELECT * FROM credential_runs WHERE run_id=?").get(runId);
+    return row ? { ...row, canonical_unchanged: row.canonical_unchanged === null ? null : Boolean(row.canonical_unchanged) } : null;
   }
 }

@@ -115,6 +115,19 @@ node ./phase0/scripts/probe-runtime-git-rtk.mjs \
 
 The probe verifies the container policy, denies access to shared Git metadata, creates a host-owned checkpoint with provenance, isolates two concurrent synthetic credentials, and preserves redacted RTK raw evidence with a receipt.
 
+## Run the direct daemon runtime/Git/credential/RTK slice
+
+After building the pinned image, run the selected candidate's C0-02 integration probe:
+
+```sh
+node ./phase0/scripts/probe-direct-runtime-git-rtk.mjs \
+  /absolute/path/to/disposable/task-repo
+```
+
+This starts Pi and the workspace shell in a daemon-created task container, proves that the Docker socket and shared Git metadata are unavailable, copies a synthetic human-owned credential into a private writable run directory from a read-only source, enforces the OAuth profile's one-run limit, removes both run copies after checksum verification, creates an idempotent host-owned checkpoint, and ingests filtered plus redacted raw RTK artifacts and receipts. It never reads a real provider credential or makes a provider request.
+
+`runtime/provider-profile.example.json` and `schemas/provider-profile.schema.json` define the redacted owner-managed provider profile contract. Real provider login is an explicit owner operation outside the repository; the live-auth smoke is intentionally separate from this synthetic proof.
+
 ## Run the remote-edge contract
 
 ```sh

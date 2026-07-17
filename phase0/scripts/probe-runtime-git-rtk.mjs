@@ -65,7 +65,8 @@ const rtkHome = join(root, "rtk-home");
 const rtkConfigDirectory = join(rtkHome, "Library", "Application Support", "rtk");
 await Promise.all([artifacts, dirname(canonicalCredential), rtkConfigDirectory].map((path) => mkdir(path, { recursive: true, mode: 0o700 })));
 
-const gitWorktree = await run("git", ["-C", fixture, "worktree", "add", "-b", "phase0/runtime-git-rtk", worktree, "HEAD"]);
+const fixtureBranch = `phase0/runtime-git-rtk-${process.pid}-${Date.now()}`;
+const gitWorktree = await run("git", ["-C", fixture, "worktree", "add", "-b", fixtureBranch, worktree, "HEAD"]);
 assert(gitWorktree.code === 0, `failed to create worktree: ${gitWorktree.stderr}`);
 for (const path of await listFiles(worktree)) await chmod(path, 0o666);
 for (const path of [worktree, join(worktree, "src"), join(worktree, "test"), artifacts]) await chmod(path, 0o777);

@@ -12,12 +12,12 @@
   "host": {
     "os": "macOS 15.7.7",
     "architecture": "arm64",
-    "container_runtime": null
+    "container_runtime": "Docker Desktop 27.3.1"
   },
   "sanitized_command": "node phase0/scripts/probe-direct-foundation.mjs <generated-fixture>",
   "exit_code": 0,
-  "started_at": "2026-07-17T00:36:53Z",
-  "ended_at": "2026-07-17T00:36:55Z",
+  "started_at": "2026-07-17T02:02:16Z",
+  "ended_at": "2026-07-17T02:02:19Z",
   "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
   "assertions": [
     {
@@ -27,7 +27,9 @@
         "authority": "direct_pi_daemon",
         "durable_store": "SQLite WAL",
         "session_process_owned_by_daemon": true,
-        "workspace_shell_owned_by_daemon": true
+        "workspace_shell_owned_by_daemon": true,
+        "container_owned_by_daemon": true,
+        "container_image_id": "sha256:7669de2c3791c662a1f59094ad31ff018178de20e843d3485c5796d545688074"
       }
     },
     {
@@ -48,7 +50,9 @@
         "provider_requests": 0,
         "structured_event_count": 18,
         "required_events_present": true,
-        "workspace_write_passed": true
+        "workspace_write_passed": true,
+        "container_pi_rpc": true,
+        "docker_socket_absent": true
       }
     },
     {
@@ -63,7 +67,11 @@
           "boss_task_get",
           "boss_task_progress",
           "boss_task_propose_complete",
-          "boss_task_request_review"
+          "boss_task_request_review",
+          "boss_git_status",
+          "boss_git_diff",
+          "boss_git_checkpoint_request",
+          "boss_git_commit_request"
         ],
         "identity_source": "server-side hashed bearer capability",
         "private_pi_fork": false
@@ -73,8 +81,8 @@
       "name": "context custody manifests and native Pi session remain durable",
       "passed": true,
       "observed": {
-        "custody_manifest_count": 5,
-        "native_session_sha256": "f69ca3c1367c46621b0c6e65fbe7088d1f4f0f9b19367ea76807194d91756b7b",
+        "custody_manifest_count": 7,
+        "native_session_sha256": "7d6d78defbf91591179470b69a1d355d653d8df690e738aff9fe96a31890526b",
         "native_session_changed_during_restart": false
       }
     },
@@ -91,43 +99,55 @@
   "artifacts": [
     {
       "path": "phase0/direct/store.mjs",
-      "sha256": "04963e231bbff04d91ffae54bf758e97f607717ce0a1f58b47ac5bef541e6dcb",
+      "sha256": "e7f367ba4cc59fb5964a7f5c36e576dd8c7781179bd7012be6386dc9bcc3936f",
       "media_type": "text/javascript",
       "tracked": true
     },
     {
       "path": "phase0/direct/rpc.mjs",
-      "sha256": "5030bbbbf0b1d36e1f732900302cc0048b9c061fa1d0d5e4217ae025940d7c23",
+      "sha256": "b1606ee9c4546685fa6f61c1d096a5fccb088629172fd00e7430c147d984ed60",
       "media_type": "text/javascript",
       "tracked": true
     },
     {
       "path": "phase0/direct/control-plane.mjs",
-      "sha256": "9dbc93202672149d9234944df5c27791c03b90af22db9141faae3e5c53c38e7e",
+      "sha256": "3896ba55bbf929cc7ba80a810d96432f57c97b05c7e7007ae8e55b2241caaf74",
       "media_type": "text/javascript",
       "tracked": true
     },
     {
       "path": "phase0/scripts/probe-direct-foundation.mjs",
-      "sha256": "74e6193a7148089300ad26b0f097cb86808bc3ff69576c8e7bf954b7e6a8a843",
+      "sha256": "689ec7d02ebab4694166b1b61b015e8e7fe3c26e5b7c664344aefbf4eb38e6ac",
       "media_type": "text/javascript",
       "tracked": true
     },
     {
       "path": "phase0/pi/boss-man-extension.ts",
-      "sha256": "e53d4bbb3a53dce0f33fc2bf8295a56adb8d77576506ac8358fa78b1ee98a5fe",
+      "sha256": "4372ea17499c0dfe8b86ed4da725f5f876d1620c71341c8f21d7c04ca61019df",
+      "media_type": "text/typescript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/direct/runtime.mjs",
+      "sha256": "b5786c942b59783156ce2b3911d452a669af5b1226a01a1ec86689aa285686fa",
+      "media_type": "text/javascript",
+      "tracked": true
+    },
+    {
+      "path": "phase0/pi/rtk-managed-extension.ts",
+      "sha256": "e750a26d0395bed322f9877290119e5e291eb5dbab6aa4440b7ce9edd4d5cfd6",
       "media_type": "text/typescript",
       "tracked": true
     },
     {
       "path": "untracked:phase0/direct/native.pi-session.jsonl",
-      "sha256": "f69ca3c1367c46621b0c6e65fbe7088d1f4f0f9b19367ea76807194d91756b7b",
+      "sha256": "7d6d78defbf91591179470b69a1d355d653d8df690e738aff9fe96a31890526b",
       "media_type": "application/x-ndjson",
       "tracked": false
     },
     {
       "path": "untracked:phase0/direct/boss-man.sqlite",
-      "sha256": "a9a9104dbdefc98afd701c1f1a67ba598155361d0133d23bbef06221f0d69a91",
+      "sha256": "2dbb5d31ff6a6ab4a457a5457a532e70beb7832c8b5c5ad5c5d122d16c95b3db",
       "media_type": "application/vnd.sqlite3",
       "tracked": false
     }
@@ -140,7 +160,7 @@
   },
   "limitations": [
     "This is a deliberately minimal Phase 0 route and API, not the production cockpit or owner authentication system.",
-    "Pi and the workspace shell run as host subprocesses in this candidate slice; container, credential, RTK, and restricted Git evidence belongs to P0-04.",
+    "The deterministic in-process provider runs inside the task container and makes no network request; an owner-operated real-provider smoke is separate evidence.",
     "Restart reconciliation conservatively marks an ambiguous run orphaned. Reattaching a demonstrably live process is not implemented in this prototype.",
     "The deterministic in-process provider exercises real Pi RPC without network or credentials; remote provider transport is outside this result.",
     "The prototype uses Node's built-in node:sqlite API, which is still marked experimental in Node 25.9.0. A selected production foundation must choose and pin its supported SQLite binding."

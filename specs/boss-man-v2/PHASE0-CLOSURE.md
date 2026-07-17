@@ -66,7 +66,7 @@ Exit: every still-applicable direct-Pi hard gate has candidate-level evidence, t
 | Work package | Status | Evidence |
 |---|---|---|
 | C0-01 task and policy transaction | Completed | `P0-DIRECT-TASK-POLICY`: real HTTP/SQLite capability path, 13 ordered committed events, competing-writer conflict, fixed-revision review, owner decision, and gated merge request |
-| C0-02 runtime/Git/credentials/RTK | Next | Shared P0-04 contract passes; direct-daemon integration pending |
+| C0-02 runtime/Git/credentials/RTK | Integrated; owner smoke pending | `P0-DIRECT-RUNTIME-GIT-RTK`: daemon-created pinned container, read-only synthetic auth source/private run copy with post-run deletion, one-run OAuth lock, host Git status/diff/idempotent checkpoint, and redacted RTK evidence all pass; a bounded owner-operated live Pi login smoke remains before closure |
 | C0-03 restart reconciliation | Pending | Depends on C0-02 side-effect boundaries |
 | C0-04 context and retrieval | Pending | Harness custody and standalone FTS contracts pass; unified manifest pending |
 | C0-05 owner authentication | Pending | Disposable edge contract passes; real application auth pending |

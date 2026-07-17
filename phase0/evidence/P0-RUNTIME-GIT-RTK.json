@@ -8,7 +8,7 @@
     "pi": "0.80.9",
     "rtk": "0.42.3",
     "node_base": "node:24-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176fde6fe7d08ab13b7f50573",
-    "task_image": "sha256:d1cf101e9de2a98e9a0094e0657e6b8706b27ff2161069275167b372e0eb967e"
+    "task_image": "sha256:7669de2c3791c662a1f59094ad31ff018178de20e843d3485c5796d545688074"
   },
   "host": {
     "os": "macOS 15.7.7",
@@ -17,15 +17,15 @@
   },
   "sanitized_command": "node phase0/scripts/probe-runtime-git-rtk.mjs /absolute/generated-fixture",
   "exit_code": 0,
-  "started_at": "2026-07-16T23:42:40Z",
-  "ended_at": "2026-07-16T23:43:06Z",
+  "started_at": "2026-07-17T01:56:27Z",
+  "ended_at": "2026-07-17T01:56:28Z",
   "fixture_commit": "cef5e049ab9841e8389c6c4f5f0fde5d2385c7b4",
   "assertions": [
     {
       "name": "pinned ARM64 Linux task image contains the supported Pi and RTK versions",
       "passed": true,
       "observed": {
-        "image_id": "sha256:d1cf101e9de2a98e9a0094e0657e6b8706b27ff2161069275167b372e0eb967e",
+        "image_id": "sha256:7669de2c3791c662a1f59094ad31ff018178de20e843d3485c5796d545688074",
         "architecture": "arm64",
         "pi": "0.80.9",
         "rtk": "0.42.3"
@@ -49,7 +49,7 @@
       "passed": true,
       "observed": {
         "container_git_add_denied": true,
-        "host_checkpoint_commit": "0a0854f12cd1f0fe2a92d5fc843783677a973313",
+        "host_checkpoint_commit": "eb5bc95457d849f0755c29b3d04b0dcf0842f9ab",
         "provenance_trailers_present": true
       }
     },
@@ -70,7 +70,7 @@
         "raw_artifacts": 1,
         "redaction_replacements": 2,
         "redacted_raw_sha256": "ace6f3405dd1fef1da2825e86c2bcbce059793e1f23204b226cb37d9211739ce",
-        "filtered_sha256": "bc023b88765e79156ee84406d160562de8d517db3ebfd04865a414d24266e260",
+        "filtered_sha256": "e985a2756ba5b7943cc55106ce471906be20c1fd02687150e5b5fec2ba3f25f5",
         "redaction_receipt_sha256": "468092f3826f4ff75df2bebf4d7fefa152ce89033b803eecc8987278fe5da602"
       }
     },
@@ -88,7 +88,7 @@
   "artifacts": [
     {
       "path": "phase0/runtime/Dockerfile",
-      "sha256": "35eb1bab33538155fbe5ee13c8dc00b52d38352f291fde0c9ecaa93f66dca3af",
+      "sha256": "74d1adaced02539f22aeccc8d62162a495c27219c13e5280a789ced0168d957a",
       "media_type": "text/x-dockerfile",
       "tracked": true
     },
@@ -106,7 +106,7 @@
     },
     {
       "path": "phase0/scripts/probe-runtime-git-rtk.mjs",
-      "sha256": "19726df362d6153cdeb6fdb91434a09e3d5372c366c631872fff580b0bc21c8a",
+      "sha256": "be28891c8c23a2f86eaa199e207f36575eeb654342145728f29fb5361673771a",
       "media_type": "text/javascript",
       "tracked": true
     }
@@ -123,7 +123,7 @@
     "hard_gates": ["G-05", "G-06"]
   },
   "limitations": [
-    "The probe proves shared runtime mechanics, not candidate integration; the selected foundation must invoke the same host-owned Git and credential boundaries transactionally.",
+    "This foundation-neutral probe remains the reference contract; candidate integration is recorded separately by P0-DIRECT-RUNTIME-GIT-RTK.",
     "Network access is disabled in this fixture, so live provider credential refresh is represented by two concurrent synthetic per-run credential copies.",
     "RTK 0.42.3 rejects the upstream README's abbreviated tee configuration because max_files and max_file_size are required at deserialization time; the checked-in configuration supplies both fields.",
     "The task image is intentionally ARM64-specific for the M1 Max deployment target and must be rebuilt from the pinned Dockerfile on another clean ARM64 host for P0-00 closure."
