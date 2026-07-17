@@ -35,7 +35,7 @@ event projection, and first provenance-linked task mutation are implemented.
 | Area | Current capability | Remaining boundary |
 |---|---|---|
 | Authority and tasks | One central Node API owns the SQLite task projection, capability-scoped agent mutations, audited loopback-owner task creation/scheduling, review, protected decisions, validation, merge-request records, and per-project orchestrator leases. Scheduling atomically assigns the task, moves it to `in_progress`, and queues one phase-scoped command. The durable FIFO command lifecycle supports idempotent enqueue, project-scoped single claim, structured success/failure, and no-replay reconciliation after lease expiry/release. | Task description/criteria editing, dependencies, stop/reconcile commands, and attention UX remain Phase 1. Actual merge/rebase/push is Phase 2. |
-| Pi sessions | Upstream Pi runs in RPC mode inside recorded task containers and as a host-managed persistent orchestrator session. Native JSONL lifecycle, model-less resume/import, child provenance, blocking task-session pre-compaction custody, one owner-authorized OpenAI Codex turn, and C0-04 bundle-child consumption pass. Orchestrator conversation runs persist their effective provider/model/thinking policy and native session path; deterministic two-turn coverage proves no transcript resend. | Conversation pre-compaction custody, live effective-model verification, true in-flight RPC reattachment, and production session controls remain. |
+| Pi sessions | Upstream Pi runs in RPC mode inside recorded task containers and as a host-managed persistent orchestrator session. Native JSONL lifecycle, model-less resume/import, child provenance, blocking task-session pre-compaction custody, owner-authorized OpenAI Codex task and orchestrator turns, and C0-04 bundle-child consumption pass. Orchestrator conversation runs persist their effective provider/model/thinking policy and native session path; deterministic two-turn coverage and a live `openai-codex/gpt-5.4-mini` turn prove no transcript resend. | Conversation pre-compaction custody, true in-flight RPC reattachment, and production session controls remain. |
 | Containers | The daemon creates, inspects, stops, and removes pinned Linux/ARM64 containers with a non-root user, read-only root, resource limits, minimal mounts, and no Docker socket. Restart reconciliation proves recorded ID, image, label, and liveness before cleanup. | True process reattachment and explicit production egress policy remain. Containers are damage containment, not a malicious-code boundary. |
 | Git and workspaces | The daemon creates a worktree; the container edits files without usable shared Git metadata. Capability routes expose host-generated status/diff and idempotent host-owned checkpoint/commit requests with provenance trailers. A commit made immediately before daemon loss is recovered from parent/provenance identity without duplication. | Checkpoint-versus-final-commit policy, actual merge/rebase/push, conflicts, and worktree cleanup remain. |
 | Credentials | A human-owned auth file is materialized read-only per run, copied into private writable Pi state, checksum-verified, concurrency-limited to one for OAuth, and both run copies are deleted on a normal stop. Synthetic canaries and one owner-authorized OpenAI Codex turn pass without changing the canonical source. Reconciliation deletes known per-run copies. | Post-crash canonical-checksum receipt and OAuth refresh reconciliation or a credential broker are required before parallel OAuth-backed runs. |
@@ -44,8 +44,8 @@ event projection, and first provenance-linked task mutation are implemented.
 | Memory and retrieval | The canonical memory/evidence schema and FTS5 projection are integrated into the central SQLite store. Eligibility is filtered before BM25 rank; receipts retain filters, scores, revisions, source refs, exclusions, excerpt checksums, and token use. A clean import rebuilds FTS from canonical JSON. | Semantic/vector retrieval remains deferred and rebuildable. Promotion UI and production mutation policy remain. |
 | Restart recovery | SQLite records immutable intent/completion/reconciliation receipts. Startup checks container identity/liveness, pauses verified idle runs, holds uncertain response/tool effects without replay, recovers checksum-valid snapshots, and recovers parent/provenance-valid Git commits without duplication. | The prototype conservatively stops the old container; true Pi RPC reattachment and host/Docker power-cycle coverage remain production work. |
 | Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
-| Developer cockpit | Product behavior and a task-first information architecture are specified. The loopback Phase 1 shell shows projects, orchestrator leases, the multi-project board, sessions, recent durable commands, context status, and terminal/attach positioning without a chat-first layout. It creates revision-bound tasks and schedules implementation/test/review agents from ready/backlog cards. | Task detail editing/dependencies/reconciliation, PTY/reconnect, diffs/tests/review/context inspectors, and optional trusted-LAN access without application auth remain. |
-| Orchestrator interaction | First-class topic/conversation projections, central model policy, ordered turns/events, scoped leases, one-turn claiming, no-replay lease-loss reconciliation, persistent managed Pi RPC runs, sanitized reconnect streams, and provenance-linked task creation are implemented behind local APIs. Two-turn deterministic coverage proves no history resend. D-039 through D-042 govern the accepted slice; D-043 proposes the browser/terminal boundary. | Further task-graph tools, conversation custody, repository import, source snapshots, the cockpit workspace, and one owner-authorized live Pi turn remain. |
+| Developer cockpit | The loopback Phase 1 cockpit keeps projects and the multi-project board visible while adding New topic, project Ask orchestrator, a persistent conversation composer, reconnectable Pi text/lifecycle state, structured task-change cards, synchronized topic/board projections, sessions, commands, and tmux/SSH attach guidance. Direct task creation/scheduling remains a secondary fast path. | Task detail editing/dependencies/reconciliation, diffs/tests/review/source/decision/custody inspectors, and optional trusted-LAN access remain. D-043 defers a browser PTY. |
+| Orchestrator interaction | First-class topic/conversation projections, central model policy, ordered turns/events, scoped leases, one-turn claiming, no-replay lease-loss reconciliation, persistent managed Pi RPC runs, sanitized reconnect streams, provenance-linked task creation, and the first browser workspace are implemented. Two-turn deterministic coverage and an owner-authorized live turn prove no history resend. D-039 through D-043 govern the accepted slice. | Further task-graph tools, conversation custody, and repository import/source snapshots remain. |
 
 ## Artifact and data layout
 
@@ -64,7 +64,7 @@ specs/phase1-local-task-controls/
   PRODUCT.md, TECH.md, RESULTS.md  local create/assign/schedule behavior and proof
 
 specs/phase1-orchestrator-conversations/
-  PRODUCT.md, TECH.md              proposed conversation-first intake contract
+  PRODUCT.md, TECH.md, RESULTS.md  approved conversation-first contract and proof
 
 phase0/
   baseline/                        artifact retention policy and source manifest
@@ -103,10 +103,10 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 3. **Phase 1 — task detail and reconciliation.** Add description/acceptance
    editing, dependencies, activity, command failure detail, and explicit owner
    reconciliation actions.
-4. **Phase 1 — conversation and workspace surfaces.** Render the landed Pi RPC
-   stream beside task/source/decision state, then add
-   diff/test/review/context/artifact inspectors. A browser PTY is conditional
-   on D-043 rather than assumed.
+4. **Phase 1 — workspace inspectors.** Add source/decision/custody navigation
+   plus diff/test/review/context/artifact inspectors around the landed
+   conversation workspace. D-043 keeps a browser PTY out of the Phase 1
+   baseline; tmux/SSH remains the escape hatch.
 5. **Phase 2 — autonomy, recovery, and portability.** Add merge/rebase/push, recovery UX, retention/backup, resource limits, and second-host reproduction.
 6. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally configured password verifier or API-key hash after the local product is mature.
 
@@ -137,11 +137,6 @@ Resolved or narrowed:
 - The ASCII information architecture in `UI.md` is the C0-04 wireframe. Detailed interaction wireframes remain future design work.
 
 Still open, but assigned to explicit gates rather than blocking current work:
-
-- D-043 needs owner approval: use structured Pi RPC conversation UI as the
-  primary orchestrator surface, keep tmux/SSH as the exact-session fallback,
-  and defer a browser terminal emulator until a concrete missing workflow
-  justifies it.
 
 - **Credential refresh:** locked reconciliation versus a host broker before parallel OAuth runs.
 - **Recovery UX and reattachment:** how the owner resolves uncertain effects, how a paused session starts a new Pi RPC process, and whether true in-flight process reattachment is worth its operational complexity.

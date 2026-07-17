@@ -126,7 +126,7 @@ tasks.
 
 ### 3a. Browser and terminal boundary
 
-D-043 is proposed for owner approval:
+D-043 is accepted:
 
 - the browser renders Pi RPC conversation events and structured Boss Man task,
   source, decision, and custody projections;
@@ -193,14 +193,22 @@ conversation turn submit/list, ordered event listing with reconnect cursors,
 scoped orchestration lease claim/complete routes, managed persistent Pi RPC
 runs, sanitized event ingestion, and the first provenance-linked `create task`
 tool. Repository/source endpoints, further task-graph mutations, conversation
-custody, and the browser workspace remain the next increments. See
-[RESULTS.md](./RESULTS.md).
+custody, and deeper task/source/decision inspectors remain the next
+increments. See [RESULTS.md](./RESULTS.md).
 
 The cockpit adds a prominent **New topic** action and an **Ask orchestrator**
 action within each project. The main topic/project workspace uses a
 conversation composer beside a task/source/decision inspector. The global
 landing page remains attention/fleet oriented, and task workspaces still
 default to Overview rather than Conversation.
+
+The first cockpit increment is implemented in `phase0/direct/cockpit.html`.
+It creates and selects topics, reuses the first existing project topic for
+**Ask orchestrator**, submits ordered owner turns, polls the durable Pi event
+projection, renders completed or in-flight assistant text, displays structured
+task-change cards, and refreshes the authoritative board. Direct task creation
+remains available in a secondary disclosure. The shell contains no terminal
+emulator; tmux/cmux/SSH attach guidance remains visible.
 
 ### 7. Context custody
 

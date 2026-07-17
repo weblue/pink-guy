@@ -1,7 +1,7 @@
 # Phase 1 orchestrator conversations — substrate results
 
-Status: Durable conversation substrate and managed Pi RPC bridge implemented;
-custody, intake adapters, and cockpit remain
+Status: Durable conversation runtime and first cockpit workspace implemented;
+custody and intake adapters remain
 
 Last updated: 2026-07-17
 
@@ -35,7 +35,14 @@ Last updated: 2026-07-17
   project-bound tasks with exact turn provenance;
 - explicit rejection of task creation from unbound topics; and
 - corrected queue behavior so a second owner message is not stranded when the
-  prior turn reports `waiting_for_owner`.
+  prior turn reports `waiting_for_owner`;
+- a task-first browser cockpit with New topic and project Ask orchestrator
+  entry points;
+- a durable conversation composer and reconnect polling over Pi RPC event
+  projections;
+- owner/Pi turn lifecycle, structured task-change cards, and synchronized
+  board/topic projections; and
+- explicit tmux/cmux/SSH attach guidance without a browser terminal emulator.
 
 ## Verification
 
@@ -68,6 +75,29 @@ makes no provider requests.
 The existing Phase 1 command-loop and task-control probes remain regression
 gates.
 
+The model-less cockpit contract probe passes:
+
+```text
+node phase0/scripts/probe-phase1-conversation-cockpit.mjs \
+  /Users/ND139178/Documents/boss-man
+```
+
+The in-app browser flow also passed against disposable local state: project
+Ask orchestrator created a bound topic, the owner turn appeared queued, a
+simulated central orchestrator completion reconnected into the same
+conversation, and its provenance-linked task appeared as a structured change
+card.
+
+An owner-authorized live Pi smoke test also passed through the integrated
+project orchestrator and the retained local API state. Pi ran with
+`openai-codex/gpt-5.4-mini` at `low` thinking, resumed the conversation's
+native JSONL session, and returned a two-sentence project summary through the
+same durable browser event projection. The run recorded 1,962 input tokens,
+90 output tokens, 2,052 total tokens, and estimated cost `0.0018765`; its
+`contextResend` receipt was `false`. The prompt forbade task mutation, and the
+authoritative board remained unchanged. The orchestrator released its lease
+and deleted its private credential copy on shutdown.
+
 ## Remaining in the approved slice
 
 1. Expand structured, provenance-linked task mutations beyond create to
@@ -76,7 +106,4 @@ gates.
    switch, and provider continuation.
 3. Add host-owned repository import/dedup and immutable manual/Jira source
    snapshots.
-4. Add the New topic and Ask orchestrator cockpit surfaces plus browser
-   coverage.
-5. Run one owner-authorized live Pi orchestrator turn after D-043 is resolved
-   and the local cockpit can show the resulting stream.
+4. Add deeper source/decision/custody inspectors and task-change navigation.

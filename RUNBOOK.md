@@ -26,7 +26,10 @@ From this repository:
 node ./phase0/scripts/serve-direct.mjs \
   --repo /Users/ND139178/Documents/boss-man \
   --state "$HOME/.local/share/boss-man/dev" \
-  --port 4310
+  --port 4310 \
+  --provider openai-codex \
+  --model gpt-5.4-mini \
+  --thinking medium
 ```
 
 Pass `--repo` more than once to register multiple repositories:
@@ -41,6 +44,12 @@ node ./phase0/scripts/serve-direct.mjs \
 Open [http://127.0.0.1:4310](http://127.0.0.1:4310). The central API binds to `127.0.0.1` intentionally. Runtime state is stored under the selected `--state` directory and retained across restarts.
 
 No password or API key is required in this profile. Do not change the listener to `0.0.0.0` as a shortcut. Phase 1 will add an explicit private-interface/CIDR-aware trusted-LAN profile.
+
+Provider/model/thinking are central defaults persisted on newly created
+orchestrator conversations. The deterministic defaults are
+`boss-man-phase0/complete`; pass explicit live values as above before expecting
+a real Pi orchestrator to consume turns. Changing an existing conversation's
+model remains a later safe-boundary custody operation.
 
 Useful checks:
 
@@ -144,17 +153,20 @@ node ./phase0/scripts/probe-phase1-orchestrator-conversations.mjs \
   /Users/ND139178/Documents/boss-man
 node ./phase0/scripts/probe-phase1-conversation-runtime.mjs \
   /Users/ND139178/Documents/boss-man
+node ./phase0/scripts/probe-phase1-conversation-cockpit.mjs \
+  /Users/ND139178/Documents/boss-man
 ```
 
 ## Current execution boundary
 
-The served Phase 1 shell shows projects, tasks, sessions, project-orchestrator
-leases, recent commands, and local create/schedule controls. The existing
-automated probes exercise real task claiming, Pi RPC, containers, worktrees,
-host Git checkpoints, RTK evidence, and context export. The shell does not yet
-provide task editing/dependencies, reconciliation actions, or the Pi RPC
-conversation workspace. Those are the next local-product slices, not
-authentication prerequisites. A browser PTY is conditional on D-043;
+The served Phase 1 cockpit shows projects, topics, the task board, sessions,
+project-orchestrator leases, recent commands, local create/schedule controls,
+and a reconnectable Pi RPC conversation workspace with structured task-change
+cards. The existing automated probes exercise real task claiming, Pi RPC,
+containers, worktrees, host Git checkpoints, RTK evidence, and context export.
+Task editing/dependencies, reconciliation actions, and deeper
+diff/test/review/source/decision/custody inspectors are the next local-product
+slices, not authentication prerequisites. D-043 defers a browser PTY;
 tmux/SSH remains the current exact-session attach path.
 
 To exercise the complete model-less C0-04 context path:

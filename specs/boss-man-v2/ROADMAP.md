@@ -51,8 +51,10 @@ and
 its durable topic/intake scope was approved as D-039 through D-041 on
 2026-07-17. Its additive topic/conversation store, local API, scoped leases,
 managed persistent Pi RPC bridge, sanitized reconnect stream, and first
-provenance-linked task mutation are implemented. Further task-graph tools,
-repository/source intake, custody, and cockpit surfaces remain.
+provenance-linked task mutation are implemented. The first New topic/Ask
+orchestrator workspace, conversation stream, change cards, and synchronized
+board projection are also implemented. Further task-graph tools,
+repository/source intake, custody, and deeper inspectors remain.
 
 Scope:
 
@@ -62,8 +64,7 @@ Scope:
   work-item snapshots;
 - usable project/task creation, editing, assignment, dependencies, attention queue, and phase selection;
 - persistent Pi RPC conversation reconnect plus tmux/cmux/SSH attach
-  information; a browser PTY is conditional on D-043 and a demonstrated
-  workflow gap;
+  information; D-043 defers a browser PTY until a demonstrated workflow gap;
 - task workspace with diffs, tests, review, artifacts, context snapshots, decisions, and raw evidence;
 - host-owned checkpoint/commit operations and manual merge preparation;
 - centrally assigned per-run provider/model selection and current run/resource
