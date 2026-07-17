@@ -74,6 +74,12 @@ function publicConversationTurn(row) {
   };
 }
 
+function publicConversationRun(row) {
+  if (!row) return null;
+  const { metadata_json: ignoredMetadataJson, ...visible } = row;
+  return { ...visible, metadata: parseJson(row.metadata_json) ?? {} };
+}
+
 function publicOrchestrationLease(row) {
   if (!row) return null;
   const { token_sha256: ignoredTokenHash, metadata_json: ignoredMetadataJson, ...visible } = row;
@@ -237,6 +243,29 @@ export class Phase0Store {
         payload_json TEXT NOT NULL,
         created_at TEXT NOT NULL,
         PRIMARY KEY (conversation_id, sequence)
+      );
+      CREATE TABLE IF NOT EXISTS conversation_runs (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL REFERENCES orchestrator_conversations(id),
+        turn_id TEXT NOT NULL REFERENCES conversation_turns(id),
+        orchestration_lease_id TEXT NOT NULL REFERENCES orchestration_leases(id),
+        process_id INTEGER,
+        native_session_path TEXT NOT NULL,
+        model_provider TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        thinking_level TEXT NOT NULL,
+        state TEXT NOT NULL,
+        metadata_json TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        ended_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS conversation_event_receipts (
+        run_id TEXT NOT NULL REFERENCES conversation_runs(id),
+        event_key TEXT NOT NULL,
+        request_sha256 TEXT NOT NULL,
+        conversation_event_sequence INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (run_id, event_key)
       );
       CREATE TABLE IF NOT EXISTS orchestration_leases (
         id TEXT PRIMARY KEY,
@@ -537,6 +566,8 @@ export class Phase0Store {
         ON topics(project_id,state,updated_at);
       CREATE INDEX IF NOT EXISTS conversation_turns_state
         ON conversation_turns(state,created_at,conversation_id,sequence);
+      CREATE INDEX IF NOT EXISTS conversation_runs_turn_state
+        ON conversation_runs(turn_id,state,started_at);
       CREATE UNIQUE INDEX IF NOT EXISTS one_active_orchestration_lease_per_scope
         ON orchestration_leases(scope_type,scope_id) WHERE status='active';
     `);
@@ -923,6 +954,19 @@ export class Phase0Store {
       .map((row) => ({ ...row, payload: parseJson(row.payload_json) ?? {} }));
   }
 
+  conversationContext(conversationId) {
+    const conversation = this.getConversation(conversationId);
+    if (!conversation) throw codedError("not_found", `unknown conversation: ${conversationId}`);
+    const topic = this.database.prepare("SELECT * FROM topics WHERE id=?").get(conversation.topic_id);
+    const project = conversation.project_id ? this.getProject(conversation.project_id) : null;
+    const tasks = conversation.project_id
+      ? this.database.prepare("SELECT * FROM tasks WHERE project_id=? ORDER BY updated_at DESC,id")
+        .all(conversation.project_id)
+        .map((task) => this.getTaskDetails(task.id))
+      : [];
+    return { topic, conversation, project, tasks };
+  }
+
   submitConversationTurn({ conversationId, message, idempotencyKey }) {
     if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
     const normalizedMessage = typeof message === "string" ? message.trim() : "";
@@ -990,6 +1034,7 @@ export class Phase0Store {
     ) VALUES(?,?,?,?,?,?,?)`).run(
       conversationId, Number(next.value), turnId, type, actor, JSON.stringify(payload), now,
     );
+    return Number(next.value);
   }
 
   registerOrchestrationLease({
@@ -1136,10 +1181,7 @@ export class Phase0Store {
     );
   }
 
-  completeConversationTurn({ token, turnId, state, result = {} }) {
-    if (!["waiting_for_owner", "completed", "failed", "cancelled"].includes(state)) {
-      throw codedError("invalid_request", "unsupported conversation turn completion state");
-    }
+  activeConversationTurnForLease(token, turnId) {
     const lease = this.authorizeOrchestrationLease(token);
     const turn = this.database.prepare("SELECT * FROM conversation_turns WHERE id=?").get(turnId);
     if (!turn) throw codedError("not_found", `unknown conversation turn: ${turnId}`);
@@ -1150,6 +1192,244 @@ export class Phase0Store {
     if (conversation.scope_type !== lease.scope_type || conversation.scope_id !== lease.scope_id) {
       throw codedError("orchestrator_denied", "turn is outside the active orchestration scope");
     }
+    return { lease, turn, conversation };
+  }
+
+  authorizeOrchestrationConversation(token, conversationId) {
+    const lease = this.authorizeOrchestrationLease(token);
+    const conversation = this.getConversation(conversationId);
+    if (!conversation) throw codedError("not_found", `unknown conversation: ${conversationId}`);
+    if (conversation.scope_type !== lease.scope_type || conversation.scope_id !== lease.scope_id) {
+      throw codedError("orchestrator_denied", "conversation is outside the active orchestration scope");
+    }
+    return { lease, conversation };
+  }
+
+  activeConversationTurnForConversation(token, conversationId) {
+    const lease = this.authorizeOrchestrationLease(token);
+    const turn = this.database.prepare(`SELECT * FROM conversation_turns
+      WHERE conversation_id=? AND state='running' AND claimed_by=?`).get(conversationId, lease.id);
+    if (!turn) {
+      throw codedError("orchestrator_denied", "conversation has no turn owned by this orchestration lease");
+    }
+    return this.activeConversationTurnForLease(token, turn.id);
+  }
+
+  startConversationRun({
+    token,
+    turnId,
+    runId,
+    processId = null,
+    nativeSessionPath,
+    metadata = {},
+  }) {
+    if (!runId || !nativeSessionPath) {
+      throw codedError("invalid_request", "conversation run id and native session path are required");
+    }
+    const { lease, turn, conversation } = this.activeConversationTurnForLease(token, turnId);
+    const prior = this.database.prepare("SELECT * FROM conversation_runs WHERE id=?").get(runId);
+    if (prior) {
+      if (
+        prior.turn_id !== turnId
+        || prior.orchestration_lease_id !== lease.id
+        || prior.native_session_path !== nativeSessionPath
+      ) {
+        throw codedError("idempotency_conflict", "conversation run id was reused for a different runtime");
+      }
+      return { replayed: true, run: publicConversationRun(prior) };
+    }
+    const active = this.database.prepare(
+      "SELECT id FROM conversation_runs WHERE turn_id=? AND state='running'",
+    ).get(turnId);
+    if (active) throw codedError("command_conflict", `turn already has an active run: ${active.id}`);
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`INSERT INTO conversation_runs(
+        id,conversation_id,turn_id,orchestration_lease_id,process_id,native_session_path,
+        model_provider,model_id,thinking_level,state,metadata_json,started_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,'running',?,?)`).run(
+        runId,
+        conversation.id,
+        turnId,
+        lease.id,
+        processId,
+        nativeSessionPath,
+        conversation.model_provider,
+        conversation.model_id,
+        conversation.thinking_level,
+        JSON.stringify(metadata),
+        now,
+      );
+      this.database.prepare(`UPDATE orchestrator_conversations SET
+        native_session_path=?,updated_at=? WHERE id=?`).run(nativeSessionPath, now, conversation.id);
+      this.appendConversationEvent(conversation.id, turnId, "pi_run_started", "orchestrator", {
+        runId,
+        processId,
+        nativeSessionPath,
+        modelProvider: conversation.model_provider,
+        modelId: conversation.model_id,
+        thinkingLevel: conversation.thinking_level,
+      }, now);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      replayed: false,
+      run: publicConversationRun(this.database.prepare("SELECT * FROM conversation_runs WHERE id=?").get(runId)),
+    };
+  }
+
+  appendConversationRuntimeEvent({ token, turnId, runId, eventKey, type, payload = {} }) {
+    if (!eventKey || !type) throw codedError("invalid_request", "runtime event key and type are required");
+    const { lease, turn } = this.activeConversationTurnForLease(token, turnId);
+    const run = this.database.prepare("SELECT * FROM conversation_runs WHERE id=?").get(runId);
+    if (!run || run.turn_id !== turnId || run.orchestration_lease_id !== lease.id || run.state !== "running") {
+      throw codedError("orchestrator_denied", "runtime event is outside the active conversation run");
+    }
+    const requestSha256 = sha256(JSON.stringify({ turnId, runId, eventKey, type, payload }));
+    const prior = this.database.prepare(`SELECT * FROM conversation_event_receipts
+      WHERE run_id=? AND event_key=?`).get(runId, eventKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "runtime event key was reused with different content");
+      }
+      return { replayed: true, sequence: prior.conversation_event_sequence };
+    }
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const sequence = this.appendConversationEvent(
+        turn.conversation_id,
+        turnId,
+        `pi_${type}`,
+        "pi",
+        { runId, ...payload },
+        now,
+      );
+      this.database.prepare(`INSERT INTO conversation_event_receipts(
+        run_id,event_key,request_sha256,conversation_event_sequence,created_at
+      ) VALUES(?,?,?,?,?)`).run(runId, eventKey, requestSha256, sequence, now);
+      this.database.exec("COMMIT");
+      return { replayed: false, sequence };
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  createConversationTask({
+    token,
+    turnId,
+    title,
+    acceptanceCriteria = [],
+    revision,
+    idempotencyKey,
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    const { turn, conversation } = this.activeConversationTurnForLease(token, turnId);
+    if (!conversation.project_id) {
+      throw codedError("project_required", "an unbound topic cannot create executable tasks");
+    }
+    const normalizedTitle = typeof title === "string" ? title.trim() : "";
+    if (!normalizedTitle || normalizedTitle.length > 500 || normalizedTitle.includes("\0")) {
+      throw codedError("invalid_request", "task title must be between 1 and 500 characters");
+    }
+    if (
+      !Array.isArray(acceptanceCriteria) || acceptanceCriteria.length > 100
+      || acceptanceCriteria.some((item) => typeof item !== "string" || !item.trim() || item.length > 2000)
+    ) {
+      throw codedError("invalid_request", "acceptance criteria must be a list of non-empty strings");
+    }
+    if (!revision) throw codedError("invalid_request", "task repository revision is required");
+    const normalizedCriteria = acceptanceCriteria.map((item) => item.trim());
+    const requestSha256 = sha256(JSON.stringify({
+      action: "conversation_create_task",
+      turnId,
+      projectId: conversation.project_id,
+      title: normalizedTitle,
+      acceptanceCriteria: normalizedCriteria,
+    }));
+    const prior = this.database.prepare("SELECT * FROM audit_events WHERE idempotency_key=?").get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256 || prior.type !== "task_created") {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different task mutation");
+      }
+      return { replayed: true, task: this.parseAuditEvent(prior).current };
+    }
+    const id = randomUUID();
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`INSERT INTO tasks(
+        id,project_id,title,status,version,updated_at,revision,validation_passed,
+        merge_requested,acceptance_criteria_json
+      ) VALUES(?,?,?,'ready',1,?,?,0,0,?)`).run(
+        id, conversation.project_id, normalizedTitle, now, revision, JSON.stringify(normalizedCriteria),
+      );
+      const current = this.getTaskDetails(id);
+      this.database.prepare(`INSERT INTO task_events(
+        task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+        actor_role,run_id,task_version
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        id,
+        "task_created",
+        `orchestrator:${conversation.id}`,
+        null,
+        "ready",
+        JSON.stringify({
+          title: normalizedTitle,
+          acceptanceCriteria: normalizedCriteria,
+          conversationId: conversation.id,
+          turnId,
+        }),
+        idempotencyKey,
+        now,
+        "orchestrator",
+        null,
+        1,
+      );
+      this.database.prepare(`INSERT INTO audit_events(
+        task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+        idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        id,
+        "task_created",
+        `orchestrator:${conversation.id}`,
+        "orchestrator",
+        null,
+        null,
+        "null",
+        JSON.stringify(current),
+        JSON.stringify({ title: normalizedTitle, acceptanceCriteria: normalizedCriteria, turnId }),
+        idempotencyKey,
+        requestSha256,
+        now,
+      );
+      this.database.prepare(`INSERT INTO task_origins(
+        task_id,task_version,topic_id,conversation_id,turn_id,created_at
+      ) VALUES(?,?,?,?,?,?)`).run(id, 1, conversation.topic_id, conversation.id, turn.id, now);
+      this.appendConversationEvent(conversation.id, turn.id, "task_mutation_applied", "orchestrator", {
+        operation: "create",
+        taskId: id,
+        taskVersion: 1,
+        title: normalizedTitle,
+      }, now);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return { replayed: false, task: this.getTaskDetails(id) };
+  }
+
+  completeConversationTurn({ token, turnId, state, result = {} }) {
+    if (!["waiting_for_owner", "completed", "failed", "cancelled"].includes(state)) {
+      throw codedError("invalid_request", "unsupported conversation turn completion state");
+    }
+    const { turn, conversation } = this.activeConversationTurnForLease(token, turnId);
     const now = this.clock();
     const conversationState = state === "waiting_for_owner" ? "waiting_for_owner"
       : state === "failed" ? "failed" : "idle";
@@ -1164,9 +1444,11 @@ export class Phase0Store {
         conversationState, turn.sequence, now, turn.conversation_id,
       );
       this.appendConversationEvent(turn.conversation_id, turnId, `turn_${state}`, "orchestrator", result, now);
+      this.database.prepare(`UPDATE conversation_runs SET
+        state=?,ended_at=? WHERE turn_id=? AND state='running'`).run(state, now, turnId);
       const next = this.database.prepare(`SELECT id FROM conversation_turns
         WHERE conversation_id=? AND state='queued' ORDER BY sequence LIMIT 1`).get(turn.conversation_id);
-      if (next && conversationState !== "waiting_for_owner") {
+      if (next) {
         this.database.prepare(
           "UPDATE orchestrator_conversations SET state='queued',updated_at=? WHERE id=?",
         ).run(now, turn.conversation_id);
@@ -1193,6 +1475,8 @@ export class Phase0Store {
         state='reconciliation_required',current_turn_id=?,updated_at=? WHERE id=?`).run(
         turn.id, now, turn.conversation_id,
       );
+      this.database.prepare(`UPDATE conversation_runs SET
+        state='reconciliation_required',ended_at=? WHERE turn_id=? AND state='running'`).run(now, turn.id);
       this.appendConversationEvent(
         turn.conversation_id, turn.id, "turn_reconciliation_required", "control_plane", result, now,
       );
@@ -1499,6 +1783,9 @@ export class Phase0Store {
       validation_passed: Boolean(task.validation_passed),
       merge_requested: Boolean(task.merge_requested),
       acceptance_criteria: parseJson(task.acceptance_criteria_json) ?? [],
+      origin: this.database.prepare(
+        "SELECT * FROM task_origins WHERE task_id=? AND task_version=?",
+      ).get(taskId, task.version) ?? null,
       children: this.database.prepare("SELECT id,title,status,version FROM tasks WHERE parent_task_id=? ORDER BY id").all(taskId),
       reviews: this.database.prepare("SELECT * FROM reviews WHERE task_id=? ORDER BY created_at,id").all(taskId)
         .map((row) => ({ ...row, findings: parseJson(row.findings_json) })),

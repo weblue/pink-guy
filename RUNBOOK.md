@@ -61,14 +61,36 @@ Each project may hold one active orchestrator lease. The process can run directl
 ```sh
 node ./phase0/scripts/project-orchestrator.mjs \
   --api http://127.0.0.1:4310 \
-  --repo /Users/ND139178/Documents/boss-man
+  --repo /Users/ND139178/Documents/boss-man \
+  --state-root "$HOME/.local/share/boss-man/dev" \
+  --credential-source "$HOME/.pi/agent/auth.json"
 ```
 
-The process registers through the central API, keeps its in-memory bearer token
-private, heartbeats the lease, polls for project-scoped commands, executes one
-at a time, and releases the lease on a normal stop. A second orchestrator for
-the same project is rejected until the first lease is released or expires.
-Use `--poll-ms` to change the local polling interval; the default is 1000 ms.
+The one project process registers both the compatibility command lease and
+the new conversation-scope lease, keeps their bearer tokens private,
+heartbeats them, consumes task commands, and runs persistent project
+conversation turns through Pi RPC. It releases both leases on a normal stop.
+A second orchestrator for the same project is rejected until the first leases
+are released or expire. Use `--poll-ms` to change the local polling interval;
+the default is 1000 ms.
+
+The owner-managed Pi login file is copied into private runtime-owned
+configuration; Pi never writes the canonical source. Do not put credentials
+in topic/task text or pass them through the browser. The current OAuth profile
+remains limited to one live orchestrator/task-provider run at a time until the
+credential concurrency/broker decision is resolved. API-key-backed profiles
+can later use a different declared concurrency policy.
+
+To process pre-project topics instead, run the system-intake orchestrator
+while no other OAuth-backed provider run is active:
+
+```sh
+node ./phase0/scripts/conversation-orchestrator.mjs \
+  --api http://127.0.0.1:4310 \
+  --state-root "$HOME/.local/share/boss-man/dev" \
+  --system-intake \
+  --credential-source "$HOME/.pi/agent/auth.json"
+```
 
 For cmux, create or select a tmux-backed workspace and run the same command there. cmux/tmux and SSH are attach and process-management transports; they do not own durable Boss Man state.
 
@@ -120,6 +142,8 @@ node ./phase0/scripts/probe-phase1-local-task-controls.mjs \
   /Users/ND139178/Documents/boss-man
 node ./phase0/scripts/probe-phase1-orchestrator-conversations.mjs \
   /Users/ND139178/Documents/boss-man
+node ./phase0/scripts/probe-phase1-conversation-runtime.mjs \
+  /Users/ND139178/Documents/boss-man
 ```
 
 ## Current execution boundary
@@ -128,9 +152,10 @@ The served Phase 1 shell shows projects, tasks, sessions, project-orchestrator
 leases, recent commands, and local create/schedule controls. The existing
 automated probes exercise real task claiming, Pi RPC, containers, worktrees,
 host Git checkpoints, RTK evidence, and context export. The shell does not yet
-provide task editing/dependencies, reconciliation actions, or a persistent
-PTY; those are the next local-product slices, not authentication
-prerequisites.
+provide task editing/dependencies, reconciliation actions, or the Pi RPC
+conversation workspace. Those are the next local-product slices, not
+authentication prerequisites. A browser PTY is conditional on D-043;
+tmux/SSH remains the current exact-session attach path.
 
 To exercise the complete model-less C0-04 context path:
 

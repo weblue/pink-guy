@@ -54,6 +54,88 @@ function bearerToken(request) {
   return value?.startsWith("Bearer ") ? value.slice("Bearer ".length) : null;
 }
 
+function clippedText(value, limit = 16_000) {
+  if (typeof value !== "string") return null;
+  return value.length <= limit ? value : `${value.slice(0, limit)}…`;
+}
+
+function sanitizePiConversationEvent(event) {
+  if (!event || typeof event !== "object" || typeof event.type !== "string") return null;
+  if (event.type === "message_update") {
+    const update = event.assistantMessageEvent;
+    if (update?.type === "text_delta") {
+      return { type: "text_delta", payload: { delta: clippedText(update.delta) ?? "" } };
+    }
+    if (update?.type === "thinking_start" || update?.type === "thinking_end") {
+      return { type: update.type, payload: {} };
+    }
+    if (update?.type === "toolcall_end") {
+      return {
+        type: "tool_call",
+        payload: {
+          toolCallId: update.toolCall?.id ?? null,
+          toolName: update.toolCall?.name ?? null,
+        },
+      };
+    }
+    return null;
+  }
+  if (event.type === "tool_execution_start") {
+    return {
+      type: "tool_start",
+      payload: { toolCallId: event.toolCallId ?? null, toolName: event.toolName ?? null },
+    };
+  }
+  if (event.type === "tool_execution_end") {
+    return {
+      type: "tool_end",
+      payload: {
+        toolCallId: event.toolCallId ?? null,
+        toolName: event.toolName ?? null,
+        isError: Boolean(event.isError),
+      },
+    };
+  }
+  if (event.type === "compaction_start") {
+    return { type: "compaction_start", payload: { reason: event.reason ?? null } };
+  }
+  if (event.type === "compaction_end") {
+    return {
+      type: "compaction_end",
+      payload: {
+        reason: event.reason ?? null,
+        aborted: Boolean(event.aborted),
+        willRetry: Boolean(event.willRetry),
+        tokensBefore: event.result?.tokensBefore ?? null,
+        estimatedTokensAfter: event.result?.estimatedTokensAfter ?? null,
+      },
+    };
+  }
+  if (event.type === "auto_retry_start" || event.type === "auto_retry_end") {
+    return {
+      type: event.type,
+      payload: {
+        attempt: event.attempt ?? null,
+        maxAttempts: event.maxAttempts ?? null,
+        success: event.success ?? null,
+      },
+    };
+  }
+  if (["agent_start", "agent_end", "agent_settled", "turn_start", "turn_end"].includes(event.type)) {
+    return { type: event.type, payload: {} };
+  }
+  if (event.type === "extension_error") {
+    return {
+      type: "extension_error",
+      payload: {
+        event: event.event ?? null,
+        error: clippedText(event.error, 2_000),
+      },
+    };
+  }
+  return null;
+}
+
 async function repositoryRevision(repositoryPath) {
   try {
     const { stdout } = await execFileAsync("git", ["-C", repositoryPath, "rev-parse", "HEAD"], {
@@ -759,7 +841,100 @@ export class DirectControlPlane {
           response.writeHead(204);
           return response.end();
         }
-        return json(response, 200, { turn });
+        return json(response, 200, {
+          turn,
+          context: this.store.conversationContext(turn.conversation_id),
+        });
+      }
+
+      const startConversationRun = url.pathname.match(/^\/api\/orchestration\/turns\/([^/]+)\/runtime$/);
+      if (request.method === "POST" && startConversationRun) {
+        const body = await readBody(request);
+        const result = this.store.startConversationRun({
+          token: bearerToken(request),
+          turnId: startConversationRun[1],
+          runId: body.runId,
+          processId: body.processId ?? null,
+          nativeSessionPath: body.nativeSessionPath,
+          metadata: body.metadata ?? {},
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const conversationRuntimeEvent = url.pathname.match(/^\/api\/orchestration\/turns\/([^/]+)\/events$/);
+      if (request.method === "POST" && conversationRuntimeEvent) {
+        const body = await readBody(request);
+        const event = sanitizePiConversationEvent(body.event);
+        if (!event) {
+          return json(response, 202, { retained: false, reason: "event_not_projected" });
+        }
+        const result = this.store.appendConversationRuntimeEvent({
+          token: bearerToken(request),
+          turnId: conversationRuntimeEvent[1],
+          runId: body.runId,
+          eventKey: body.eventKey,
+          type: event.type,
+          payload: event.payload,
+        });
+        return json(response, result.replayed ? 200 : 201, { retained: true, ...result });
+      }
+
+      const conversationTaskMutation = url.pathname.match(
+        /^\/api\/orchestration\/turns\/([^/]+)\/task-mutations$/,
+      );
+      if (request.method === "POST" && conversationTaskMutation) {
+        const body = await readBody(request);
+        if (body.operation !== "create") {
+          throw Object.assign(new Error("only create task mutations are implemented"), { code: "invalid_request" });
+        }
+        const turn = this.store.activeConversationTurnForLease(
+          bearerToken(request),
+          conversationTaskMutation[1],
+        );
+        if (!turn.conversation.project_id) {
+          throw Object.assign(new Error("an unbound topic cannot create executable tasks"), {
+            code: "project_required",
+          });
+        }
+        const project = this.store.getProject(turn.conversation.project_id);
+        const result = this.store.createConversationTask({
+          token: bearerToken(request),
+          turnId: conversationTaskMutation[1],
+          title: body.title,
+          acceptanceCriteria: body.acceptanceCriteria ?? [],
+          revision: await repositoryRevision(project.repository_path),
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const activeConversationTaskMutation = url.pathname.match(
+        /^\/api\/orchestration\/conversations\/([^/]+)\/task-mutations$/,
+      );
+      if (request.method === "POST" && activeConversationTaskMutation) {
+        const body = await readBody(request);
+        if (body.operation !== "create") {
+          throw Object.assign(new Error("only create task mutations are implemented"), { code: "invalid_request" });
+        }
+        const active = this.store.activeConversationTurnForConversation(
+          bearerToken(request),
+          activeConversationTaskMutation[1],
+        );
+        if (!active.conversation.project_id) {
+          throw Object.assign(new Error("an unbound topic cannot create executable tasks"), {
+            code: "project_required",
+          });
+        }
+        const project = this.store.getProject(active.conversation.project_id);
+        const result = this.store.createConversationTask({
+          token: bearerToken(request),
+          turnId: active.turn.id,
+          title: body.title,
+          acceptanceCriteria: body.acceptanceCriteria ?? [],
+          revision: await repositoryRevision(project.repository_path),
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
       }
 
       const completeTurn = url.pathname.match(/^\/api\/orchestration\/turns\/([^/]+)\/complete$/);
@@ -875,6 +1050,13 @@ export class DirectControlPlane {
         return json(response, 200, {
           events: this.store.conversationEvents(conversationEvents[1], { after }),
         });
+      }
+
+      const conversationContext = url.pathname.match(/^\/api\/conversations\/([^/]+)\/context$/);
+      if (request.method === "GET" && conversationContext) {
+        const token = bearerToken(request);
+        if (token) this.store.authorizeOrchestrationConversation(token, conversationContext[1]);
+        return json(response, 200, this.store.conversationContext(conversationContext[1]));
       }
 
       const createTask = url.pathname.match(/^\/api\/projects\/([^/]+)\/tasks$/);
@@ -1006,7 +1188,7 @@ export class DirectControlPlane {
     } catch (error) {
       const status = error.code === "not_found" ? 404
         : ["capability_denied", "self_approval_denied", "orchestrator_denied", "local_operator_denied"].includes(error.code) ? 403
-          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict"].includes(error.code) ? 409
+          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict", "project_required"].includes(error.code) ? 409
             : 400;
       return json(response, status, { error: error.code ?? "request_failed", message: error.message });
     }

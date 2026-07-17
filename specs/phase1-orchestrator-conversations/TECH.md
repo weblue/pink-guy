@@ -1,6 +1,6 @@
 # Phase 1 orchestrator conversations and project intake
 
-Status: Implementation in progress — durable topic/conversation substrate landed
+Status: Implementation in progress — durable substrate and managed Pi RPC bridge landed
 
 Last updated: 2026-07-17
 
@@ -96,6 +96,51 @@ events, applies capability-scoped mutations, and ends in a terminal or
 waiting-for-owner state. Ambiguous provider/tool effects use the existing
 no-automatic-replay reconciliation policy.
 
+The managed runtime now launches one persistent Pi RPC process per active
+conversation, using the centrally persisted provider, model, and thinking
+level. It sends only the newly claimed owner message to Pi; it never
+reconstructs or resends prior conversation history. Pi owns active context,
+compaction, and the native JSONL session. `conversation_runs` records the
+lease, turn, process, native session path, and effective model route.
+
+The existing `project-orchestrator.mjs` owns both task-command polling and
+project-conversation polling in one OS process. During the additive migration
+it holds one compatibility `project_orchestrators` lease plus one new
+`orchestration_leases` project-scope lease; this is not two project daemons.
+The compatibility table can be retired after task-command consumers migrate
+to the common scope lease.
+
+A real Pi runtime requires an explicit owner-managed credential source. It is
+copied into a private runtime-owned `PI_CODING_AGENT_DIR`; the canonical login
+file is never passed to Pi as writable state. The known OAuth concurrency gate
+still applies across project/system-intake and task-provider runs until a
+broker or verified reconciliation design is approved.
+
+Sanitized text/lifecycle/tool-metadata events are projected into
+`conversation_events` with idempotent runtime receipts. Full native Pi JSONL
+remains canonical evidence; private reasoning and raw tool bodies do not enter
+the browser projection. The first narrow extension tools read authoritative
+conversation context and create a project-bound task with exact topic,
+conversation, and turn provenance. Unbound topics cannot create executable
+tasks.
+
+### 3a. Browser and terminal boundary
+
+D-043 is proposed for owner approval:
+
+- the browser renders Pi RPC conversation events and structured Boss Man task,
+  source, decision, and custody projections;
+- the browser never owns the Pi process and never synthesizes a replacement
+  prompt from stored chat history;
+- no browser terminal emulator or raw PTY stream is required for the Phase 1
+  orchestrator path; and
+- tmux/SSH remains an exact-session operational and recovery attach path.
+
+This is not the original Boss Man “chat wrapper” design. The browser is a
+reconnectable view of Pi's persistent native session, while the central API
+owns task/audit state. An embedded terminal remains a later option only for
+developer workflows that Pi RPC and explicit cockpit controls cannot cover.
+
 ### 4. Repository onboarding
 
 Add a host-owned repository import service:
@@ -143,11 +188,13 @@ Initial local endpoints:
 - stream conversation events;
 - list structured turn mutations and linked tasks.
 
-The first substrate increment implements topic create/list/open/archive,
+The implemented increments now include topic create/list/open/archive,
 conversation turn submit/list, ordered event listing with reconnect cursors,
-and scoped orchestration lease claim/complete routes. Repository/source
-endpoints, structured task mutation tools, and streaming transport remain the
-next increments. See [RESULTS.md](./RESULTS.md).
+scoped orchestration lease claim/complete routes, managed persistent Pi RPC
+runs, sanitized event ingestion, and the first provenance-linked `create task`
+tool. Repository/source endpoints, further task-graph mutations, conversation
+custody, and the browser workspace remain the next increments. See
+[RESULTS.md](./RESULTS.md).
 
 The cockpit adds a prominent **New topic** action and an **Ask orchestrator**
 action within each project. The main topic/project workspace uses a
@@ -229,7 +276,8 @@ conversation-to-board and context-export suite.
 
 - **Chat-first regression:** structured task/source/decision state remains
   independently navigable; conversation is primary ingress, not the global
-  information architecture.
+  information architecture. The conversation is a projection of Pi's native
+  session, not a separate history that must be resent.
 - **Fake project/task records:** first-class topics avoid weakening repository
   and task invariants.
 - **Two orchestration authorities:** all leases, messages, Pi events, and task

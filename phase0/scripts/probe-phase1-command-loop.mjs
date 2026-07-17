@@ -217,6 +217,22 @@ const fakeServer = createServer(async (incoming, response) => {
     await readRequestBody(incoming);
     return sendJson(response, 201, { id: "fake-lease", token: "fake-token" });
   }
+  if (incoming.method === "POST" && url.pathname === "/api/orchestration/leases") {
+    await readRequestBody(incoming);
+    return sendJson(response, 201, { id: "fake-conversation-lease", token: "fake-conversation-token" });
+  }
+  if (incoming.method === "POST" && url.pathname === "/api/orchestration/leases/heartbeat") {
+    await readRequestBody(incoming);
+    return sendJson(response, 200, { id: "fake-conversation-lease", status: "active" });
+  }
+  if (incoming.method === "DELETE" && url.pathname === "/api/orchestration/leases/current") {
+    return sendJson(response, 200, { lease: { id: "fake-conversation-lease", status: "released" } });
+  }
+  if (incoming.method === "POST" && url.pathname === "/api/orchestration/turns/claim") {
+    await readRequestBody(incoming);
+    response.writeHead(204);
+    return response.end();
+  }
   if (incoming.method === "POST" && url.pathname === "/api/orchestrators/heartbeat") {
     await readRequestBody(incoming);
     return sendJson(response, 200, { id: "fake-lease", status: "active" });
@@ -307,4 +323,3 @@ const result = {
 };
 process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 await authority.close();
-

@@ -49,9 +49,10 @@ The active conversation slice is
 and
 [`../phase1-orchestrator-conversations/TECH.md`](../phase1-orchestrator-conversations/TECH.md);
 its durable topic/intake scope was approved as D-039 through D-041 on
-2026-07-17. Its additive topic/conversation store, local API, and scoped lease
-substrate are implemented; managed Pi turns, task deltas, intake adapters, and
-cockpit surfaces remain.
+2026-07-17. Its additive topic/conversation store, local API, scoped leases,
+managed persistent Pi RPC bridge, sanitized reconnect stream, and first
+provenance-linked task mutation are implemented. Further task-graph tools,
+repository/source intake, custody, and cockpit surfaces remain.
 
 Scope:
 
@@ -60,7 +61,9 @@ Scope:
   including new-project discovery, repository intake, and read-only external
   work-item snapshots;
 - usable project/task creation, editing, assignment, dependencies, attention queue, and phase selection;
-- persistent PTY with resize, reconnect, scrollback, and tmux/cmux attach information;
+- persistent Pi RPC conversation reconnect plus tmux/cmux/SSH attach
+  information; a browser PTY is conditional on D-043 and a demonstrated
+  workflow gap;
 - task workspace with diffs, tests, review, artifacts, context snapshots, decisions, and raw evidence;
 - host-owned checkpoint/commit operations and manual merge preparation;
 - centrally assigned per-run provider/model selection and current run/resource

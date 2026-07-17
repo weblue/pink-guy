@@ -1,10 +1,10 @@
 # Boss Man v2 current state
 
-Status: Phase 1 in progress — orchestrator conversation scope approved
+Status: Phase 1 in progress — managed orchestrator conversations underway
 
 Last updated: 2026-07-17
 
-Branch: `codex/phase1-local-control-loop`
+Branch: `codex/phase1-orchestrator-conversations`
 
 ## Current position
 
@@ -19,21 +19,23 @@ command state without becoming chat-first. The owner can now create a
 revision-bound task with acceptance criteria and atomically assign/schedule
 one explicit agent phase from the board.
 
-The next product direction is now explicit: a durable scoped orchestrator
-conversation should be the primary way to create and refine work. It must
+The active product direction is now implemented through its first runtime
+boundary: a durable scoped orchestrator conversation is the primary way to
+create and refine work. It must
 support a pre-repository top-level topic, existing private repository intake,
 optional owner description, and immutable external work-item snapshots such
 as Jira. The board remains authoritative and direct task controls remain a
 fast path. The owner approved the first-class topic, system-intake
 orchestrator, and read-only source-snapshot directions as D-039 through D-041
-on 2026-07-17. The slice is ready for implementation.
+on 2026-07-17. The topic/turn substrate, persistent Pi RPC bridge, sanitized
+event projection, and first provenance-linked task mutation are implemented.
 
 ## Capability map
 
 | Area | Current capability | Remaining boundary |
 |---|---|---|
 | Authority and tasks | One central Node API owns the SQLite task projection, capability-scoped agent mutations, audited loopback-owner task creation/scheduling, review, protected decisions, validation, merge-request records, and per-project orchestrator leases. Scheduling atomically assigns the task, moves it to `in_progress`, and queues one phase-scoped command. The durable FIFO command lifecycle supports idempotent enqueue, project-scoped single claim, structured success/failure, and no-replay reconciliation after lease expiry/release. | Task description/criteria editing, dependencies, stop/reconcile commands, and attention UX remain Phase 1. Actual merge/rebase/push is Phase 2. |
-| Pi sessions | Upstream Pi runs in RPC mode inside the recorded task container. Native JSONL lifecycle, model-less resume/import, child provenance, blocking pre-compaction custody, one owner-authorized OpenAI Codex turn, native-byte preservation, and C0-04 bundle-child consumption pass. Pi 0.80.9 accepts explicit provider/model selection at startup and model changes through RPC. | Boss Man has not yet implemented the persisted per-run model policy or effective-model verification. True in-flight RPC reattachment and production session controls also remain. |
+| Pi sessions | Upstream Pi runs in RPC mode inside recorded task containers and as a host-managed persistent orchestrator session. Native JSONL lifecycle, model-less resume/import, child provenance, blocking task-session pre-compaction custody, one owner-authorized OpenAI Codex turn, and C0-04 bundle-child consumption pass. Orchestrator conversation runs persist their effective provider/model/thinking policy and native session path; deterministic two-turn coverage proves no transcript resend. | Conversation pre-compaction custody, live effective-model verification, true in-flight RPC reattachment, and production session controls remain. |
 | Containers | The daemon creates, inspects, stops, and removes pinned Linux/ARM64 containers with a non-root user, read-only root, resource limits, minimal mounts, and no Docker socket. Restart reconciliation proves recorded ID, image, label, and liveness before cleanup. | True process reattachment and explicit production egress policy remain. Containers are damage containment, not a malicious-code boundary. |
 | Git and workspaces | The daemon creates a worktree; the container edits files without usable shared Git metadata. Capability routes expose host-generated status/diff and idempotent host-owned checkpoint/commit requests with provenance trailers. A commit made immediately before daemon loss is recovered from parent/provenance identity without duplication. | Checkpoint-versus-final-commit policy, actual merge/rebase/push, conflicts, and worktree cleanup remain. |
 | Credentials | A human-owned auth file is materialized read-only per run, copied into private writable Pi state, checksum-verified, concurrency-limited to one for OAuth, and both run copies are deleted on a normal stop. Synthetic canaries and one owner-authorized OpenAI Codex turn pass without changing the canonical source. Reconciliation deletes known per-run copies. | Post-crash canonical-checksum receipt and OAuth refresh reconciliation or a credential broker are required before parallel OAuth-backed runs. |
@@ -43,7 +45,7 @@ on 2026-07-17. The slice is ready for implementation.
 | Restart recovery | SQLite records immutable intent/completion/reconciliation receipts. Startup checks container identity/liveness, pauses verified idle runs, holds uncertain response/tool effects without replay, recovers checksum-valid snapshots, and recovers parent/provenance-valid Git commits without duplication. | The prototype conservatively stops the old container; true Pi RPC reattachment and host/Docker power-cycle coverage remain production work. |
 | Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
 | Developer cockpit | Product behavior and a task-first information architecture are specified. The loopback Phase 1 shell shows projects, orchestrator leases, the multi-project board, sessions, recent durable commands, context status, and terminal/attach positioning without a chat-first layout. It creates revision-bound tasks and schedules implementation/test/review agents from ready/backlog cards. | Task detail editing/dependencies/reconciliation, PTY/reconnect, diffs/tests/review/context inspectors, and optional trusted-LAN access without application auth remain. |
-| Orchestrator interaction | First-class topic and conversation projections, centrally assigned model policy, ordered owner turns/events, scoped system-intake/project leases, one-turn-per-conversation claiming, and no-replay lease-loss reconciliation are implemented behind local APIs. D-039 through D-042 govern the slice. | The managed Pi planning session, structured task-delta tools, conversation custody extension, repository import, source snapshots, and cockpit workspace remain. |
+| Orchestrator interaction | First-class topic/conversation projections, central model policy, ordered turns/events, scoped leases, one-turn claiming, no-replay lease-loss reconciliation, persistent managed Pi RPC runs, sanitized reconnect streams, and provenance-linked task creation are implemented behind local APIs. Two-turn deterministic coverage proves no history resend. D-039 through D-042 govern the accepted slice; D-043 proposes the browser/terminal boundary. | Further task-graph tools, conversation custody, repository import, source snapshots, the cockpit workspace, and one owner-authorized live Pi turn remain. |
 
 ## Artifact and data layout
 
@@ -93,16 +95,18 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 
 ## Next steps
 
-1. **Phase 1 — orchestrator Pi and task deltas.** Connect claimed durable
-   turns to a managed Pi planning session, narrow orchestrator tools,
-   provenance-linked task changes, and model-less custody.
+1. **Phase 1 — orchestrator task deltas and custody.** Expand the landed
+   managed Pi bridge beyond task creation to update/split/dependency,
+   assumption, and decision tools, then add model-less conversation custody.
 2. **Phase 1 — repository and source intake.** Add host-owned repository URL
    import plus immutable manual/Jira snapshots with no write-back.
 3. **Phase 1 — task detail and reconciliation.** Add description/acceptance
    editing, dependencies, activity, command failure detail, and explicit owner
    reconciliation actions.
-4. **Phase 1 — terminal and workspace surfaces.** Add a persistent
-   PTY/reconnect path, then diff/test/review/context/artifact inspectors.
+4. **Phase 1 — conversation and workspace surfaces.** Render the landed Pi RPC
+   stream beside task/source/decision state, then add
+   diff/test/review/context/artifact inspectors. A browser PTY is conditional
+   on D-043 rather than assumed.
 5. **Phase 2 — autonomy, recovery, and portability.** Add merge/rebase/push, recovery UX, retention/backup, resource limits, and second-host reproduction.
 6. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally configured password verifier or API-key hash after the local product is mature.
 
@@ -127,9 +131,17 @@ Resolved or narrowed:
 - LiteLLM is deferred from v1. Boss Man centrally resolves and persists each
   orchestrator and task-subagent model assignment, supplies it to Pi at
   startup, and gates later changes behind a safe-boundary snapshot.
+- The managed conversation runtime sends each new owner message directly to
+  one persistent Pi native session and projects sanitized RPC events; it does
+  not rebuild or resend prior chat history.
 - The ASCII information architecture in `UI.md` is the C0-04 wireframe. Detailed interaction wireframes remain future design work.
 
 Still open, but assigned to explicit gates rather than blocking current work:
+
+- D-043 needs owner approval: use structured Pi RPC conversation UI as the
+  primary orchestrator surface, keep tmux/SSH as the exact-session fallback,
+  and defer a browser terminal emulator until a concrete missing workflow
+  justifies it.
 
 - **Credential refresh:** locked reconciliation versus a host broker before parallel OAuth runs.
 - **Recovery UX and reattachment:** how the owner resolves uncertain effects, how a paused session starts a new Pi RPC process, and whether true in-flight process reattachment is worth its operational complexity.

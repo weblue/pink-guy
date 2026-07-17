@@ -163,6 +163,45 @@ const projectCannotClaimIntake = await request("/api/orchestration/turns/claim",
   body: {},
 });
 assert(projectCannotClaimIntake.status === 204, "project lease claimed an unbound intake turn");
+const boundTurn = await request(`/api/conversations/${bound.value.conversation.id}/turns`, {
+  method: "POST",
+  idempotencyKey: "bound-turn",
+  body: { message: "Create the refined maintenance task." },
+});
+assert(boundTurn.status === 201, "bound conversation turn submission failed");
+const claimedBoundTurn = await request("/api/orchestration/turns/claim", {
+  method: "POST",
+  token: projectLease.value.token,
+  body: {},
+});
+assert(
+  claimedBoundTurn.status === 200 && claimedBoundTurn.value.turn.id === boundTurn.value.turn.id,
+  "project lease did not claim its bound conversation turn",
+);
+const createdFromConversation = await request(
+  `/api/orchestration/conversations/${bound.value.conversation.id}/task-mutations`,
+  {
+    method: "POST",
+    token: projectLease.value.token,
+    idempotencyKey: "conversation-created-task",
+    body: {
+      operation: "create",
+      title: "Implement the maintenance ticket",
+      acceptanceCriteria: ["The regression is covered by a deterministic test."],
+    },
+  },
+);
+assert(
+  createdFromConversation.status === 201
+    && createdFromConversation.value.task.origin.conversation_id === bound.value.conversation.id
+    && createdFromConversation.value.task.origin.turn_id === boundTurn.value.turn.id,
+  "conversation task mutation did not preserve exact turn provenance",
+);
+await request(`/api/orchestration/turns/${boundTurn.value.turn.id}/complete`, {
+  method: "POST",
+  token: projectLease.value.token,
+  body: { state: "completed", result: { taskId: createdFromConversation.value.task.id } },
+});
 
 const intakeLease = await request("/api/orchestration/leases", {
   method: "POST",
@@ -207,12 +246,12 @@ const completedFirst = await request(`/api/orchestration/turns/${first.value.tur
   method: "POST",
   token: intakeLease.value.token,
   body: {
-    state: "completed",
+    state: "waiting_for_owner",
     result: { summary: "Created a bounded draft task graph.", taskMutations: [] },
   },
 });
 assert(
-  completedFirst.status === 200 && completedFirst.value.turn.state === "completed",
+  completedFirst.status === 200 && completedFirst.value.turn.state === "waiting_for_owner",
   "claimed conversation turn did not complete",
 );
 const claimedSecond = await request("/api/orchestration/turns/claim", {
@@ -224,6 +263,20 @@ assert(
   claimedSecond.status === 200 && claimedSecond.value.turn.id === second.value.turn.id,
   "conversation queue did not preserve turn order",
 );
+const intakeCannotCreateTask = await request(
+  `/api/orchestration/conversations/${conversationId}/task-mutations`,
+  {
+    method: "POST",
+    token: intakeLease.value.token,
+    idempotencyKey: "unbound-task-create",
+    body: {
+      operation: "create",
+      title: "Must not exist",
+      acceptanceCriteria: [],
+    },
+  },
+);
+assert(intakeCannotCreateTask.status === 409, "an unbound topic created an executable task");
 
 const release = await request("/api/orchestration/leases/current", {
   method: "DELETE",
