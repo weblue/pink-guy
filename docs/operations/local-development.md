@@ -240,8 +240,10 @@ pre-compaction export, repository/source intake, plain-text prompt defaults,
 per-agent model routes, task detail, owner decisions, and command
 reconciliation now have first-class local controls. The fixed-revision
 implementation/checkpoint/test/review protocol, deterministic initial Ready
-dispatch, and its diff/test/review/context/artifact inspector are implemented;
-one live automatic-release acceptance smoke remains. D-043
+dispatch, and its diff/test/review/context/artifact inspector are implemented
+and live-dogfooded. The lease inspector shows active project/conversation
+leases by default and keeps inactive history in a collapsed audit section.
+D-043
 defers a browser PTY; tmux/SSH remains the current exact-session attach path.
 
 Watch the zero-provider baseline before scheduling live work:

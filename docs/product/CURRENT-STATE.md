@@ -1,15 +1,15 @@
 # Boss Man v2 current state
 
-Status: Phase 1 implementation and repository dogfood complete — one live
-automatic-release acceptance smoke remains
+Status: Phase 1 complete — accepted for supervised local development
 
 Last updated: 2026-07-18
 
 ## Current position
 
 The thin direct-Pi foundation is selected and Phase 0 is complete for the
-local-smoke profile. Phase 1 has begun with the durable local control loop. The
-central API can enqueue idempotent phase-scoped commands, let only the active
+local-smoke profile. Phase 1 closed on 2026-07-18 with the durable local
+control loop. The central API can enqueue idempotent phase-scoped commands,
+let only the active
 project orchestrator claim them in FIFO order, retain structured terminal
 results, and hold claimed work for explicit reconciliation after lease loss.
 The project-orchestrator process now consumes `start_task` commands through the
@@ -78,6 +78,15 @@ checks, atomic command creation, and sub-agent dispatch belong to the central
 scheduler. Existing tasks remain manual; the cockpit and terminal show rank
 and wait reasons. Direct phase scheduling remains an explicit recovery path.
 
+The Phase 1 closure task
+`94613637-58af-4ba5-ae4e-b03503bf5a54` proved that path live: the orchestrator
+released it, the central scheduler dispatched implementation two milliseconds
+later, validation passed the resulting fixed revision, independent review
+approved it, and completion recorded the merge request. Its lease-observability
+change was merged in PR #15. The same run exposed the first Phase 2 recovery
+priority: a transport-failed command left its Pi run alive long enough to emit
+late evidence, requiring the owner to use supported stop/reset controls.
+
 Task lifecycle is now explicit and orthogonal to execution status. Executable
 tasks can run phases; umbrella and intake artifacts cannot. Tags are optional,
 normalized organization labels. Archive/restore operations are versioned and
@@ -116,18 +125,16 @@ the runtime structure.
 | Restart recovery | SQLite records immutable intent/completion/reconciliation receipts. Startup checks container identity/liveness, pauses verified idle runs, holds uncertain response/tool effects without replay, recovers checksum-valid snapshots, and recovers parent/provenance-valid Git commits without duplication. | The prototype conservatively stops the old container; true Pi RPC reattachment and host/Docker power-cycle coverage remain production work. |
 | Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
 | Developer cockpit | The loopback cockpit combines persistent Pi conversation, multi-project board, repository/source intake, prompt/model controls, fixed-revision phase controls, workspace/diff/test/review/context/artifact inspectors, command recovery, and tmux/SSH guidance. | Attention aggregation, richer artifact navigation, and owner dependency editing remain usage-driven. D-043 defers a browser PTY. |
-| Orchestrator interaction | First-class topic/conversation projections, central model/prompt policy, scoped leases, persistent Pi RPC, audited task-graph/lifecycle/dispatch mutations, intake-to-project transfer, per-subagent route selection, deterministic Ready selection, settled implementation/test/review commands, and model-less automatic phase continuation are implemented. Passing independent review completes the task only when all policy gates pass. | One live automatic-release acceptance smoke remains. Source refresh semantics and wider measured resource-pressure/concurrency controls are later work; Pi refines and releases work but does not pop the runnable queue. |
+| Orchestrator interaction | First-class topic/conversation projections, central model/prompt policy, scoped leases, persistent Pi RPC, audited task-graph/lifecycle/dispatch mutations, intake-to-project transfer, per-subagent route selection, deterministic Ready selection, settled implementation/test/review commands, and model-less automatic phase continuation are implemented and live-dogfooded. Passing independent review completes the task only when all policy gates pass. | Couple command failure to live-run cancellation/quarantine and reconcile late evidence explicitly. Source refresh semantics and wider measured resource-pressure/concurrency controls are later work; Pi refines and releases work but does not pop the runnable queue. |
 
 ## Adoption readiness
 
-Boss Man is currently a **development preview suitable for supervised
-dogfooding**, not yet a full-time replacement for a direct Codex or Pi coding
-session.
+Boss Man is now a **supervised local development tool**, not yet a dependable
+full-time replacement for a direct Codex or Pi coding session.
 
 | Checkpoint | Required capability | Recommended use |
 |---|---|---|
-| Current | Durable local API, project conversations, shared browser/terminal view, fixed-revision phase workflow, evidence inspector, and managed runtime/Git/context foundations | Begin supervised real-repository workflow dogfooding alongside a direct coding client |
-| Phase 1 exit | Complete implementation → fixed checkpoint → test → review flow across multiple real repositories, with remaining custody/attention gaps closed | Prefer Boss Man for supervised local development; retain a direct client as recovery fallback |
+| Phase 1 (current) | Complete implementation → fixed checkpoint → test → review flow across multiple real repositories, with deterministic initial dispatch, context custody, and inspectable evidence | Prefer Boss Man for supervised local development; retain a direct client as recovery fallback |
 | Phase 2 exit | Dependable restart/resume, merge/rebase/push/conflicts/cleanup, credential concurrency, retention/backup, measured resource limits, provider drills, and second-host reproduction | Use Boss Man as the full-time local coding environment |
 | Phase 3 exit | Authenticated SWAG deployment with proxy, session/key, streaming, reconnect, rate-limit, and recovery controls | Use the intended remote-first experience |
 
@@ -183,23 +190,18 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 The executable checklist is
 [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
-1. **Publish and merge D-046.** Rerun all 14 model-less probes from `main`.
-2. **Run one live automatic-release acceptance smoke.** Use a bounded task
-   with deterministic validation, let the Pi orchestrator refine and release
-   it, and observe model-less implementation selection followed by automatic
-   test and review. Do not use the manual phase override.
-3. **Fix only evidence-backed Phase 1 blockers.** Prioritize failures that
-   prevent release, dispatch, phase advancement, validation/review, custody,
-   or audit.
-   Source refresh UX, owner dependency editing, attention aggregation, richer
-   artifact navigation, and a workspace shell are not Phase 1 blockers unless
-   dogfooding proves otherwise.
-4. **Close Phase 1.** Record the automatic-release receipt, update results/runbooks,
-   and declare the supervised local workflow the preferred development path
-   while retaining direct Pi/Codex as recovery.
-5. **Phase 2 — autonomy, recovery, and portability.** Add
-   merge/rebase/push, recovery UX, credential concurrency, retention/backup,
-   measured resource limits, and second-host reproduction.
+1. **Make command/run settlement atomic and observable.** A failed command
+   must cancel or quarantine its live Pi run, and late checkpoints must enter
+   an explicit accept/discard reconciliation flow instead of racing reset.
+2. **Finish host-owned Git integration.** Add policy-governed
+   merge/rebase/push, conflict handling, and settled worktree cleanup.
+3. **Measure concurrency and pressure.** Replace conservative one-command
+   capacity with evidence-backed provider, project, Docker, memory, and host
+   limits.
+4. **Add retention and portability operations.** Implement deletion/quotas,
+   backup/restore, and a clean second-ARM64-host reproduction.
+5. **Run provider failure and model-switch drills.** Exercise configured
+   direct Pi routes, including a local route when one is available.
 6. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
    configured password verifier or API-key hash after the local product is
    mature.
@@ -241,7 +243,11 @@ Still open, but assigned to explicit gates rather than blocking current work:
 - **Credential concurrency:** keep OAuth-backed task runs serialized and
   measure overlapping orchestrator/task provider turns during dogfooding
   before changing the policy.
-- **Recovery UX and reattachment:** how the owner resolves uncertain effects, how a paused session starts a new Pi RPC process, and whether true in-flight process reattachment is worth its operational complexity.
+- **Recovery UX and reattachment:** the closure smoke proved that command
+  failure can race a still-running Pi session and late checkpoint. Phase 2
+  must define cancellation/quarantine plus explicit late-evidence
+  accept/discard semantics, then decide whether true in-flight process
+  reattachment is worth its operational complexity.
 - **Optional workspace shell:** D-043 rejects a browser PTY as a Phase 1
   requirement. Add a durable interactive shell only if dogfooding exposes work
   that cannot be performed through Pi RPC, cockpit controls, or tmux/SSH.

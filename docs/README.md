@@ -42,17 +42,15 @@ verification results.
 
 P1-1 through P1-3 are usable. P1-4 now has its fixed-revision phase protocol,
 model-less automatic test/review continuation, workspace inspector, and
-observer baseline and deterministic initial Ready dispatch. The remaining
-Phase 1 evidence is one live automatic-release smoke through the normal Pi
-orchestrator and project daemon.
+observer baseline and deterministic initial Ready dispatch. A live
+orchestrator-release task passed implementation, fixed-revision validation,
+independent review, and completion, so Phase 1 is complete.
 
 ## Adoption checkpoints
 
-- **Dogfood now:** use Boss Man alongside a direct coding client for
-  noncritical, supervised work.
-- **Supervised daily driver:** complete Phase 1 and validate the full
-  implementation → fixed checkpoint → test → review flow across multiple real
-  repositories.
+- **Supervised daily driver:** Phase 1 is complete; prefer Boss Man for
+  noncritical supervised local work while retaining a direct client for
+  recovery.
 - **Full-time local replacement:** complete Phase 2 recovery, Git completion,
   credential/concurrency, backup, and portability gates.
 - **Remote-first operation:** complete Phase 3 authentication and SWAG

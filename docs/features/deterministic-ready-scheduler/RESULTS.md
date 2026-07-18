@@ -1,6 +1,6 @@
 # Deterministic Ready scheduler results
 
-Status: Model-less implementation verified; one live release-flow dogfood remains
+Status: Implemented and verified by live release-flow dogfood
 
 Last updated: 2026-07-18
 
@@ -37,12 +37,26 @@ measures provider and host concurrency before widening those values.
 - dispatch after capacity release; and
 - reconciliation after an API restart.
 
-The probe makes zero provider requests. The full core suite now contains 14
+The probe makes zero provider requests. The full core suite now contains 15
 model-less Phase 1 probes.
 
-## Remaining evidence
+## Live acceptance receipt
 
-Use the normal cockpit or orchestrator release tool on a small real repository
-task and observe automatic implementation → test → review settlement. This is
-an acceptance smoke for the integrated Pi tool and live daemon; it does not
-require another scheduler design decision.
+Task `94613637-58af-4ba5-ae4e-b03503bf5a54` was created and released through
+the normal persistent Pi orchestrator conversation with automatic policy and
+priority 10. The release event at `2026-07-18T22:03:55.734Z` was followed by
+the scheduler event at `2026-07-18T22:03:55.736Z`, proving that the LLM did
+not select or pop the runnable queue.
+
+Implementation checkpointed
+`392df1763419a143523dd3a9512f8371bc6a2de1`. Independent validation passed
+the 15-probe core suite, independent review approved the same revision with no
+findings, completion moved the task to Done, and merge request
+`4c0eb5af-e68a-470f-8aba-0939320f2c17` was recorded. The resulting change was
+merged as [PR #15](https://github.com/weblue/pink-guy/pull/15).
+
+The implementation command's transport failed while its Pi run continued and
+later emitted the accepted checkpoint. The owner used the normal stop and
+reset controls before automatic validation/review settlement. This is a
+Phase 2 recovery defect: command failure must cancel or quarantine the live
+run, and late evidence must have an explicit reconciliation path.
