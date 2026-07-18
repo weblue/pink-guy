@@ -182,14 +182,15 @@ resolve(reference, credential_profile) -> source identity
 fetch(source identity, cursor?) -> immutable snapshot + attachment metadata
 ```
 
-The first production adapter can target Jira REST APIs. Credentials remain in
-deployment-owned host configuration and are materialized only into the source
-service request, never into Pi context. The orchestrator receives a normalized,
-checksum-bound snapshot with provenance and trust labels.
+Provider-specific adapters may be added only when a concrete intake need
+appears. Credentials remain in deployment-owned host configuration and are
+materialized only into a source-service request, never into Pi context. The
+orchestrator receives a normalized, checksum-bound snapshot with provenance
+and trust labels.
 
 The first release performs explicit/manual refresh. It has no webhooks,
-polling daemon, or Jira write-back. Pasted source text uses the same snapshot
-schema with `provider=manual`.
+polling daemon, or source-system write-back. Pasted source text uses the same
+snapshot schema with `provider=manual`.
 
 ### 6. API and cockpit
 
@@ -259,7 +260,7 @@ flowchart TD
 - Invariants 5-6: temporary local Git remotes prove URL dedup, clone receipts,
   current revision, missing-auth failure, and zero credentials in Pi/container
   state.
-- Invariants 7-9, 21: fake Jira/manual adapters prove immutable snapshot
+- Invariants 7-9, 21: fake provider/manual adapters prove immutable snapshot
   revisions, refresh diffs, provenance, prompt-injection containment, and no
   write-back.
 - Invariants 10-15: deterministic Pi provider plus registered orchestrator
@@ -318,5 +319,6 @@ order:
    that hosts multiple topic conversations, then transfers a conversation to
    the one project orchestrator after binding. Approved as D-040 on 2026-07-17.
 3. **External source direction:** use immutable, manually refreshed,
-   read-only snapshots for the first release; defer Jira write-back, webhooks,
-   and polling. Approved as D-041 on 2026-07-17.
+   read-only snapshots for the first release; provider-specific sync,
+   write-back, webhooks, and polling are not part of the current design.
+   Approved as D-041 on 2026-07-17 and narrowed on 2026-07-18.

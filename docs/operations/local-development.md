@@ -5,8 +5,8 @@ Status: Phase 1 local cockpit and shared terminal client
 The current application can be served locally for multi-project observability
 and durable project-orchestrator command delivery. The local-smoke profile
 intentionally has no application authentication and binds only to loopback.
-Trusted-LAN binding is later Phase 1 work; authenticated SWAG/public access is
-Phase 3.
+Authenticated SWAG/public access is Phase 3; there is no unauthenticated
+network-listener profile.
 
 ## Prerequisites
 
@@ -16,7 +16,9 @@ Phase 3.
 - Pi on `PATH`;
 - Docker Desktop only when running task-container probes or starting a managed task run.
 
-No Compose file is required. SQLite is embedded, project orchestrators are dynamic per-project processes, and task containers are created per run rather than treated as fixed downstream services.
+SQLite is embedded, project orchestrators are dynamic per-project processes,
+and the host daemon creates task containers per run. Task containers do not
+receive the Docker socket and do not spawn other containers.
 
 ## Serve the central API and operator shell
 
@@ -44,9 +46,8 @@ npm start -- \
 Open [http://127.0.0.1:4310](http://127.0.0.1:4310). The central API binds to `127.0.0.1` intentionally. Runtime state is stored under the selected `--state` directory and retained across restarts.
 
 No password or API key is required in this profile. Do not change the listener
-to `0.0.0.0` as a shortcut. Trusted-LAN exposure is not a Phase 1 requirement;
-use loopback until an authenticated remote profile or a separately approved
-private-interface/CIDR contract exists.
+to `0.0.0.0` as a shortcut. Use loopback until the authenticated remote
+profile exists.
 
 Provider/model/thinking are central defaults persisted on newly created
 orchestrator conversations. The deterministic defaults are
@@ -146,7 +147,7 @@ npm run boss -- model --topic TOPIC_ID --provider PROVIDER --model MODEL_ID --th
 
 Repository import creates a host-owned clone under the selected state root
 and opens its durable project topic. The browser also accepts an optional
-description and immutable manual/Jira source snapshot. SSH authentication is
+description and immutable generic source snapshot. SSH authentication is
 performed by host Git; never paste private keys or provider credentials into a
 topic or source snapshot.
 
@@ -245,7 +246,8 @@ node ./tests/probes/probe-direct-context-custody.mjs \
   /tmp/boss-man-context-fixture
 ```
 
-The context probe uses no provider, network request, embedding, or vector index.
+The context probe uses no provider, network request, or derived retrieval
+service.
 
 To exercise the container path, first build the pinned image and then follow
 the [container test instructions](testing.md#container-tests).

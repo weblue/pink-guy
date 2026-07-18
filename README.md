@@ -111,11 +111,19 @@ Model selection is a central, observable policy—not an agent-controlled
 choice. Boss Man persists the provider, model, and thinking level when a
 conversation is created and passes that exact route to Pi.
 
+Conversation routes can be selected and changed today. Explicit per-task or
+per-phase sub-agent route assignment is the next Phase 1 slice; until it lands,
+task agents inherit the daemon startup route.
+
 List models available to the authenticated Pi installation:
 
 ```sh
 pi --list-models
 ```
+
+A local model uses the same provider/model fields when it is exposed by the
+configured Pi installation; Boss Man does not require a separate routing
+service.
 
 Select the default route for newly created conversations when starting Boss
 Man:

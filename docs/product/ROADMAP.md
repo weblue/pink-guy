@@ -11,7 +11,6 @@ This is the canonical phase sequence. Phase 0 research artifacts remain useful e
 | Profile | Intended access | Listener | Application authentication |
 |---|---|---|---|
 | Local smoke | Browser and tools on the Boss Man Mac | Loopback only | None |
-| Trusted LAN development (optional) | Explicitly selected private LAN interface and allowlisted private CIDRs | Private address only; never a public wildcard | Deferred unless local dogfooding demonstrates a need before Phase 3 |
 | Remote | SWAG HTTPS subdomain or another explicitly approved remote edge | Private upstream reachable only from the trusted proxy/LAN | Required |
 
 The application must select a profile explicitly at startup. It must not decide that a request is “local” merely from an untrusted `X-Forwarded-For` header. Enabling remote exposure is a human-approved deployment change.
@@ -24,7 +23,7 @@ Purpose: prove the hard architectural seams and produce a locally runnable opera
 
 Completed outcomes:
 
-- direct Pi foundation selected over an Agent of Empires fork;
+- direct Pi foundation selected;
 - authoritative task/policy transactions;
 - daemon-owned containers, worktrees, Git capabilities, credentials, and RTK evidence;
 - conservative restart/side-effect reconciliation;
@@ -79,8 +78,8 @@ Scope:
   information; D-043 defers a browser PTY until a demonstrated workflow gap;
 - task workspace with diffs, tests, review, artifacts, context snapshots, decisions, and raw evidence;
 - host-owned checkpoint/commit operations and manual merge preparation;
-- centrally assigned per-run provider/model selection and current run/resource
-  observability;
+- centrally assigned per-run provider/model selection, including local-model
+  routes, and current run/resource observability;
 - desktop browser tests and local smoke runbook.
 
 Exit: the owner can start or reopen a scoped orchestrator conversation, turn a
@@ -104,7 +103,8 @@ Scope:
 - policy-governed merge/rebase/push, conflict handling, and worktree cleanup;
 - orchestrator restart recovery, paused-session resume, and uncertain-effect resolution UX;
 - retention deletion, quotas, backup/restore, encryption expectations, and storage-pressure behavior;
-- provider failure drills, switch recovery, and optional paid fallback decision;
+- provider failure drills and switch recovery across configured direct Pi
+  routes;
 - measured global/per-project concurrency and host-pressure limits for the 64 GB M1 Max;
 - clean second-ARM64-host reproduction and migration rehearsal;
 - security review of artifact, capability, optional workspace-shell, and
@@ -144,7 +144,4 @@ the home-server SWAG edge.
 
 - team accounts and multi-tenant authorization;
 - public registration;
-- automatic OpenRouter failover unless Phase 2 measurements justify it;
-- semantic/vector/graph memory beyond the rebuildable FTS baseline;
-- Slack/email notifications;
 - a second public SSH/router path to the Mac.

@@ -7,7 +7,7 @@ Last updated: 2026-07-17
 ## Summary
 
 The owner can bring an existing Git repository into Boss Man without startup
-seed flags, attach immutable manual or Jira context, edit authoritative task
+seed flags, attach immutable external-source context, edit authoritative task
 detail, resolve protected decisions, stop/resume a task run, and explicitly
 retry or reset a failed or uncertain orchestrator command.
 
@@ -19,7 +19,7 @@ retry or reset a failed or uncertain orchestrator command.
   its durable topic instead of cloning another copy.
 - Git authentication remains host-owned; credentials are not submitted in the
   API payload or copied into task containers.
-- Manual and Jira inputs are immutable snapshots with content checksums and no
+- External inputs are immutable snapshots with content checksums and no
   write-back.
 - Task title, description, and acceptance criteria use optimistic versions
   and ordered audit events.
@@ -31,8 +31,8 @@ retry or reset a failed or uncertain orchestrator command.
 
 ## Remaining boundary
 
-- Remote repository-host integrations, refresh/diff semantics for ticket
-  snapshots, and Jira API ingestion.
+- Remote repository-host integrations and refresh/diff semantics for external
+  source snapshots.
 - Owner dependency editing, a consolidated attention queue, and richer
   diff/test/review/context/artifact inspectors.
 - Full merge/rebase/push and worktree cleanup, which remain Phase 2.
