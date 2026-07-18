@@ -175,3 +175,14 @@ usage-driven:
 No browser terminal or full browser IDE is required to close Phase 1. A
 polished chat screen is not a substitute for task, evidence, and risk
 observability.
+
+## Visual system notes
+
+- The cockpit uses a shared semantic palette rather than one-off colors for each
+  region: cyan/green for primary status, blue for navigation and state, and
+  warmer accents for focus and warnings.
+- Spacing now follows a tighter, repeated rhythm inside panels, cards, and
+  control rows so future screens should prefer the same gap-based layout over
+  ad hoc top margins.
+- The color lift stays intentionally local to the cockpit shell; new surfaces
+  should reuse the same tokens instead of introducing unrelated accents.
