@@ -51,9 +51,9 @@ Figma: none provided.
    repository is available. The description is treated as owner context and
    remains distinguishable from facts inferred from repository content.
 
-7. External work items use a generic source attachment. Jira is the first
-   intended private-source adapter, but a topic may also retain a URL, pasted
-   text, or another supported provider's item.
+7. External work items use a generic source attachment. A topic may retain a
+   URL, pasted text, or a supported provider's item without coupling the
+   conversation model to a named ticket system.
 
 8. Importing a work item creates a timestamped, checksum-bound source snapshot
    containing its provider, external identifier, canonical URL, available
@@ -61,9 +61,8 @@ Figma: none provided.
    a new revision and visible diff; it never silently rewrites the prior
    snapshot.
 
-9. External sources are read-only by default. Creating or editing Boss Man
-   tasks does not modify Jira or another source system unless a later,
-   separately approved write-back feature is enabled.
+9. External sources are read-only. Creating or editing Boss Man tasks does not
+   modify a source system.
 
 10. Before asking the owner questions, the orchestrator reads the supplied
     description, current source snapshots, applicable project memory, and
@@ -168,7 +167,7 @@ Figma: none provided.
 
 - making the entire dashboard a conversation list;
 - replacing the task board, task workspace, or direct task API;
-- Jira write-back or two-way issue synchronization;
+- source-system write-back or two-way synchronization;
 - allowing a topic without a repository to run code-changing agents;
 - letting source content act as trusted system instructions;
 - supporting a harness other than Pi.

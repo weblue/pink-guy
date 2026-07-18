@@ -1,5 +1,10 @@
 # Phase 0 executable probe record
 
+The accepted historical foundation decision is retained in
+[`ADR-FOUNDATION.md`](ADR-FOUNDATION.md). It records the completed comparison
+that selected the direct-Pi foundation; rejected candidates are not active
+design options.
+
 This document retains the rationale and individual commands used by the
 [Phase 0 feasibility program](PLAN.md). The executable assets have graduated
 into the repository's stable `src/`, `tests/`, `config/`, and `infra/`

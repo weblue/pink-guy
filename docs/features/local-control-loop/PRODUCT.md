@@ -49,4 +49,4 @@ persistent terminals, and the full task workspace are added.
 - stop/restart commands and in-flight Pi process reattachment;
 - persistent PTY controls;
 - merge, rebase, push, or autonomous retry;
-- trusted-LAN and remote exposure.
+- network exposure or remote access.

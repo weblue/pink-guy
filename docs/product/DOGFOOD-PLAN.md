@@ -24,8 +24,8 @@ cockpit, project orchestrators, Pi task agents, and audited controls.
 
 ## Scenarios
 
-1. **Maintenance repository:** one refined, low-risk bug or small Jira-style
-   ticket with deterministic regression coverage.
+1. **Maintenance repository:** one refined, low-risk bug or external work-item
+   snapshot with deterministic regression coverage.
 2. **New work:** one bounded feature or prototype whose orchestrator must
    clarify material ambiguity and create or refine the task graph.
 
@@ -75,14 +75,16 @@ Phase 1 can close when both scenarios have:
 - a human smoke result; and
 - documented defects classified as fixed, Phase 2, or explicitly deferred.
 
-## Not required for dogfooding
+## Deliberate boundaries
 
-- browser terminal emulator or embedded IDE;
-- Agent of Empires fork or runtime dependency;
-- LiteLLM or automatic OpenRouter fallback;
-- semantic/vector RAG beyond the current canonical evidence plus FTS baseline;
-- Jira API synchronization or write-back;
-- Docker Compose without a stable separately operated service;
-- trusted-LAN or SWAG exposure;
-- Slack/email notifications; or
-- automatic merge/rebase/push.
+- Use Pi's recorded per-run provider/model route, including a local model when
+  selected; no separate routing service is assumed.
+- Keep artifacts, context, native sessions, and memories in canonical storage;
+  FTS remains the model-less retrieval projection.
+- The host daemon creates task containers dynamically. Task containers do not
+  receive the Docker socket or create child containers.
+- External work enters through immutable generic source snapshots with no
+  synchronization contract.
+- Loopback is the only Phase 1 listener.
+- Completion and merge-request creation may be automatic after independent
+  review; merge/rebase/push remains Phase 2.

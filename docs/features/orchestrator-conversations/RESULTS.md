@@ -142,7 +142,7 @@ and deleted its private credential copy on shutdown.
 ## Remaining in the approved slice
 
 Conversation custody for model switching, repository import/dedup, immutable
-manual/Jira snapshots, task detail, and owner decision resolution are now
+external-source snapshots, task detail, and owner decision resolution are now
 implemented by later Phase 1 slices. Custody before orchestrator compaction
 and scope transfer plus deeper source/decision/custody/workspace inspectors
 remain.

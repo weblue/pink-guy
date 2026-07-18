@@ -1,6 +1,6 @@
 # ADR: Boss Man v2 foundation
 
-Status: Accepted
+Status: Accepted historical Phase 0 record
 
 Date: 2026-07-16
 

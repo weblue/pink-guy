@@ -1,8 +1,8 @@
 # Boss Man v2 technical design
 
-Status: Direct-Pi foundation approved; Phase 0 closure
+Status: Direct-Pi Phase 1 implementation
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## Context and evidence
 
@@ -11,8 +11,6 @@ This design is based on the following upstream revisions:
 - [`weblue/boss-man@59f8282`](https://github.com/weblue/boss-man/tree/59f8282654f9b4cea90f2ba830aa6d56106e25b4)
 - [`weblue/inspector-gadget@3df3938`](https://github.com/weblue/inspector-gadget/tree/3df39382ceb147aa411f9c578ef4131fc91912f2)
 - [`earendil-works/pi@v0.80.9`](https://github.com/earendil-works/pi/tree/2d16f92973230a7e095aa984f150ba8702784f50)
-- [`agent-of-empires@90855a5`](https://github.com/agent-of-empires/agent-of-empires/tree/90855a59360f46652786a49f54a56df002d8ef98)
-- [`svkozak/pi-acp@49d6ec8`](https://github.com/svkozak/pi-acp/tree/49d6ec804d40b52317d873360654054c5d2387a3)
 
 The current Boss Man already has a useful SQLite task graph and event history, an SSE-backed web UI, Docker/Sandcastle execution, and worktree-based runs. Its continuation mechanism starts a fresh harness process from a prompt assembled from a rolling LLM summary, recent turns, tasks, and memories. The raw events remain available, but they are not treated as a portable, versioned session artifact.
 
@@ -22,17 +20,16 @@ Inspector Gadget demonstrates useful remote host setup through Tailscale, SSH, t
 
 Inspector Gadget also pins and installs RTK, wires its Pi extension, and instructs agents to use RTK filters. Current RTK supports Pi command interception, full-output tee artifacts, bypasses, and local savings metrics. This is directly useful when lossless raw evidence remains separate from filtered model context.
 
-The UI/runtime landscape changed the foundation calculation. [Agent of Empires](https://github.com/agent-of-empires/agent-of-empires) already provides an MIT-licensed PWA, terminal and structured views, diffs, persistent workers, worktrees, container adapters, reverse-proxy hardening, an HTTP API, and plugin surfaces. The MIT-licensed [`pi-acp`](https://github.com/svkozak/pi-acp) adapter translates ACP to `pi --mode rpc` while preserving Pi-native sessions. Together they are a credible foundation candidate that did not exist in the original Boss Man design.
-
 The Pi ecosystem now also contains several local memory extensions. [`pi-persistent-intelligence`](https://github.com/Mont3ll/pi-persistent-intelligence) is the closest architectural match because it uses canonical JSONL, rendered Markdown, evidence, tombstones, and patch-governed durable changes. It is a useful spike candidate, but its current maturity is too low to make Boss Man's custody or recovery guarantees depend on it.
 
 ## Architectural decision
 
 Build a Pi-native control plane that reuses the proven product concepts from Boss Man, but replace the execution, UI, task-authorization, and context seams instead of incrementally wrapping Sandcastle.
 
-Phase 0 compared two equal candidates: (A) a bounded Agent of Empires core fork running Pi through `pi-acp`, and (B) a direct Pi RPC control plane using SQLite, a task-first web cockpit, the Docker Engine API, and a host-owned Git service. The owner selected the direct-Pi foundation on 2026-07-16. `PHASE0-RESULTS.md` records the evidence and remaining closure gates; `ADR-FOUNDATION.md` records the accepted decision.
-
-Boss Man must have one durable lifecycle authority: the central API and its SQLite transaction log. One leased orchestrator process per project may coordinate its task agents, but it never owns a competing durable database. An unchanged Agent of Empires daemon beside an independent Boss Man service is rejected because it duplicates session, worker, worktree, container, authentication, and Git state. Pi JSONL remains authoritative session evidence.
+Boss Man has one durable lifecycle authority: the central API and its SQLite
+transaction log. One leased orchestrator process per project may coordinate
+its task agents, but it never owns a competing durable database. Pi JSONL
+remains authoritative session evidence.
 
 ## High-level architecture
 
@@ -273,7 +270,14 @@ stateDiagram-v2
     Done --> InProgress: reopen
 ```
 
-Capabilities constrain transitions by role. An implementing worker can mutate its assignment and descendants but cannot approve itself. The orchestrator starts a separate read-only reviewer session against a fixed revision. Reviewer output is a structured artifact and task event. After approval and policy-required validation, the orchestrator may request Done and merge without human intervention. A human can override, pause autonomous merging, or require a gate for named risk categories.
+Capabilities constrain transitions by role. An implementing worker can mutate
+its assignment and descendants but cannot approve itself. The orchestrator
+starts a separate read-only reviewer session against a fixed revision.
+Reviewer output is a structured artifact and task event. After approval and
+policy-required validation, the orchestrator may mark the task Done and create
+a merge request without human acceptance. Actual merge/rebase/push remains a
+separate Phase 2 policy action. A human can require an integration hold for a
+project/branch or a decision gate for named risk categories.
 
 The merge policy evaluates changed paths, task risk, independent review, test plan, command results, unresolved findings, conflicts, and repository policy. Documentation-only work may legitimately omit tests; behavior changes normally require regression coverage; cross-boundary changes normally require integration coverage. Any omission carries an explicit reviewer-approved rationale.
 
@@ -289,7 +293,7 @@ The host service:
 2. bind-mounts only the worktree files and approved artifact directory into the container;
 3. exposes status/diff through capability tools;
 4. creates checkpoints and commits on the host after validating task/run ownership;
-5. performs merge/rebase only through an explicit human or policy action;
+5. performs merge/rebase only through an explicit Phase 2 policy action;
 6. removes worktrees only after checking dirty state and durable artifact references.
 
 The common Git directory should not be writable from the agent container. Linked worktree behavior under this restriction is an explicit prototype gate: if normal file operations require metadata writes, provide the minimum isolated metadata view or a workspace representation that is reconciled by the host, rather than mounting the entire repository Git directory writable.
@@ -322,7 +326,12 @@ Pi OAuth refresh and concurrent access to shared auth state are a risk. The firs
 5. discard private refresh mutations rather than silently reconciling them; and
 6. delete both materialized run copies after verifying the canonical source checksum.
 
-This path passed both the synthetic isolation proof and one bounded owner-authorized OpenAI Codex turn, including a Pi Bash tool call through managed RTK capture. It is still not a durable refresh strategy. Production must either add explicit locked reconciliation with conflict handling or introduce a host credential broker before parallel OAuth-backed runs are allowed. Direct API and prepaid gateway keys can use higher concurrency only when the owner profile explicitly permits it.
+This path passed both the synthetic isolation proof and one bounded
+owner-authorized OpenAI Codex turn, including a Pi Bash tool call through
+managed RTK capture. Parallel OAuth-backed runs remain disabled until a
+simpler independently verifiable refresh strategy is proven. Direct API keys
+and local-model routes can use separate concurrency limits only when the owner
+profile explicitly permits them.
 
 Direct API and prepaid gateway keys are simpler to scope than consumer OAuth files. Secrets must be redacted before event/artifact persistence.
 
@@ -338,13 +347,8 @@ Deployment code is an artifact, not standing deployment authority. Agents may bu
 
 ### Provider and model routing
 
-Pi remains the provider adapter. Do not put LiteLLM in the first release merely to normalize provider APIs a second time.
-
-Initial policy:
-
-1. OpenAI-backed Pi authentication/model while included usage is available.
-2. Claude, Gemini, OpenRouter, or another supported route selectable manually through configurable model policy and evaluation, not embedded in task code.
-3. Prepaid OpenRouter automatic fallback deferred until the core provider/model selection, snapshot, and safe-boundary switch path is proven.
+Pi remains the provider adapter. Boss Man does not assume a separate routing
+service or automatic fallback.
 
 Each orchestrator and task-subagent run stores its resolved provider, model,
 thinking level, policy source, and billing class before process creation. The
@@ -352,17 +356,31 @@ supervisor starts Pi with explicit `--provider` and `--model` arguments (or a
 provider-qualified `--model`) rather than inheriting Pi's last interactive
 selection. The effective model returned by Pi is checked against the run
 record. RPC `set_model` is permitted only through the safe-boundary switch
-workflow; it is not an unrestricted agent capability.
+workflow; it is not an unrestricted agent capability. The orchestrator may
+select a different route for every sub-agent. A local model is a first-class
+route when the configured Pi installation can address its provider/endpoint;
+the run records that route and its local billing class exactly like a hosted
+model.
 
-The first release must support a manual safe-boundary model change. Before switching, write a context snapshot and an event describing the old route, failure class, new route, and retry identity. If the last provider request may have completed tool actions, pause for reconciliation instead of replaying. Automatic paid fallback becomes a later policy layer unless the foundation exposes it with little additional risk.
+The first release supports a manual safe-boundary model change. Before
+switching, write a context snapshot and an event describing the old route,
+failure class, new route, and retry identity. If the last provider request may
+have completed tool actions, pause for reconciliation instead of replaying.
 
 Expose provider health and remaining credit when a stable provider API supports it. Treat missing data as unknown, not zero or unlimited. Model IDs and price tables are configuration refreshed independently of task/session records.
 
-LiteLLM can be reconsidered only if centralized virtual keys, cross-provider budgets, or organization-scale routing become requirements that Pi plus OpenRouter cannot satisfy. If introduced, use a pinned, signed container image and a security update process; never a floating PyPI dependency.
+A routing intermediary is considered only after a concrete Pi compatibility,
+local-endpoint, or centralized-policy gap is reproduced. It is an adapter
+choice, not part of the durable task, session, context, or model-policy
+contract.
 
 ### Exposure profiles and remote access
 
-Local smoke binds to loopback and has no application authentication. A later trusted-LAN development profile may bind to one explicitly selected private interface and accept only configured private CIDRs; it also has no application authentication initially. Startup rejects a public wildcard bind unless the authenticated remote profile is enabled. Request locality is derived from the configured listener and trusted network boundary, never an arbitrary forwarded header.
+Local smoke binds to loopback and has no application authentication. The next
+network-accessible profile is authenticated remote access. Startup rejects a
+public wildcard bind unless that profile is enabled. Request locality is
+derived from the configured listener and trusted proxy boundary, never an
+arbitrary forwarded header.
 
 The existing LinuxServer SWAG container and the Boss Man Mac are on the same LAN. SWAG is the public TLS endpoint for a dedicated Boss Man subdomain and proxies HTTP and WebSocket traffic to the Mac's reserved LAN address. The current conditional SWAG Basic Auth remains an outer gate for non-local requests.
 
@@ -465,11 +483,14 @@ This closes the Phase 0 restart gate without claiming in-flight Pi RPC process r
 
 ## Security model
 
-The local-first release assumes one trusted human owner and a loopback or explicitly trusted-LAN listener. Model output, repository content, tools, and downloaded dependencies remain untrusted. The Phase 3 remote profile additionally treats every network request as untrusted until authenticated.
+The local-first release assumes one trusted human owner and a loopback
+listener. Model output, repository content, tools, and downloaded dependencies
+remain untrusted. The Phase 3 remote profile additionally treats every network
+request as untrusted until authenticated.
 
 Main controls:
 
-- loopback-by-default listener and explicit trusted-LAN/remote profiles;
+- loopback-only local profile and an explicit authenticated remote profile;
 - Phase 3 SWAG TLS plus simple single-owner authentication, Host/Origin validation, CSRF defense, and rate limits;
 - least-privilege run capabilities;
 - no Docker socket in agents;
@@ -478,7 +499,8 @@ Main controls:
 - immutable audit/context evidence;
 - dependency/image pinning and verification;
 - artifact redaction and retention policies;
-- confirmation for paid fallback and destructive workspace actions; policy evidence for autonomous merge.
+- confirmation for paid route changes and destructive workspace actions;
+  policy evidence for autonomous completion and Phase 2 integration.
 
 Containers reduce accidental host damage but do not stop a determined process from exfiltrating accessible source or credentials over allowed network egress. The UI and documentation must describe this honestly.
 
@@ -492,7 +514,6 @@ Containers reduce accidental host damage but do not stop a determined process fr
 - Human-decision classification and rejection of Done/merge while a protected decision remains unresolved.
 - Idempotent mutation and optimistic concurrency behavior.
 - Pi RPC request/notification parsing across supported Pi versions.
-- `pi-acp` translation fidelity if the Agent of Empires foundation is selected.
 - Context schema round-trip including unknown entry types.
 - Memory lifecycle/capability matrix, provenance integrity, tombstone behavior, and stale/contested injection rules.
 - Deterministic FTS retrieval and context-receipt reproduction with semantic retrieval disabled.
@@ -519,7 +540,15 @@ Containers reduce accidental host damage but do not stop a determined process fr
 
 ### End-to-end acceptance
 
-Automate the local-first behaviors in `PRODUCT.md` §14, including a reviewer/change-request loop, autonomous platform-owned merge for an unprotected change, a blocked merge requiring an owner architecture decision, forced provider failure with manual model switch, local browser reconnect, and a full host-service restart. Verify artifacts by checksums and by importing the exported native session into a new managed Pi runtime. Phase 3 adds the SWAG/auth acceptance matrix. Use Playwright for the cockpit's critical desktop/mobile flows and retain screenshots or traces for failed UI tests.
+Automate the local-first behaviors in `PRODUCT.md` §14, including a
+reviewer/change-request loop, autonomous completion and merge-request creation
+for an unprotected change, a blocked integration requiring an owner
+architecture decision, forced provider failure with manual model switch, local
+browser reconnect, and a full host-service restart. Verify artifacts by
+checksums and by importing the exported native session into a new managed Pi
+runtime. Phase 3 adds the SWAG/auth acceptance matrix. Use Playwright for the
+cockpit's critical desktop/mobile flows and retain screenshots or traces for
+failed UI tests.
 
 ## Delivery plan
 
@@ -537,13 +566,12 @@ Automate the local-first behaviors in `PRODUCT.md` §14, including a reviewer/ch
 - Shared browser/terminal Pi conversation projection plus tmux/cmux
   process-endpoint and attach information; no Phase 1 browser PTY.
 - Host checkpoint/commit plus manual merge preparation.
-- Explicit trusted-LAN profile with selected private interface/CIDR policy and no application authentication.
 
 ### Phase 2: autonomy, recovery, and portability
 
 - Policy-governed merge/rebase/push, conflict handling, and cleanup.
 - Recovery/resume UX, retention/deletion/quotas, backup/restore, and storage pressure.
-- Provider failure drills, custody-backed switch recovery, and paid-fallback decision.
+- Provider failure drills and custody-backed switch recovery.
 - Measured concurrency/resource limits on the target Mac.
 - Second clean ARM64 reproduction and migration rehearsal.
 
@@ -571,7 +599,9 @@ The main integration agent owns schema definitions, migrations, shared generated
 ## Risks and unresolved constraints
 
 1. **Pi API stability:** RPC, session JSONL, and extension hooks can evolve. Pin a tested Pi version, wrap it behind adapters, and retain unknown event types.
-2. **OAuth concurrency:** single-run snapshot isolation and one live turn pass; parallel consumer OAuth remains disabled until locked refresh reconciliation or a host broker is approved.
+2. **OAuth concurrency:** single-run snapshot isolation and one live turn pass;
+   parallel consumer OAuth remains disabled until a simpler independently
+   verifiable refresh strategy is proven.
 3. **Exactly-once side effects:** provider failure after a tool call cannot always be classified automatically. Prefer pause-and-reconcile over replay.
 4. **Git metadata isolation:** linked worktrees normally reference a shared common Git directory. Prove the mount design before promising strict Git custody.
 5. **Secret persistence:** raw tool results can contain credentials. Redaction must occur before durable event capture, while preserving evidence that redaction occurred.
@@ -579,13 +609,20 @@ The main integration agent owns schema definitions, migrations, shared generated
 7. **Single-host availability:** the always-on Mac remains a failure domain. v1 should support backups and restart recovery, not pretend to be highly available.
 8. **Provider policy drift:** subscription and third-party OAuth rules can change independently. Billing mode must be visible configuration, not a code assumption.
 9. **Supply-chain exposure:** agent images execute large toolchains and downloaded code. Pin images and dependencies and avoid unnecessary routing infrastructure.
-10. **Foundation fork burden and authority split:** Agent of Empires moves quickly, includes many non-Pi paths, exposes only narrow host-rendered plugin surfaces, and currently permits both daemon and TUI ownership of session metadata. Its own open architecture work proposes daemon ownership. Adopt only as a bounded core fork with one lifecycle authority, a measured patch surface, upstream issue/PR intake, automated compatibility tests, and a successful rebase rehearsal.
-11. **ACP translation loss:** pinned `pi-acp` reaches the Pi pre-compaction hook, preserves native model/abort state, reloads sessions, and translates active-turn notifications. It misses extension `session_start` notifications emitted before the bridge subscribes, and extension slash commands are not exposed. Treat Pi JSONL and custody manifests as authoritative; do not make startup UI notifications or extension slash commands part of required control-plane correctness.
-12. **Public terminal exposure:** a SWAG subdomain makes authentication, proxy-header trust, origin checks, WebSocket controls, and recovery-code handling release blockers rather than optional hardening.
-13. **RTK evidence divergence:** filtered output can omit relevant detail. Preserve raw output for every managed command and make policy decisions from exit state plus raw evidence.
-14. **Memory poisoning:** repository text or a compromised agent can attempt to persist instructions for future sessions. Enforce scope capabilities, provenance, trust classes, secret scanning, review gates, and delimited data-only injection.
-15. **Stale or contradictory memory:** durable claims can outlive the code that made them true. Track source revisions, expiry/supersession, contested state, and retrieval receipts; prefer live repository inspection when confidence or freshness is insufficient.
-16. **Memory dependency churn:** current Pi memory packages are young and may change rapidly. Pin reviewed versions, prohibit auto-update, keep the Boss Man schema/export contract first-party, and make the dependency removable.
+10. **Public terminal exposure:** a SWAG subdomain makes authentication,
+    proxy-header trust, origin checks, WebSocket controls, and recovery-code
+    handling release blockers rather than optional hardening.
+11. **RTK evidence divergence:** filtered output can omit relevant detail.
+    Preserve raw output for every managed command and make policy decisions
+    from exit state plus raw evidence.
+12. **Memory poisoning:** repository text or a compromised agent can attempt
+    to persist instructions for future sessions. Enforce scope capabilities,
+    provenance, trust classes, secret scanning, review gates, and delimited
+    data-only injection.
+13. **Stale or contradictory memory:** durable claims can outlive the code
+    that made them true. Track source revisions, expiry/supersession,
+    contested state, and retrieval receipts; prefer live repository inspection
+    when confidence or freshness is insufficient.
 
 ## Implementation gate
 

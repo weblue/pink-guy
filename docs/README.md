@@ -20,7 +20,6 @@ and retained history.
 - [Product contract](product/PRODUCT.md)
 - [Developer cockpit/UI direction](product/UI.md)
 - [Technical architecture](architecture/TECH.md)
-- [Foundation ADR](architecture/ADR-FOUNDATION.md)
 
 ## Implemented Phase 1 feature contracts
 

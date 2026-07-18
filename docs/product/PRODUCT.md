@@ -113,7 +113,9 @@ A task can have multiple sequential runs and sessions. A session may be attached
 
 2.9 A user can start a top-level topic for a new project or prototype before a repository exists. The topic retains its orchestrator conversation and may later bind to an existing project or become a new repository-backed project.
 
-2.10 A user can start from an existing repository URL or registered local repository, optionally provide a project description, and attach external work-item references such as a private Jira ticket.
+2.10 A user can start from an existing repository URL or registered local
+repository, optionally provide a project description, and attach an immutable
+generic external work-item snapshot.
 
 2.11 The orchestrator reads supplied descriptions, source snapshots, applicable memory, and relevant repository evidence before asking questions. It asks only about remaining material ambiguity and may create sufficiently clear tasks without an interview.
 
@@ -303,12 +305,12 @@ The selected mode is visible before the child starts and remains part of its pro
 
 11.1 Local-first releases support an explicit loopback profile with no application authentication. The listener binds only to loopback and clearly identifies that exposure mode.
 
-11.2 Phase 1 remains loopback-only. A trusted-LAN profile is optional and no
-longer a Phase 1 deliverable; if later justified, it binds to a selected
-private interface, restricts accepted source networks to configured private
-CIDRs, displays a persistent warning, and is never enabled implicitly.
+11.2 Phase 1 remains loopback-only. The next network-accessible profile is the
+authenticated remote profile.
 
-11.3 Loopback and trusted-LAN classification comes from the configured listener and host/network policy, not from arbitrary forwarded headers. Public wildcard binding is rejected unless the authenticated remote profile is configured.
+11.3 Loopback and remote classification comes from the configured listener and
+trusted proxy policy, not from arbitrary forwarded headers. Public wildcard
+binding is rejected unless the authenticated remote profile is configured.
 
 11.4 Authenticated remote access is a later phase. Its primary web service is served through the existing SWAG reverse proxy at a dedicated HTTPS subdomain, without exposing the Boss Man origin directly to the public internet.
 
@@ -377,7 +379,7 @@ is Phase 2.
 
 14.7 The owner can recover an exported native session and normalized context bundle after restarting the control plane.
 
-14.8 No Slack or email integration is required in the first release; attention remains visible in the product.
+14.8 Attention remains visible in the product.
 
 14.9 The owner can inspect active and proposed project memory, trace every injected item to evidence, and rebuild model-less search after deleting the derived index.
 
