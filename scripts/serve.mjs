@@ -89,6 +89,8 @@ for (const repositoryPath of repositories) {
     repositoryId: identifier("repository", repositoryPath),
     projectName: basename(repositoryPath),
     taskId: identifier("intake", repositoryPath),
+    taskKind: "intake",
+    tags: ["intake", "bootstrap"],
     repositoryPath,
     title: `Audit ${basename(repositoryPath)} and define the next task`,
     revision: execFileSync("git", ["-C", repositoryPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim(),

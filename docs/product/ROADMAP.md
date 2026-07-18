@@ -70,7 +70,9 @@ routed task phases, source-controlled plain-text prompts, deterministic
 dogfood coverage, and one bounded provider/container smoke are implemented.
 Automatic model-less implementation → test → review continuation is
 implemented with deterministic restart reconciliation and explicit stop
-conditions. Supervised phase-flow dogfooding on two real repositories remains.
+conditions. Explicit executable/umbrella/intake task kinds, normalized tags,
+and reversible archive/restore keep retained planning artifacts off the active
+board. Supervised phase-flow dogfooding on two real repositories remains.
 
 Scope:
 

@@ -134,8 +134,10 @@
   .composer textarea { min-height: 4rem; }
   .composer button { min-width: 7rem; }
   #board { display: grid; gap: .6rem; grid-template-columns: repeat(6, minmax(11rem, 1fr)); overflow-x: auto; }
+  #archived-board { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); margin-top: .65rem; }
   .column { min-height: 10rem; }
   .task { border-left-color: #6b88ff; }
+  .task.archived { border-left-color: var(--muted); opacity: .88; }
   .task.focused { outline: 2px solid var(--yellow); outline-offset: 2px; }
   .controls { display: flex; gap: .45rem; margin-top: .55rem; }
   .controls select { min-width: 0; flex: 1; }
@@ -204,6 +206,12 @@
       <form id="create-task">
         <select id="task-project" required aria-label="Project"></select>
         <input id="task-title" required maxlength="500" placeholder="Task title">
+        <select id="task-kind" aria-label="Task kind">
+          <option value="executable">Executable</option>
+          <option value="umbrella">Umbrella</option>
+          <option value="intake">Intake</option>
+        </select>
+        <input id="task-tags" maxlength="1000" placeholder="Tags, comma separated">
         <textarea id="task-criteria" placeholder="Acceptance criteria, one per line"></textarea>
         <button type="submit">Create ready task</button>
       </form>
@@ -268,6 +276,10 @@
     <section class="panel">
       <h2>Task board</h2>
       <div id="board" data-testid="task-board"></div>
+      <details id="archived-panel" data-testid="archived-task-artifacts">
+        <summary>Archived artifacts · <span id="archived-count">0</span></summary>
+        <div id="archived-board"></div>
+      </details>
     </section>
   </section>
 
@@ -393,7 +405,8 @@
   function renderProjects() {
     document.querySelector("#projects").innerHTML = app.projects.map((project) =>
       "<div class=\"row project-row\"><strong>" + esc(project.name) + "</strong>"
-      + "<div class=\"muted\">" + esc(project.task_count) + " tasks · " + esc(project.repository_path) + "</div>"
+      + "<div class=\"muted\">" + esc(project.task_count) + " total tasks · "
+        + esc(project.archived_task_count || 0) + " archived · " + esc(project.repository_path) + "</div>"
       + "<div class=\"project-actions\"><button class=\"ghost\" data-ask-project=\"" + esc(project.id)
       + "\">Ask orchestrator</button></div></div>"
     ).join("") || "<p class=\"muted\">No projects registered.</p>";
@@ -420,6 +433,17 @@
     const target = document.querySelector("#board");
     target.innerHTML = "";
     if (!app.board) return;
+    const cardMarkup = (task, state, archived = false) => {
+      const tags = (task.tags || []).map((tag) => "<span class=\"tag\">" + esc(tag) + "</span>").join(" ");
+      return "<strong>" + esc(task.title) + "</strong><div class=\"muted\">"
+        + esc(task.project_id) + " · v" + esc(task.version) + "</div>"
+        + "<div><span class=\"tag\">" + esc(task.task_kind || "executable") + "</span> " + tags + "</div>"
+        + (archived ? "<div class=\"muted\">retained status · " + esc(state) + "</div>" : "")
+        + (!archived && (state === "ready" || state === "backlog") && task.task_kind === "executable"
+          ? "<div class=\"controls\"><button data-schedule=\"" + esc(task.id)
+            + "\" data-phase=\"implementation\">Schedule implementation</button></div>"
+          : "");
+    };
     for (const [state, tasks] of Object.entries(app.board.columns)) {
       const column = document.createElement("section");
       column.className = "column";
@@ -429,16 +453,24 @@
         card.className = "task";
         card.dataset.taskId = task.id;
         card.tabIndex = 0;
-        card.innerHTML = "<strong>" + esc(task.title) + "</strong><div class=\"muted\">"
-          + esc(task.project_id) + " · v" + esc(task.version) + "</div>"
-          + ((state === "ready" || state === "backlog")
-            ? "<div class=\"controls\"><button data-schedule=\"" + esc(task.id)
-              + "\" data-phase=\"implementation\">Schedule implementation</button></div>"
-            : "");
+        card.innerHTML = cardMarkup(task, state);
         column.append(card);
       }
       target.append(column);
     }
+    const archivedTarget = document.querySelector("#archived-board");
+    const archived = app.board.archived || [];
+    document.querySelector("#archived-count").textContent = archived.length;
+    archivedTarget.innerHTML = "";
+    for (const task of archived) {
+      const card = document.createElement("article");
+      card.className = "task archived";
+      card.dataset.taskId = task.id;
+      card.tabIndex = 0;
+      card.innerHTML = cardMarkup(task, task.status, true);
+      archivedTarget.append(card);
+    }
+    if (!archived.length) archivedTarget.innerHTML = "<p class=\"muted\">No archived task artifacts.</p>";
   }
 
   function renderTaskDetail() {
@@ -487,6 +519,14 @@
         ? "<div class=\"good\">Completion gates passed · merge requested</div>"
         : "<div class=\"muted\">Completion gates: "
           + esc((workspace?.completion_evaluation?.reasons || []).join(", ") || "not evaluated") + "</div>";
+    const lifecycleControl = task.archived
+      ? "<div class=\"controls\"><input id=\"task-restore-reason\" maxlength=\"2000\" placeholder=\"Restore note (optional)\">"
+        + "<button data-restore-task=\"" + esc(task.id) + "\">Restore to "
+        + esc(task.status) + "</button></div>"
+      : ["in_progress", "review"].includes(task.status)
+        ? "<p class=\"muted\">Stop or reconcile active work before archival.</p>"
+        : "<div class=\"controls\"><input id=\"task-archive-reason\" required maxlength=\"2000\" placeholder=\"Why this is no longer active\">"
+          + "<button class=\"secondary\" data-archive-task=\"" + esc(task.id) + "\">Archive artifact</button></div>";
     const runs = (workspace?.runs || []).slice().reverse().map((run) => {
       const git = run.git_operations.map((operation) =>
         "<div class=\"muted\">" + esc(operation.kind + " · " + operation.new_revision.slice(0, 12))
@@ -531,11 +571,21 @@
       + "<input id=\"task-detail-title\" required maxlength=\"500\" value=\"" + esc(task.title) + "\">"
       + "<textarea id=\"task-detail-description\" maxlength=\"20000\" placeholder=\"Task description\">"
         + esc(task.description || "") + "</textarea>"
+      + "<select id=\"task-detail-kind\" aria-label=\"Task kind\">"
+        + ["executable", "umbrella", "intake"].map((kind) =>
+          "<option value=\"" + kind + "\"" + (kind === task.task_kind ? " selected" : "") + ">"
+            + esc(kind) + "</option>"
+        ).join("") + "</select>"
+      + "<input id=\"task-detail-tags\" maxlength=\"1000\" placeholder=\"Tags, comma separated\" value=\""
+        + esc((task.tags || []).join(", ")) + "\">"
       + "<textarea id=\"task-detail-criteria\" placeholder=\"Acceptance criteria, one per line\">"
         + esc(task.acceptance_criteria.join("\n")) + "</textarea>"
       + "<button type=\"submit\">Save task v" + esc(task.version) + "</button></form>"
-      + "<div class=\"muted\">status " + esc(task.status) + " · revision "
-        + esc(task.revision || "not fixed") + "</div>" + phaseControls + completionControl
+      + "<div class=\"muted\">status " + esc(task.status) + " · kind " + esc(task.task_kind)
+        + (task.archived ? " · archived " + esc(task.archived_at) + " by " + esc(task.archived_by) : "")
+        + " · revision " + esc(task.revision || "not fixed") + "</div>"
+      + (task.archive_reason ? "<div class=\"muted\">Archive reason: " + esc(task.archive_reason) + "</div>" : "")
+      + lifecycleControl + phaseControls + completionControl
       + "<h3>Dependencies</h3><ul>" + dependencies + "</ul>"
       + "<h3>Decisions</h3>" + decisions
       + "<h3>Validation</h3>" + validations
@@ -665,7 +715,10 @@
       app.selectedTask
       && !document.querySelector("#task-detail").contains(document.activeElement)
     ) {
-      const stillVisible = Object.values(board.columns).flat().some((task) => task.id === app.selectedTask.id);
+      const stillVisible = [
+        ...Object.values(board.columns).flat(),
+        ...(board.archived || []),
+      ].some((task) => task.id === app.selectedTask.id);
       if (stillVisible) await loadTask(app.selectedTask.id);
       else app.selectedTask = null;
     }
@@ -941,7 +994,13 @@
       await request("/api/projects/" + encodeURIComponent(project) + "/tasks", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": key("create-task") },
-        body: JSON.stringify({ title: document.querySelector("#task-title").value, acceptanceCriteria }),
+        body: JSON.stringify({
+          title: document.querySelector("#task-title").value,
+          taskKind: document.querySelector("#task-kind").value,
+          tags: document.querySelector("#task-tags").value
+            .split(",").map((value) => value.trim()).filter(Boolean),
+          acceptanceCriteria,
+        }),
       });
       mutationStatus("Task created.");
       event.target.reset();
@@ -980,6 +1039,11 @@
     }
   });
 
+  document.querySelector("#archived-board").addEventListener("click", (event) => {
+    const task = event.target.closest("[data-task-id]");
+    if (task) void loadTask(task.dataset.taskId).catch((error) => mutationStatus(error.message, true));
+  });
+
   document.querySelector("#task-detail").addEventListener("submit", async (event) => {
     if (event.target.id !== "task-detail-form") return;
     event.preventDefault();
@@ -992,6 +1056,9 @@
         body: JSON.stringify({
           title: document.querySelector("#task-detail-title").value,
           description: document.querySelector("#task-detail-description").value || null,
+          taskKind: document.querySelector("#task-detail-kind").value,
+          tags: document.querySelector("#task-detail-tags").value
+            .split(",").map((value) => value.trim()).filter(Boolean),
           acceptanceCriteria: document.querySelector("#task-detail-criteria").value
             .split("\n").map((value) => value.trim()).filter(Boolean),
           expectedVersion: app.selectedTask.version,
@@ -1016,6 +1083,45 @@
   });
 
   document.querySelector("#task-detail").addEventListener("click", async (event) => {
+    const archiveButton = event.target.closest("[data-archive-task]");
+    if (archiveButton) {
+      archiveButton.disabled = true;
+      try {
+        const reason = document.querySelector("#task-archive-reason").value.trim();
+        if (!reason) throw new Error("Enter an archive reason first.");
+        await request("/api/tasks/" + encodeURIComponent(archiveButton.dataset.archiveTask) + "/archive", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": key("archive-task") },
+          body: JSON.stringify({ expectedVersion: app.selectedTask.version, reason }),
+        });
+        mutationStatus("Task artifact archived with its history retained.");
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+        archiveButton.disabled = false;
+      }
+      return;
+    }
+    const restoreButton = event.target.closest("[data-restore-task]");
+    if (restoreButton) {
+      restoreButton.disabled = true;
+      try {
+        await request("/api/tasks/" + encodeURIComponent(restoreButton.dataset.restoreTask) + "/restore", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": key("restore-task") },
+          body: JSON.stringify({
+            expectedVersion: app.selectedTask.version,
+            reason: document.querySelector("#task-restore-reason").value.trim() || null,
+          }),
+        });
+        mutationStatus("Task restored to its retained status column.");
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+        restoreButton.disabled = false;
+      }
+      return;
+    }
     const resumeButton = event.target.closest("[data-resume-task]");
     if (resumeButton) {
       resumeButton.disabled = true;
@@ -1106,13 +1212,14 @@
   document.querySelector("#changes").addEventListener("click", (event) => {
     const button = event.target.closest("[data-focus-task]");
     if (!button) return;
-    const task = [...document.querySelectorAll("#board [data-task-id]")]
+    const task = [...document.querySelectorAll("#board [data-task-id], #archived-board [data-task-id]")]
       .find((item) => item.dataset.taskId === button.dataset.focusTask);
     if (!task) {
       mutationStatus("The changed task is not on the current board.", true);
       return;
     }
-    document.querySelectorAll("#board .focused").forEach((item) => item.classList.remove("focused"));
+    document.querySelectorAll("#board .focused, #archived-board .focused")
+      .forEach((item) => item.classList.remove("focused"));
     task.classList.add("focused");
     task.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
   });

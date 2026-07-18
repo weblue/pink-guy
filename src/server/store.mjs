@@ -10,6 +10,7 @@ import {
 import { validateModelRoute } from "./model-routes.mjs";
 
 const TASK_STATES = new Set(["backlog", "ready", "in_progress", "review", "blocked", "done"]);
+const TASK_KINDS = new Set(["executable", "umbrella", "intake"]);
 const RUN_PHASES = new Set(["implementation", "test", "review"]);
 const ORCHESTRATOR_COMMAND_KINDS = new Set(["start_task"]);
 const ORCHESTRATOR_COMMAND_TERMINAL_STATES = new Set([
@@ -42,6 +43,30 @@ function sha256(value) {
 
 function codedError(code, message, details = {}) {
   return Object.assign(new Error(message), { code, ...details });
+}
+
+function normalizeTaskKind(value, fallback = "executable") {
+  const kind = typeof value === "string" && value.trim() ? value.trim() : fallback;
+  if (!TASK_KINDS.has(kind)) {
+    throw codedError("invalid_request", `unsupported task kind: ${kind}`);
+  }
+  return kind;
+}
+
+function normalizeTaskTags(value = []) {
+  if (!Array.isArray(value) || value.length > 20) {
+    throw codedError("invalid_request", "task tags must be a list of at most 20 values");
+  }
+  const tags = [...new Set(value.map((item) =>
+    typeof item === "string" ? item.trim().toLowerCase() : ""
+  ))].filter(Boolean);
+  if (tags.some((tag) => !/^[a-z0-9][a-z0-9._-]{0,49}$/.test(tag))) {
+    throw codedError(
+      "invalid_request",
+      "task tags must use 1-50 lowercase letters, numbers, dot, underscore, or hyphen",
+    );
+  }
+  return tags;
 }
 
 function publicOrchestrator(row) {
@@ -529,6 +554,10 @@ export class Phase0Store {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        id TEXT PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS memory_events (
         sequence INTEGER PRIMARY KEY AUTOINCREMENT,
         event_id TEXT NOT NULL UNIQUE,
@@ -638,6 +667,32 @@ export class Phase0Store {
     this.ensureColumn("tasks", "merge_requested", "INTEGER NOT NULL DEFAULT 0");
     this.ensureColumn("tasks", "acceptance_criteria_json", "TEXT NOT NULL DEFAULT '[]'");
     this.ensureColumn("tasks", "description", "TEXT");
+    this.ensureColumn("tasks", "task_kind", "TEXT NOT NULL DEFAULT 'executable'");
+    this.ensureColumn("tasks", "tags_json", "TEXT NOT NULL DEFAULT '[]'");
+    this.ensureColumn("tasks", "archived_at", "TEXT");
+    this.ensureColumn("tasks", "archived_by", "TEXT");
+    this.ensureColumn("tasks", "archive_reason", "TEXT");
+    const lifecycleMigration = "2026-07-18-task-lifecycle-classification";
+    if (!this.database.prepare("SELECT 1 value FROM schema_migrations WHERE id=?").get(lifecycleMigration)) {
+      this.database.exec("BEGIN IMMEDIATE");
+      try {
+        this.database.prepare(
+          "UPDATE tasks SET task_kind='intake' WHERE id LIKE 'intake-%' AND task_kind='executable'",
+        ).run();
+        this.database.prepare(`UPDATE tasks SET task_kind='umbrella'
+          WHERE task_kind='executable' AND EXISTS(
+            SELECT 1 FROM tasks child WHERE child.parent_task_id=tasks.id
+          )`).run();
+        this.database.prepare("INSERT INTO schema_migrations(id,applied_at) VALUES(?,?)").run(
+          lifecycleMigration,
+          this.clock(),
+        );
+        this.database.exec("COMMIT");
+      } catch (error) {
+        this.database.exec("ROLLBACK");
+        throw error;
+      }
+    }
     this.ensureColumn("projects", "repository_id", "TEXT");
     this.ensureColumn("projects", "source_url", "TEXT");
     this.ensureColumn("task_events", "actor_role", "TEXT");
@@ -881,17 +936,32 @@ export class Phase0Store {
     title,
     revision = "fixture-revision-1",
     acceptanceCriteria = [],
+    taskKind = "executable",
+    tags = [],
   }) {
     const now = this.clock();
+    const normalizedKind = normalizeTaskKind(taskKind);
+    const normalizedTags = normalizeTaskTags(tags);
     this.database
       .prepare("INSERT OR IGNORE INTO projects(id,name,repository_path,created_at,repository_id) VALUES(?,?,?,?,?)")
       .run(projectId, projectName, repositoryPath, now, repositoryId);
     this.database.prepare("UPDATE projects SET repository_id=COALESCE(repository_id,?) WHERE id=?").run(repositoryId, projectId);
     this.database
       .prepare(`INSERT OR IGNORE INTO tasks(
-        id,project_id,title,status,version,updated_at,revision,validation_passed,merge_requested,acceptance_criteria_json
-      ) VALUES(?,?,?,?,1,?,?,0,0,?)`)
-      .run(taskId, projectId, title, "ready", now, revision, JSON.stringify(acceptanceCriteria));
+        id,project_id,title,status,version,updated_at,revision,validation_passed,
+        merge_requested,acceptance_criteria_json,task_kind,tags_json
+      ) VALUES(?,?,?,?,1,?,?,0,0,?,?,?)`)
+      .run(
+        taskId,
+        projectId,
+        title,
+        "ready",
+        now,
+        revision,
+        JSON.stringify(acceptanceCriteria),
+        normalizedKind,
+        JSON.stringify(normalizedTags),
+      );
     this.database.prepare("UPDATE tasks SET revision=COALESCE(revision,?) WHERE id=?").run(revision, taskId);
     return this.getTask(taskId);
   }
@@ -900,6 +970,8 @@ export class Phase0Store {
     projectId,
     title,
     acceptanceCriteria = [],
+    taskKind = "executable",
+    tags = [],
     revision,
     idempotencyKey,
   }) {
@@ -917,8 +989,15 @@ export class Phase0Store {
     if (!revision) throw codedError("invalid_request", "task repository revision is required");
     if (!this.getProject(projectId)) throw codedError("not_found", `unknown project: ${projectId}`);
     const normalizedCriteria = acceptanceCriteria.map((item) => item.trim());
+    const normalizedKind = normalizeTaskKind(taskKind);
+    const normalizedTags = normalizeTaskTags(tags);
     const requestSha256 = sha256(JSON.stringify({
-      action: "create_task", projectId, title: normalizedTitle, acceptanceCriteria: normalizedCriteria,
+      action: "create_task",
+      projectId,
+      title: normalizedTitle,
+      acceptanceCriteria: normalizedCriteria,
+      taskKind: normalizedKind,
+      tags: normalizedTags,
     }));
     const prior = this.database.prepare("SELECT * FROM audit_events WHERE idempotency_key=?").get(idempotencyKey);
     if (prior) {
@@ -933,9 +1012,16 @@ export class Phase0Store {
     try {
       this.database.prepare(`INSERT INTO tasks(
         id,project_id,title,status,version,updated_at,revision,validation_passed,
-        merge_requested,acceptance_criteria_json
-      ) VALUES(?,?,?,'ready',1,?,?,0,0,?)`).run(
-        id, projectId, normalizedTitle, now, revision, JSON.stringify(normalizedCriteria),
+        merge_requested,acceptance_criteria_json,task_kind,tags_json
+      ) VALUES(?,?,?,'ready',1,?,?,0,0,?,?,?)`).run(
+        id,
+        projectId,
+        normalizedTitle,
+        now,
+        revision,
+        JSON.stringify(normalizedCriteria),
+        normalizedKind,
+        JSON.stringify(normalizedTags),
       );
       const current = this.getTaskDetails(id);
       this.database.prepare(`INSERT INTO task_events(
@@ -943,7 +1029,12 @@ export class Phase0Store {
         actor_role,run_id,task_version
       ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
         id, "task_created", "local-owner", null, "ready",
-        JSON.stringify({ title: normalizedTitle, acceptanceCriteria: normalizedCriteria }),
+        JSON.stringify({
+          title: normalizedTitle,
+          acceptanceCriteria: normalizedCriteria,
+          taskKind: normalizedKind,
+          tags: normalizedTags,
+        }),
         idempotencyKey, now, "owner", null, 1,
       );
       this.database.prepare(`INSERT INTO audit_events(
@@ -951,7 +1042,12 @@ export class Phase0Store {
         idempotency_key,request_sha256,created_at
       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
         id, "task_created", "local-owner", "owner", null, null, "null", JSON.stringify(current),
-        JSON.stringify({ title: normalizedTitle, acceptanceCriteria: normalizedCriteria }),
+        JSON.stringify({
+          title: normalizedTitle,
+          acceptanceCriteria: normalizedCriteria,
+          taskKind: normalizedKind,
+          tags: normalizedTags,
+        }),
         idempotencyKey, requestSha256, now,
       );
       this.database.exec("COMMIT");
@@ -967,6 +1063,8 @@ export class Phase0Store {
     title,
     description = null,
     acceptanceCriteria = [],
+    taskKind = null,
+    tags = null,
     expectedVersion,
     idempotencyKey,
   }) {
@@ -1001,12 +1099,25 @@ export class Phase0Store {
       throw codedError("invalid_request", "expected task version is required");
     }
     const normalizedCriteria = acceptanceCriteria.map((item) => item.trim());
+    const normalizedKind = normalizeTaskKind(taskKind, task.task_kind);
+    const normalizedTags = normalizeTaskTags(tags ?? parseJson(task.tags_json) ?? []);
+    if (normalizedKind !== task.task_kind) {
+      const busy = this.database.prepare(`SELECT 1 value FROM orchestrator_commands
+        WHERE task_id=? AND state IN ('queued','claimed') LIMIT 1`).get(taskId)
+        || this.database.prepare(`SELECT 1 value FROM runs r JOIN sessions s ON s.id=r.session_id
+          WHERE s.task_id=? AND r.state='running' LIMIT 1`).get(taskId);
+      if (busy || ["in_progress", "review"].includes(task.status)) {
+        throw codedError("transition_denied", "active task kind cannot change");
+      }
+    }
     const request = {
       action: "owner_update_task",
       taskId,
       title: normalizedTitle,
       description: normalizedDescription,
       acceptanceCriteria: normalizedCriteria,
+      taskKind: normalizedKind,
+      tags: normalizedTags,
       expectedVersion,
     };
     const requestSha256 = sha256(JSON.stringify(request));
@@ -1028,11 +1139,13 @@ export class Phase0Store {
     this.database.exec("BEGIN IMMEDIATE");
     try {
       const changed = this.database.prepare(`UPDATE tasks SET
-        title=?,description=?,acceptance_criteria_json=?,version=?,updated_at=?
+        title=?,description=?,acceptance_criteria_json=?,task_kind=?,tags_json=?,version=?,updated_at=?
         WHERE id=? AND version=?`).run(
         normalizedTitle,
         normalizedDescription,
         JSON.stringify(normalizedCriteria),
+        normalizedKind,
+        JSON.stringify(normalizedTags),
         nextVersion,
         now,
         taskId,
@@ -1044,6 +1157,8 @@ export class Phase0Store {
         title: normalizedTitle,
         description: normalizedDescription,
         acceptanceCriteria: normalizedCriteria,
+        taskKind: normalizedKind,
+        tags: normalizedTags,
       };
       this.database.prepare(`INSERT INTO task_events(
         task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
@@ -1069,6 +1184,133 @@ export class Phase0Store {
         "task_updated",
         "local-owner",
         "owner",
+        null,
+        null,
+        JSON.stringify(prior),
+        JSON.stringify(current),
+        JSON.stringify(payload),
+        idempotencyKey,
+        requestSha256,
+        now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return { replayed: false, task: this.getTaskDetails(taskId) };
+  }
+
+  setTaskArchived({
+    taskId,
+    archived,
+    reason,
+    expectedVersion,
+    idempotencyKey,
+    actor = "local-owner",
+    actorRole = "owner",
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    const task = this.getTask(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    if (!Number.isInteger(expectedVersion)) {
+      throw codedError("invalid_request", "expected task version is required");
+    }
+    const normalizedReason = typeof reason === "string" ? reason.trim() : "";
+    if (
+      archived
+      && (!normalizedReason || normalizedReason.length > 2_000 || normalizedReason.includes("\0"))
+    ) {
+      throw codedError("invalid_request", "archive reason must be between 1 and 2000 characters");
+    }
+    if (!archived && normalizedReason.length > 2_000) {
+      throw codedError("invalid_request", "restore reason must be at most 2000 characters");
+    }
+    const request = {
+      action: archived ? "archive_task" : "restore_task",
+      taskId,
+      expectedVersion,
+      reason: normalizedReason,
+      actor,
+    };
+    const requestSha256 = sha256(JSON.stringify(request));
+    const eventType = archived ? "task_archived" : "task_restored";
+    const priorAudit = this.database.prepare(
+      "SELECT * FROM audit_events WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (priorAudit) {
+      if (priorAudit.request_sha256 !== requestSha256 || priorAudit.type !== eventType) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different lifecycle mutation");
+      }
+      return { replayed: true, task: this.getTaskDetails(taskId) };
+    }
+    if (task.version !== expectedVersion) {
+      throw codedError("version_conflict", `task is version ${task.version}, expected ${expectedVersion}`);
+    }
+    if (archived === Boolean(task.archived_at)) {
+      throw codedError(
+        "transition_denied",
+        archived ? "task is already archived" : "task is not archived",
+      );
+    }
+    if (archived) {
+      const busy = this.database.prepare(`SELECT 1 value FROM orchestrator_commands
+        WHERE task_id=? AND state IN ('queued','claimed') LIMIT 1`).get(taskId)
+        || this.database.prepare(`SELECT 1 value FROM runs r JOIN sessions s ON s.id=r.session_id
+          WHERE s.task_id=? AND r.state='running' LIMIT 1`).get(taskId);
+      if (busy || ["in_progress", "review"].includes(task.status)) {
+        throw codedError("transition_denied", "active task work must be stopped or reconciled before archival");
+      }
+    }
+    const prior = this.getTaskDetails(taskId);
+    const now = this.clock();
+    const nextVersion = task.version + 1;
+    const payload = {
+      reason: normalizedReason || "Restored to active board",
+      kind: task.task_kind,
+      tags: parseJson(task.tags_json) ?? [],
+    };
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const changed = this.database.prepare(`UPDATE tasks SET
+        archived_at=?,archived_by=?,archive_reason=?,version=?,updated_at=?
+        WHERE id=? AND version=?`).run(
+        archived ? now : null,
+        archived ? actor : null,
+        archived ? normalizedReason : null,
+        nextVersion,
+        now,
+        taskId,
+        expectedVersion,
+      );
+      if (Number(changed.changes) !== 1) {
+        throw codedError("version_conflict", "task changed during lifecycle mutation");
+      }
+      const current = this.getTaskDetails(taskId);
+      this.database.prepare(`INSERT INTO task_events(
+        task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+        actor_role,run_id,task_version
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        taskId,
+        eventType,
+        actor,
+        task.status,
+        task.status,
+        JSON.stringify(payload),
+        idempotencyKey,
+        now,
+        actorRole,
+        null,
+        nextVersion,
+      );
+      this.database.prepare(`INSERT INTO audit_events(
+        task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+        idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        taskId,
+        eventType,
+        actor,
+        actorRole,
         null,
         null,
         JSON.stringify(prior),
@@ -1122,6 +1364,9 @@ export class Phase0Store {
         task: this.parseAuditEvent(priorAudit).current,
         command: publicOrchestratorCommand(priorCommand),
       };
+    }
+    if (task.archived_at || task.task_kind !== "executable") {
+      throw codedError("transition_denied", "only active executable tasks can be scheduled");
     }
     const unresolvedDependency = this.database.prepare(`SELECT t.id,t.title,t.status
       FROM task_dependencies d JOIN tasks t ON t.id=d.depends_on_task_id
@@ -1231,6 +1476,9 @@ export class Phase0Store {
   resumeOwnerTaskRun({ taskId, phase, idempotencyKey, modelRoute }) {
     const task = this.getTask(taskId);
     if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    if (task.archived_at || task.task_kind !== "executable") {
+      throw codedError("transition_denied", "only active executable tasks can resume");
+    }
     if (!task.assigned_worker || !["in_progress", "blocked", "review"].includes(task.status)) {
       throw codedError("transition_denied", "only an assigned active task can resume a stopped run");
     }
@@ -1411,7 +1659,11 @@ export class Phase0Store {
   projects() {
     return this.database.prepare(`SELECT p.*,
       (SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id) AS task_count,
-      (SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.status IN ('in_progress','review','blocked')) AS active_task_count
+      (SELECT COUNT(*) FROM tasks t
+        WHERE t.project_id=p.id AND t.archived_at IS NULL
+          AND t.status IN ('in_progress','review','blocked')) AS active_task_count,
+      (SELECT COUNT(*) FROM tasks t
+        WHERE t.project_id=p.id AND t.archived_at IS NOT NULL) AS archived_task_count
       FROM projects p ORDER BY p.name,p.id`).all();
   }
 
@@ -2317,6 +2569,8 @@ export class Phase0Store {
     turnId,
     title,
     acceptanceCriteria = [],
+    taskKind = "executable",
+    tags = [],
     revision,
     idempotencyKey,
   }) {
@@ -2337,12 +2591,16 @@ export class Phase0Store {
     }
     if (!revision) throw codedError("invalid_request", "task repository revision is required");
     const normalizedCriteria = acceptanceCriteria.map((item) => item.trim());
+    const normalizedKind = normalizeTaskKind(taskKind);
+    const normalizedTags = normalizeTaskTags(tags);
     const requestSha256 = sha256(JSON.stringify({
       action: "conversation_create_task",
       turnId,
       projectId: conversation.project_id,
       title: normalizedTitle,
       acceptanceCriteria: normalizedCriteria,
+      taskKind: normalizedKind,
+      tags: normalizedTags,
     }));
     const prior = this.database.prepare("SELECT * FROM audit_events WHERE idempotency_key=?").get(idempotencyKey);
     if (prior) {
@@ -2357,9 +2615,16 @@ export class Phase0Store {
     try {
       this.database.prepare(`INSERT INTO tasks(
         id,project_id,title,status,version,updated_at,revision,validation_passed,
-        merge_requested,acceptance_criteria_json
-      ) VALUES(?,?,?,'ready',1,?,?,0,0,?)`).run(
-        id, conversation.project_id, normalizedTitle, now, revision, JSON.stringify(normalizedCriteria),
+        merge_requested,acceptance_criteria_json,task_kind,tags_json
+      ) VALUES(?,?,?,'ready',1,?,?,0,0,?,?,?)`).run(
+        id,
+        conversation.project_id,
+        normalizedTitle,
+        now,
+        revision,
+        JSON.stringify(normalizedCriteria),
+        normalizedKind,
+        JSON.stringify(normalizedTags),
       );
       const current = this.getTaskDetails(id);
       this.database.prepare(`INSERT INTO task_events(
@@ -2374,6 +2639,8 @@ export class Phase0Store {
         JSON.stringify({
           title: normalizedTitle,
           acceptanceCriteria: normalizedCriteria,
+          taskKind: normalizedKind,
+          tags: normalizedTags,
           conversationId: conversation.id,
           turnId,
         }),
@@ -2395,7 +2662,13 @@ export class Phase0Store {
         null,
         "null",
         JSON.stringify(current),
-        JSON.stringify({ title: normalizedTitle, acceptanceCriteria: normalizedCriteria, turnId }),
+        JSON.stringify({
+          title: normalizedTitle,
+          acceptanceCriteria: normalizedCriteria,
+          taskKind: normalizedKind,
+          tags: normalizedTags,
+          turnId,
+        }),
         idempotencyKey,
         requestSha256,
         now,
@@ -2425,14 +2698,25 @@ export class Phase0Store {
     expectedVersion,
     title = null,
     acceptanceCriteria = null,
+    taskKind = null,
+    tags = null,
     dependsOnTaskId = null,
     body = null,
     category = null,
     question = null,
+    reason = null,
     idempotencyKey,
   }) {
     if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
-    if (!["update", "split", "add_dependency", "record_assumption", "require_decision"].includes(operation)) {
+    if (![
+      "update",
+      "split",
+      "add_dependency",
+      "record_assumption",
+      "require_decision",
+      "archive",
+      "restore",
+    ].includes(operation)) {
       throw codedError("invalid_request", `unsupported conversation task mutation: ${operation}`);
     }
     const { turn, conversation } = this.activeConversationTurnForLease(token, turnId);
@@ -2444,15 +2728,43 @@ export class Phase0Store {
     if (task.project_id !== conversation.project_id) {
       throw codedError("orchestrator_denied", "task mutation is outside the conversation project scope");
     }
-    if (task.status === "done") {
-      throw codedError("transition_denied", "completed tasks must be reopened before mutation");
-    }
     if (!Number.isInteger(expectedVersion)) {
       throw codedError("invalid_request", "expected task version is required");
+    }
+    if (operation === "archive" || operation === "restore") {
+      const result = this.setTaskArchived({
+        taskId,
+        archived: operation === "archive",
+        reason,
+        expectedVersion,
+        idempotencyKey,
+        actor: `orchestrator:${conversation.id}`,
+        actorRole: "orchestrator",
+      });
+      if (!result.replayed) {
+        this.appendConversationEvent(
+          conversation.id,
+          turn.id,
+          "task_mutation_applied",
+          "orchestrator",
+          {
+            operation,
+            taskId,
+            taskVersion: result.task.version,
+            reason: typeof reason === "string" ? reason.trim() : "",
+          },
+        );
+      }
+      return { ...result, operation, childTask: null };
+    }
+    if (task.status === "done") {
+      throw codedError("transition_denied", "completed tasks must be reopened before mutation");
     }
 
     let normalizedTitle = null;
     let normalizedCriteria = null;
+    let normalizedKind = null;
+    let normalizedTags = null;
     let normalizedBody = null;
     let normalizedCategory = null;
     let normalizedQuestion = null;
@@ -2470,6 +2782,21 @@ export class Phase0Store {
         throw codedError("invalid_request", "acceptance criteria must be a list of non-empty strings");
       }
       normalizedCriteria = acceptanceCriteria.map((item) => item.trim());
+      normalizedKind = operation === "update"
+        ? normalizeTaskKind(taskKind, task.task_kind)
+        : "executable";
+      normalizedTags = operation === "update"
+        ? normalizeTaskTags(tags ?? parseJson(task.tags_json) ?? [])
+        : [];
+      if (operation === "update" && normalizedKind !== task.task_kind) {
+        const busy = this.database.prepare(`SELECT 1 value FROM orchestrator_commands
+          WHERE task_id=? AND state IN ('queued','claimed') LIMIT 1`).get(taskId)
+          || this.database.prepare(`SELECT 1 value FROM runs r JOIN sessions s ON s.id=r.session_id
+            WHERE s.task_id=? AND r.state='running' LIMIT 1`).get(taskId);
+        if (busy || ["in_progress", "review"].includes(task.status)) {
+          throw codedError("transition_denied", "active task kind cannot change");
+        }
+      }
     } else if (operation === "add_dependency") {
       if (!dependsOnTaskId || dependsOnTaskId === taskId) {
         throw codedError("invalid_request", "a task must depend on a different task");
@@ -2509,6 +2836,8 @@ export class Phase0Store {
       expectedVersion,
       title: normalizedTitle,
       acceptanceCriteria: normalizedCriteria,
+      taskKind: normalizedKind,
+      tags: normalizedTags,
       dependsOnTaskId,
       body: normalizedBody,
       category: normalizedCategory,
@@ -2565,21 +2894,29 @@ export class Phase0Store {
     try {
       if (operation === "update") {
         this.database.prepare(`UPDATE tasks SET
-          title=?,acceptance_criteria_json=?,version=?,updated_at=? WHERE id=? AND version=?`).run(
+          title=?,acceptance_criteria_json=?,task_kind=?,tags_json=?,version=?,updated_at=?
+          WHERE id=? AND version=?`).run(
           normalizedTitle,
           JSON.stringify(normalizedCriteria),
+          normalizedKind,
+          JSON.stringify(normalizedTags),
           nextVersion,
           now,
           taskId,
           task.version,
         );
-        Object.assign(eventPayload, { title: normalizedTitle, acceptanceCriteria: normalizedCriteria });
+        Object.assign(eventPayload, {
+          title: normalizedTitle,
+          acceptanceCriteria: normalizedCriteria,
+          taskKind: normalizedKind,
+          tags: normalizedTags,
+        });
       } else if (operation === "split") {
         childTaskId = randomUUID();
         this.database.prepare(`INSERT INTO tasks(
           id,project_id,title,status,version,updated_at,parent_task_id,revision,
-          validation_passed,merge_requested,acceptance_criteria_json
-        ) VALUES(?,?,?,'ready',1,?,?,?,0,0,?)`).run(
+          validation_passed,merge_requested,acceptance_criteria_json,task_kind,tags_json
+        ) VALUES(?,?,?,'ready',1,?,?,?,0,0,?,'executable','[]')`).run(
           childTaskId,
           task.project_id,
           normalizedTitle,
@@ -2589,12 +2926,14 @@ export class Phase0Store {
           JSON.stringify(normalizedCriteria),
         );
         this.database.prepare(
-          "UPDATE tasks SET version=?,updated_at=? WHERE id=? AND version=?",
+          "UPDATE tasks SET task_kind='umbrella',version=?,updated_at=? WHERE id=? AND version=?",
         ).run(nextVersion, now, taskId, task.version);
         Object.assign(eventPayload, {
           childTaskId,
           title: normalizedTitle,
           acceptanceCriteria: normalizedCriteria,
+          parentTaskKind: "umbrella",
+          childTaskKind: "executable",
         });
       } else if (operation === "add_dependency") {
         this.database.prepare(`INSERT INTO task_dependencies(
@@ -2982,6 +3321,9 @@ export class Phase0Store {
     if (task.project_id !== projectId) {
       throw codedError("orchestrator_denied", "task is outside the command project");
     }
+    if (task.archived_at || task.task_kind !== "executable") {
+      throw codedError("transition_denied", "only active executable tasks can receive commands");
+    }
     const request = { projectId, taskId, kind, phase, payload };
     const requestSha256 = sha256(JSON.stringify(request));
     const prior = this.database.prepare(
@@ -3345,11 +3687,19 @@ export class Phase0Store {
       ...task,
       validation_passed: Boolean(task.validation_passed),
       merge_requested: Boolean(task.merge_requested),
+      archived: Boolean(task.archived_at),
+      tags: normalizeTaskTags(parseJson(task.tags_json) ?? []),
       acceptance_criteria: parseJson(task.acceptance_criteria_json) ?? [],
       origin: this.database.prepare(
         "SELECT * FROM task_origins WHERE task_id=? AND task_version=?",
       ).get(taskId, task.version) ?? null,
-      children: this.database.prepare("SELECT id,title,status,version FROM tasks WHERE parent_task_id=? ORDER BY id").all(taskId),
+      children: this.database.prepare(`SELECT
+        id,title,status,version,task_kind,tags_json,archived_at
+        FROM tasks WHERE parent_task_id=? ORDER BY id`).all(taskId).map((child) => ({
+        ...child,
+        tags: parseJson(child.tags_json) ?? [],
+        archived: Boolean(child.archived_at),
+      })),
       dependencies: this.database.prepare(`SELECT
         d.depends_on_task_id id,t.title,t.status,t.version,d.conversation_id,d.turn_id,d.created_at
         FROM task_dependencies d JOIN tasks t ON t.id=d.depends_on_task_id
@@ -3671,6 +4021,7 @@ export class Phase0Store {
     }
     const tasks = this.database.prepare(`SELECT * FROM tasks
       WHERE project_id=? AND status NOT IN ('done','blocked')
+        AND task_kind='executable' AND archived_at IS NULL
         AND revision IS NOT NULL
         AND requested_review_revision=revision
       ORDER BY updated_at,id`).all(projectId);
@@ -3835,6 +4186,7 @@ export class Phase0Store {
   allowedTaskPhases(taskId) {
     const task = this.getTask(taskId);
     if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    if (task.archived_at || task.task_kind !== "executable") return [];
     const busy = this.database.prepare(`SELECT 1 AS value FROM orchestrator_commands
       WHERE task_id=? AND state IN ('queued','claimed') LIMIT 1`).get(taskId)
       || this.database.prepare(`SELECT 1 AS value FROM runs r JOIN sessions s ON s.id=r.session_id
@@ -3907,8 +4259,17 @@ export class Phase0Store {
   board() {
     const rows = this.database.prepare("SELECT * FROM tasks ORDER BY updated_at DESC, id").all();
     const columns = Object.fromEntries([...TASK_STATES].map((state) => [state, []]));
-    for (const row of rows) columns[row.status].push(row);
-    return { columns, generatedAt: this.clock() };
+    const archived = [];
+    for (const row of rows) {
+      const task = {
+        ...row,
+        archived: Boolean(row.archived_at),
+        tags: parseJson(row.tags_json) ?? [],
+      };
+      if (row.archived_at) archived.push(task);
+      else columns[row.status].push(task);
+    }
+    return { columns, archived, generatedAt: this.clock() };
   }
 
   createSession({ id, taskId, nativePath, provider, model, parentSessionId = null }) {

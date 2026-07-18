@@ -193,6 +193,8 @@ const split = await mutate("graph-split", {
 assert(
   split.status === 201
     && split.value.task.version === 6
+    && split.value.task.task_kind === "umbrella"
+    && split.value.childTask.task_kind === "executable"
     && split.value.childTask.parent_task_id === firstId
     && split.value.childTask.origin.parent_task_id === firstId
     && split.value.childTask.origin.turn_id === turn.value.turn.id,
@@ -283,6 +285,7 @@ process.stdout.write(`${JSON.stringify({
   optimistic_versioning: true,
   exact_turn_provenance: true,
   split_child_idempotency: true,
+  split_parent_classified_umbrella: true,
   same_project_scope: true,
   dependency_cycle_rejected: true,
   unresolved_dependency_blocks_schedule: true,

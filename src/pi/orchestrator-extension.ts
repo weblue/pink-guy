@@ -101,11 +101,22 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
     parameters: Type.Object({
       title: Type.String({ minLength: 1, maxLength: 500 }),
       acceptanceCriteria: Type.Array(Type.String({ minLength: 1, maxLength: 2_000 }), { maxItems: 100 }),
+      taskKind: Type.Optional(Type.Union([
+        Type.Literal("executable"),
+        Type.Literal("umbrella"),
+        Type.Literal("intake"),
+      ])),
+      tags: Type.Optional(Type.Array(
+        Type.String({ minLength: 1, maxLength: 50 }),
+        { maxItems: 20 },
+      )),
     }),
     async execute(toolCallId, params, signal) {
       return mutateTask(toolCallId, "create", {
         title: params.title,
         acceptanceCriteria: params.acceptanceCriteria,
+        taskKind: params.taskKind,
+        tags: params.tags,
       }, signal);
     },
   });
@@ -120,6 +131,15 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
       expectedVersion: Type.Integer({ minimum: 1 }),
       title: Type.String({ minLength: 1, maxLength: 500 }),
       acceptanceCriteria: Type.Array(Type.String({ minLength: 1, maxLength: 2_000 }), { maxItems: 100 }),
+      taskKind: Type.Optional(Type.Union([
+        Type.Literal("executable"),
+        Type.Literal("umbrella"),
+        Type.Literal("intake"),
+      ])),
+      tags: Type.Optional(Type.Array(
+        Type.String({ minLength: 1, maxLength: 50 }),
+        { maxItems: 20 },
+      )),
     }),
     async execute(toolCallId, params, signal) {
       return mutateTask(toolCallId, "update", params, signal);
@@ -185,6 +205,36 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
     }),
     async execute(toolCallId, params, signal) {
       return mutateTask(toolCallId, "require_decision", params, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_orchestrator_archive_task",
+    label: "Archive a Boss Man task artifact",
+    description: "Remove a settled task or planning artifact from the active board while retaining its complete history.",
+    promptSnippet: "Archive only when the record is no longer active and state the concrete reason",
+    parameters: Type.Object({
+      taskId: Type.String({ minLength: 1 }),
+      expectedVersion: Type.Integer({ minimum: 1 }),
+      reason: Type.String({ minLength: 1, maxLength: 2_000 }),
+    }),
+    async execute(toolCallId, params, signal) {
+      return mutateTask(toolCallId, "archive", params, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_orchestrator_restore_task",
+    label: "Restore a Boss Man task artifact",
+    description: "Return one archived task to its retained execution-status column without scheduling it.",
+    promptSnippet: "Restore an archived task only when it should become active again",
+    parameters: Type.Object({
+      taskId: Type.String({ minLength: 1 }),
+      expectedVersion: Type.Integer({ minimum: 1 }),
+      reason: Type.Optional(Type.String({ maxLength: 2_000 })),
+    }),
+    async execute(toolCallId, params, signal) {
+      return mutateTask(toolCallId, "restore", params, signal);
     },
   });
 

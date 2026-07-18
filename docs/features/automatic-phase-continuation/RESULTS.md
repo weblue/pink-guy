@@ -30,8 +30,7 @@ Verification:
 
 The local API, system-intake orchestrator, and project orchestrator were
 restarted on the implementation branch. The project orchestrator reconciled
-the retained Ready queue and correctly selected no implementation: the three
-remaining cards are an intake placeholder, a completed-work umbrella, and a
-superseded review-only child. Their presence exposes a separate task-lifecycle
-gap: non-executable umbrella/intake artifacts need an explicit archive or
-roll-up state instead of remaining in Ready.
+the retained Ready queue and correctly selected no implementation. The
+follow-up task-lifecycle feature now classifies and archives the intake
+placeholder, completed-work umbrella, and superseded review-only child while
+retaining their history.

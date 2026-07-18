@@ -112,6 +112,11 @@ task evidence. Failed validation, non-approved review, missing phase evidence,
 decisions, and dependencies stop the pipeline for explicit recovery. The
 cockpit's **Manually start phase** action is an override, not the normal flow.
 
+The active board distinguishes executable work from umbrella and intake
+artifacts. Optional task tags are organizational only. Settled planning records
+can be archived with an audited reason, remain fully inspectable, and can be
+restored without automatically scheduling work.
+
 ## Select and swap models
 
 Model selection is a central, observable policy—not an agent-controlled

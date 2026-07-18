@@ -354,6 +354,8 @@ export class DirectControlPlane {
         turnId,
         title: body.title,
         acceptanceCriteria: body.acceptanceCriteria ?? [],
+        taskKind: body.taskKind ?? "executable",
+        tags: body.tags ?? [],
         revision: await repositoryRevision(project.repository_path),
         idempotencyKey,
       });
@@ -366,10 +368,13 @@ export class DirectControlPlane {
       expectedVersion: body.expectedVersion,
       title: body.title,
       acceptanceCriteria: body.acceptanceCriteria,
+      taskKind: body.taskKind,
+      tags: body.tags,
       dependsOnTaskId: body.dependsOnTaskId,
       body: body.body,
       category: body.category,
       question: body.question,
+      reason: body.reason,
       idempotencyKey,
     });
   }
@@ -381,6 +386,11 @@ export class DirectControlPlane {
   } = {}) {
     const task = this.store.getTask(taskId);
     if (!task) throw new Error(`unknown task: ${taskId}`);
+    if (task.archived_at || task.task_kind !== "executable") {
+      throw Object.assign(new Error("only active executable tasks can start a session"), {
+        code: "transition_denied",
+      });
+    }
     if (phase === "implementation" && !task.assigned_worker) {
       throw new Error(`implementation task must be assigned before starting a session: ${taskId}`);
     }
@@ -1514,6 +1524,8 @@ export class DirectControlPlane {
           projectId: project.id,
           title: body.title,
           acceptanceCriteria: body.acceptanceCriteria ?? [],
+          taskKind: body.taskKind,
+          tags: body.tags,
           revision: await repositoryRevision(project.repository_path),
           idempotencyKey: request.headers["idempotency-key"],
         });
@@ -1578,10 +1590,27 @@ export class DirectControlPlane {
           title: body.title,
           description: body.description ?? null,
           acceptanceCriteria: body.acceptanceCriteria ?? [],
+          taskKind: body.taskKind,
+          tags: body.tags,
           expectedVersion: body.expectedVersion,
           idempotencyKey: request.headers["idempotency-key"],
         });
         result.task = { ...result.task, activity: this.store.taskAudit(taskDetail[1]) };
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const taskLifecycle = url.pathname.match(/^\/api\/tasks\/([^/]+)\/(archive|restore)$/);
+      if (request.method === "POST" && taskLifecycle) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.setTaskArchived({
+          taskId: taskLifecycle[1],
+          archived: taskLifecycle[2] === "archive",
+          reason: body.reason,
+          expectedVersion: body.expectedVersion,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        result.task = { ...result.task, activity: this.store.taskAudit(taskLifecycle[1]) };
         return json(response, result.replayed ? 200 : 201, result);
       }
 
