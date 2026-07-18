@@ -118,6 +118,22 @@ export function resolveModelRoute(policy, phase, override = null) {
   };
 }
 
+export function assertConfiguredModelSelection(policy, phase, route) {
+  const configured = [
+    policy.default,
+    ...Object.values(policy.phases),
+  ];
+  if (!configured.some((candidate) =>
+    candidate.provider === route.provider && candidate.model === route.model
+  )) {
+    throw Object.assign(new Error(
+      `${phase} route ${route.provider}/${route.model} is not configured; `
+      + "add it to model-routes.json or omit the override",
+    ), { code: "invalid_request" });
+  }
+  return route;
+}
+
 export function publicModelRoutePolicy(policy) {
   const route = (value) => ({
     provider: value.provider,

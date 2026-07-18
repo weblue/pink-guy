@@ -101,11 +101,22 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
     parameters: Type.Object({
       title: Type.String({ minLength: 1, maxLength: 500 }),
       acceptanceCriteria: Type.Array(Type.String({ minLength: 1, maxLength: 2_000 }), { maxItems: 100 }),
+      taskKind: Type.Optional(Type.Union([
+        Type.Literal("executable"),
+        Type.Literal("umbrella"),
+        Type.Literal("intake"),
+      ])),
+      tags: Type.Optional(Type.Array(
+        Type.String({ minLength: 1, maxLength: 50 }),
+        { maxItems: 20 },
+      )),
     }),
     async execute(toolCallId, params, signal) {
       return mutateTask(toolCallId, "create", {
         title: params.title,
         acceptanceCriteria: params.acceptanceCriteria,
+        taskKind: params.taskKind,
+        tags: params.tags,
       }, signal);
     },
   });
@@ -120,6 +131,15 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
       expectedVersion: Type.Integer({ minimum: 1 }),
       title: Type.String({ minLength: 1, maxLength: 500 }),
       acceptanceCriteria: Type.Array(Type.String({ minLength: 1, maxLength: 2_000 }), { maxItems: 100 }),
+      taskKind: Type.Optional(Type.Union([
+        Type.Literal("executable"),
+        Type.Literal("umbrella"),
+        Type.Literal("intake"),
+      ])),
+      tags: Type.Optional(Type.Array(
+        Type.String({ minLength: 1, maxLength: 50 }),
+        { maxItems: 20 },
+      )),
     }),
     async execute(toolCallId, params, signal) {
       return mutateTask(toolCallId, "update", params, signal);
@@ -189,13 +209,44 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
+    name: "boss_orchestrator_archive_task",
+    label: "Archive a Boss Man task artifact",
+    description: "Remove a settled task or planning artifact from the active board while retaining its complete history.",
+    promptSnippet: "Archive only when the record is no longer active and state the concrete reason",
+    parameters: Type.Object({
+      taskId: Type.String({ minLength: 1 }),
+      expectedVersion: Type.Integer({ minimum: 1 }),
+      reason: Type.String({ minLength: 1, maxLength: 2_000 }),
+    }),
+    async execute(toolCallId, params, signal) {
+      return mutateTask(toolCallId, "archive", params, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_orchestrator_restore_task",
+    label: "Restore a Boss Man task artifact",
+    description: "Return one archived task to its retained execution-status column without scheduling it.",
+    promptSnippet: "Restore an archived task only when it should become active again",
+    parameters: Type.Object({
+      taskId: Type.String({ minLength: 1 }),
+      expectedVersion: Type.Integer({ minimum: 1 }),
+      reason: Type.Optional(Type.String({ maxLength: 2_000 })),
+    }),
+    async execute(toolCallId, params, signal) {
+      return mutateTask(toolCallId, "restore", params, signal);
+    },
+  });
+
+  pi.registerTool({
     name: "boss_orchestrator_schedule_task",
     label: "Schedule a Boss Man task sub-agent",
     description: "Queue one implementation, test, or review sub-agent with an explicit or configured model route.",
     promptSnippet: "Select the phase and model route for a scoped task sub-agent",
     promptGuidelines: [
       "Omit provider, model, and thinkingLevel to use the configured phase default.",
-      "Choose a different route only when task needs, cost, or local-model policy justify it.",
+      "Only select a route already declared in Boss Man model-route configuration.",
+      "Choose a different configured route only when task needs, cost, or local-model policy justify it.",
     ],
     parameters: Type.Object({
       taskId: Type.String({ minLength: 1 }),

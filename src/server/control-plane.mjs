@@ -11,6 +11,7 @@ import { ContextCustodyService } from "./context-service.mjs";
 import { redactValue, RunCredentialVault } from "./credentials.mjs";
 import { HostGitService } from "./git-service.mjs";
 import {
+  assertConfiguredModelSelection,
   createModelRoutePolicy,
   publicModelRoutePolicy,
   resolveModelRoute,
@@ -142,6 +143,47 @@ function sanitizePiConversationEvent(event) {
   return null;
 }
 
+export function sanitizePiTaskEvent(event) {
+  const projected = sanitizePiConversationEvent(event);
+  if (projected) return projected;
+  if (event?.type === "response") {
+    return {
+      type: "response",
+      payload: {
+        id: event.id ?? null,
+        command: event.command ?? null,
+        success: Boolean(event.success),
+        error: clippedText(event.error, 2_000),
+        ...(event.command === "get_state" ? {
+          state: {
+            sessionId: event.data?.sessionId ?? null,
+            sessionFile: event.data?.sessionFile ?? null,
+            modelProvider: event.data?.model?.provider ?? null,
+            modelId: event.data?.model?.id ?? null,
+            thinkingLevel: event.data?.thinkingLevel ?? null,
+          },
+        } : {}),
+      },
+    };
+  }
+  if (event?.type === "extension_ui_request") {
+    return {
+      type: "extension_ui_request",
+      payload: {
+        method: event.method ?? null,
+        message: clippedText(event.message, 2_000),
+        notifyType: event.notifyType ?? null,
+      },
+    };
+  }
+  return null;
+}
+
+export function taskStateAllowsPhase(status, phase) {
+  if (phase === "implementation") return status === "in_progress";
+  return ["in_progress", "review"].includes(status);
+}
+
 async function repositoryRevision(repositoryPath) {
   try {
     const { stdout } = await execFileAsync("git", ["-C", repositoryPath, "rev-parse", "HEAD"], {
@@ -225,6 +267,43 @@ export class DirectControlPlane {
     return resolveModelRoute(this.modelRoutePolicy, phase, route);
   }
 
+  reconcileAutomaticPipelines(orchestratorToken) {
+    const orchestrator = this.store.authorizeActiveProjectOrchestrator(orchestratorToken);
+    const directives = this.store.automaticPipelineDirectives(orchestrator.project_id);
+    const receipts = [];
+    for (const directive of directives) {
+      if (directive.action !== "schedule") {
+        receipts.push({ ...directive, scheduled: false });
+        continue;
+      }
+      const modelRoute = {
+        ...this.resolveModelRoute(directive.phase),
+        policySource: "automatic_phase_continuation",
+      };
+      const result = this.store.scheduleOwnerTaskRun({
+        taskId: directive.taskId,
+        phase: directive.phase,
+        modelRoute,
+        actor: "pipeline-coordinator",
+        source: "automatic_phase_continuation",
+        idempotencyKey: [
+          "automatic-phase",
+          directive.taskId,
+          directive.revision,
+          directive.phase,
+        ].join(":"),
+      });
+      receipts.push({
+        ...directive,
+        scheduled: true,
+        replayed: result.replayed,
+        commandId: result.command.id,
+        modelRoute,
+      });
+    }
+    return receipts;
+  }
+
   assertLocalOwnerProfile() {
     if (this.exposureProfile !== "local_smoke") {
       throw Object.assign(new Error("local owner mutations require the loopback local-smoke profile"), {
@@ -275,6 +354,8 @@ export class DirectControlPlane {
         turnId,
         title: body.title,
         acceptanceCriteria: body.acceptanceCriteria ?? [],
+        taskKind: body.taskKind ?? "executable",
+        tags: body.tags ?? [],
         revision: await repositoryRevision(project.repository_path),
         idempotencyKey,
       });
@@ -287,10 +368,13 @@ export class DirectControlPlane {
       expectedVersion: body.expectedVersion,
       title: body.title,
       acceptanceCriteria: body.acceptanceCriteria,
+      taskKind: body.taskKind,
+      tags: body.tags,
       dependsOnTaskId: body.dependsOnTaskId,
       body: body.body,
       category: body.category,
       question: body.question,
+      reason: body.reason,
       idempotencyKey,
     });
   }
@@ -302,11 +386,17 @@ export class DirectControlPlane {
   } = {}) {
     const task = this.store.getTask(taskId);
     if (!task) throw new Error(`unknown task: ${taskId}`);
-    if (!task.assigned_worker) throw new Error(`task must be assigned before starting a session: ${taskId}`);
-    if (
-      (phase === "review" && !["in_progress", "review"].includes(task.status))
-      || (phase !== "review" && task.status !== "in_progress")
-    ) throw new Error("task must be in the active state required by its agent phase");
+    if (task.archived_at || task.task_kind !== "executable") {
+      throw Object.assign(new Error("only active executable tasks can start a session"), {
+        code: "transition_denied",
+      });
+    }
+    if (phase === "implementation" && !task.assigned_worker) {
+      throw new Error(`implementation task must be assigned before starting a session: ${taskId}`);
+    }
+    if (!taskStateAllowsPhase(task.status, phase)) {
+      throw new Error("task must be in the active state required by its agent phase");
+    }
     const project = this.store.getProject(task.project_id);
     const orchestrator = this.enforceOrchestratorLease || orchestratorToken
       ? this.store.authorizeProjectOrchestrator(orchestratorToken, task.project_id)
@@ -398,10 +488,17 @@ export class DirectControlPlane {
           "--system-prompt", composeAgentSystemPrompt(phase, promptProfile.prompt_text),
         ]),
         onEvent: (event) => {
-          const safeEvent = sanitize(event);
+          const projected = sanitizePiTaskEvent(event);
+          if (!projected) return;
+          const safeEvent = sanitize(projected);
           if (active) {
             active.sequence += 1;
-            this.store.appendRunEvent(active.runId, active.sequence, safeEvent.type ?? "unknown", safeEvent);
+            this.store.appendRunEvent(
+              active.runId,
+              active.sequence,
+              safeEvent.type ?? "unknown",
+              safeEvent.payload ?? {},
+            );
           } else pending.push(safeEvent);
         },
       });
@@ -449,7 +546,12 @@ export class DirectControlPlane {
       active = { runId: run.id, sequence: 0 };
       for (const event of pending) {
         active.sequence += 1;
-        this.store.appendRunEvent(run.id, active.sequence, event.type ?? "unknown", event);
+        this.store.appendRunEvent(
+          run.id,
+          active.sequence,
+          event.type ?? "unknown",
+          event.payload ?? {},
+        );
       }
       const artifacts = new RtkArtifactIngestor({
         store: this.store, sessionId: state.sessionId, runId, artifactRoot: artifactDirectory,
@@ -491,7 +593,13 @@ export class DirectControlPlane {
     }).effect;
     const from = managed.rpc.messages.length;
     await managed.rpc.command({ type: "prompt", message });
-    await managed.rpc.waitFor((event) => event.type === "agent_settled", "agent settlement", from);
+    await managed.rpc.waitFor(
+      (event) => event.type === "agent_settled",
+      "agent settlement",
+      from,
+      10 * 60 * 1_000,
+      90 * 1_000,
+    );
     await this.faultInjector("provider_after_settled", { sideEffectId: journal.id, runId: managed.run.id, sessionId });
     await this.ingestSnapshots(managed);
     const rtkReceipts = await managed.artifacts.ingestPiArtifacts();
@@ -526,6 +634,17 @@ export class DirectControlPlane {
     const started = await this.startTask(taskId, { orchestratorToken, phase, modelRoute });
     try {
       const execution = await this.prompt(started.session.id, this.phaseKickoff(phase));
+      const phaseOutcome = this.store.taskPhaseOutcome(taskId, phase);
+      if (!phaseOutcome.recorded) {
+        throw Object.assign(new Error(
+          `${phase} phase settled without recording its required authoritative outcome`,
+        ), {
+          code: "phase_protocol_violation",
+          phase,
+          taskId,
+          revision: phaseOutcome.revision,
+        });
+      }
       let completion = null;
       const evaluation = this.store.evaluateCompletion(taskId);
       if (phase === "review" && evaluation.allowed && orchestratorToken) {
@@ -554,6 +673,7 @@ export class DirectControlPlane {
       return {
         ...started,
         execution,
+        phaseOutcome,
         completion,
         task: this.store.getTaskDetails(taskId),
       };
@@ -1153,6 +1273,7 @@ export class DirectControlPlane {
           billingClass: body.billingClass,
           policySource: "orchestrator_selection",
         });
+        assertConfiguredModelSelection(this.modelRoutePolicy, phase, modelRoute);
         const result = this.store.scheduleOwnerTaskRun({
           taskId: task.id,
           phase,
@@ -1226,7 +1347,9 @@ export class DirectControlPlane {
         return json(response, 200, { released: true });
       }
       if (request.method === "POST" && url.pathname === "/api/orchestrators/commands/claim") {
-        const command = this.store.claimOrchestratorCommand(bearerToken(request));
+        const token = bearerToken(request);
+        this.reconcileAutomaticPipelines(token);
+        const command = this.store.claimOrchestratorCommand(token);
         if (!command) {
           response.writeHead(204);
           return response.end();
@@ -1237,13 +1360,18 @@ export class DirectControlPlane {
       const completeCommand = url.pathname.match(/^\/api\/orchestrators\/commands\/([^/]+)\/complete$/);
       if (request.method === "POST" && completeCommand) {
         const body = await readBody(request);
+        const token = bearerToken(request);
+        const command = this.store.completeOrchestratorCommand({
+          token,
+          commandId: completeCommand[1],
+          state: body.state,
+          result: body.result ?? {},
+        });
         return json(response, 200, {
-          command: this.store.completeOrchestratorCommand({
-            token: bearerToken(request),
-            commandId: completeCommand[1],
-            state: body.state,
-            result: body.result ?? {},
-          }),
+          command,
+          continuation: body.state === "succeeded"
+            ? this.reconcileAutomaticPipelines(token)
+            : [],
         });
       }
 
@@ -1396,6 +1524,8 @@ export class DirectControlPlane {
           projectId: project.id,
           title: body.title,
           acceptanceCriteria: body.acceptanceCriteria ?? [],
+          taskKind: body.taskKind,
+          tags: body.tags,
           revision: await repositoryRevision(project.repository_path),
           idempotencyKey: request.headers["idempotency-key"],
         });
@@ -1460,10 +1590,27 @@ export class DirectControlPlane {
           title: body.title,
           description: body.description ?? null,
           acceptanceCriteria: body.acceptanceCriteria ?? [],
+          taskKind: body.taskKind,
+          tags: body.tags,
           expectedVersion: body.expectedVersion,
           idempotencyKey: request.headers["idempotency-key"],
         });
         result.task = { ...result.task, activity: this.store.taskAudit(taskDetail[1]) };
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const taskLifecycle = url.pathname.match(/^\/api\/tasks\/([^/]+)\/(archive|restore)$/);
+      if (request.method === "POST" && taskLifecycle) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.setTaskArchived({
+          taskId: taskLifecycle[1],
+          archived: taskLifecycle[2] === "archive",
+          reason: body.reason,
+          expectedVersion: body.expectedVersion,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        result.task = { ...result.task, activity: this.store.taskAudit(taskLifecycle[1]) };
         return json(response, result.replayed ? 200 : 201, result);
       }
 

@@ -1,18 +1,28 @@
 #!/usr/bin/env node
 
 import { chmod, mkdtemp, readFile } from "node:fs/promises";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ConversationOrchestratorRuntime } from "../../src/server/conversation-runtime.mjs";
-import { DirectControlPlane } from "../../src/server/control-plane.mjs";
-import { loadModelRoutePolicy } from "../../src/server/model-routes.mjs";
+import {
+  DirectControlPlane,
+  sanitizePiTaskEvent,
+  taskStateAllowsPhase,
+} from "../../src/server/control-plane.mjs";
+import {
+  createModelRoutePolicy,
+  loadModelRoutePolicy,
+} from "../../src/server/model-routes.mjs";
 import {
   DEFAULT_PROMPT_DIRECTORY,
   DEFAULT_PROMPT_PROFILES,
   phaseKickoffPrompt,
 } from "../../src/server/prompt-profiles.mjs";
+import { PiRpcProcess } from "../../src/server/rpc.mjs";
 
 const fixture = process.argv[2];
 if (!fixture?.startsWith("/")) {
@@ -24,13 +34,92 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function fakeRpcChild() {
+  const child = new EventEmitter();
+  child.stdin = new PassThrough();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.exitCode = null;
+  child.kill = (signal) => {
+    child.exitCode = signal === "SIGKILL" ? 137 : 0;
+    child.emit("exit", child.exitCode, signal);
+    return true;
+  };
+  return child;
+}
+
+const activeChild = fakeRpcChild();
+const activeRpc = new PiRpcProcess({ child: activeChild });
+const activityAwareSettlement = activeRpc.waitFor(
+  (message) => message.type === "agent_settled",
+  "activity-aware settlement",
+  0,
+  500,
+  60,
+);
+setTimeout(() => activeChild.stdout.write('{"type":"message_update"}\n'), 40);
+setTimeout(() => activeChild.stdout.write('{"type":"agent_settled"}\n'), 80);
+await activityAwareSettlement;
+
+const exitedChild = fakeRpcChild();
+const exitedRpc = new PiRpcProcess({ child: exitedChild });
+const exitDetected = exitedRpc.waitFor(
+  (message) => message.type === "agent_settled",
+  "process-exit settlement",
+  0,
+  500,
+  100,
+).then(() => false, (error) => error.message.includes("Pi RPC exited"));
+setTimeout(() => exitedChild.kill("SIGTERM"), 10);
+assert(await exitDetected, "Pi process exit was not detected before the timeout ceiling");
+assert(
+  sanitizePiTaskEvent({
+    type: "message_update",
+    assistantMessageEvent: {
+      type: "thinking_delta",
+      delta: "private reasoning",
+      partial: { thinkingSignature: "private-signature" },
+    },
+  }) === null,
+  "task event projection retained private reasoning metadata",
+);
+assert(
+  sanitizePiTaskEvent({
+    type: "message_update",
+    assistantMessageEvent: { type: "text_delta", delta: "visible progress" },
+  })?.payload?.delta === "visible progress",
+  "task event projection dropped visible text progress",
+);
+assert(
+  taskStateAllowsPhase("in_progress", "implementation")
+    && taskStateAllowsPhase("review", "test")
+    && taskStateAllowsPhase("review", "review")
+    && !taskStateAllowsPhase("ready", "implementation"),
+  "task startup and scheduling disagree about phase-active states",
+);
+
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(moduleDirectory, "../..");
 const fakePi = resolve(moduleDirectory, "fixtures/fake-pi-rpc.mjs");
 await chmod(fakePi, 0o755);
-const modelPolicy = await loadModelRoutePolicy(
+const configuredDefaultPolicy = await loadModelRoutePolicy(
   resolve(repositoryRoot, "config/model-routes.json"),
 );
+const modelPolicy = createModelRoutePolicy({
+  provider: configuredDefaultPolicy.default.provider,
+  model: configuredDefaultPolicy.default.model,
+  thinking: configuredDefaultPolicy.default.thinking,
+  billingClass: configuredDefaultPolicy.default.billingClass,
+  phases: {
+    implementation: {
+      provider: "ollama",
+      model: "qwen2.5-coder:14b",
+      thinking: "low",
+      billingClass: "local",
+    },
+  },
+  source: "configured_default",
+});
 const root = await mkdtemp(join(tmpdir(), "boss-man-dogfood-readiness-"));
 const authority = new DirectControlPlane({
   databasePath: join(root, "boss-man.sqlite"),
@@ -92,7 +181,7 @@ const routes = await request("/api/model-routes");
 assert(
   routes.status === 200
     && routes.value.default.provider === "openai-codex"
-    && routes.value.phases.implementation.model === "gpt-5.4-mini",
+    && routes.value.phases.implementation.model === "qwen2.5-coder:14b",
   "human-editable model route defaults were not exposed",
 );
 
@@ -184,6 +273,27 @@ const projectRuntime = new ConversationOrchestratorRuntime({
   pollMs: 100,
 });
 const claimed = await projectRuntime.claim();
+const rejectedUnconfiguredRoute = await request(
+  `/api/orchestration/conversations/${conversationId}/task-schedules`,
+  {
+    method: "POST",
+    token: projectRuntime.token,
+    idempotencyKey: "dogfood-unconfigured-model-schedule",
+    body: {
+      taskId: "dogfood-task",
+      phase: "implementation",
+      modelProvider: "openai",
+      modelId: "gpt-5.4-mini",
+      thinkingLevel: "medium",
+      billingClass: "subscription",
+    },
+  },
+);
+assert(
+  rejectedUnconfiguredRoute.status === 400
+    && rejectedUnconfiguredRoute.value.error === "invalid_request",
+  "orchestrator scheduled an unconfigured model route",
+);
 const scheduled = await request(
   `/api/orchestration/conversations/${conversationId}/task-schedules`,
   {
@@ -253,10 +363,14 @@ process.stdout.write(`${JSON.stringify({
   prompts_from_text_files: true,
   configured_model_defaults: true,
   orchestrator_selected_subagent_route: true,
+  unconfigured_orchestrator_route_rejected: true,
   local_model_route_recorded: true,
   pre_compaction_custody: preCompaction.value.snapshot.snapshot_id,
   scope_transfer_custody: transfer.value.binding.custody_snapshot_id,
   transferred_native_session_resumed: true,
+  progress_aware_task_supervision: true,
+  sanitized_task_event_projection: true,
+  phase_state_contract_aligned: true,
   provider_requests: 0,
   isolated_root: root,
 }, null, 2)}\n`);

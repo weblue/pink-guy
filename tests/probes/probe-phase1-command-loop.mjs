@@ -208,6 +208,12 @@ await request(`/api/orchestrators/commands/${claimedRetry.value.command.id}/comp
   token: replacementRegistration.value.token,
   body: { state: "failed", result: { reason: "deterministic_probe_failure" } },
 });
+const blockedAfterFailure = authority.store.getTask("task-a");
+assert(
+  blockedAfterFailure.status === "blocked"
+    && authority.store.taskAudit("task-a").some((event) => event.type === "task_command_failed"),
+  "terminal command failure was not projected as visible blocked task attention",
+);
 const reset = await request(`/api/commands/${claimedRetry.value.command.id}/reconcile`, {
   method: "POST",
   idempotencyKey: "phase1-owner-reset",
@@ -366,6 +372,7 @@ const result = {
   explicit_owner_reset: true,
   automatic_replay: false,
   consumer_success_and_failure: true,
+  terminal_failure_blocks_task: true,
   public_token_leak: false,
   isolated_root: root,
 };

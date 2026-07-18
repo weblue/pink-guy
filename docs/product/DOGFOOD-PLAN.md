@@ -1,6 +1,7 @@
 # Phase 1 dogfood plan
 
-Status: Ready after dogfood-readiness PR lands
+Status: Active dogfood — first project workflow completed and its recovery
+defects are regression-covered; two cross-repository scenarios remain
 
 Last updated: 2026-07-18
 
@@ -44,12 +45,15 @@ For each scenario:
    **Snapshot + transfer** (or `boss bind`) after choosing the repository.
 2. Converse with the project orchestrator until acceptance criteria and any
    decision gates are explicit.
-3. Schedule implementation and observe its container, worktree, progress,
-   host checkpoint, artifacts, and final fixed revision.
-4. Schedule test and verify that its fresh worktree base equals that revision
-   and that exact pass/fail evidence is recorded.
-5. Schedule independent review and inspect reviewer identity, findings,
-   disposition, diff, validation, context receipts, and artifacts.
+3. Let the orchestrator schedule implementation after refinement and observe
+   its container, worktree, progress, host checkpoint, artifacts, and final
+   fixed revision. Use the manual phase control only as an explicit override
+   or recovery action.
+4. Observe automatic test scheduling and verify that its fresh worktree base
+   equals that revision and that exact pass/fail evidence is recorded.
+5. Observe automatic independent review scheduling and inspect reviewer
+   identity, findings, disposition, diff, validation, context receipts, and
+   artifacts.
 6. Confirm the orchestrator marks the task Done only when every completion
    gate passes and records—not executes—the merge request.
 7. Smoke-test the resulting revision outside the agent container, then record
@@ -66,6 +70,54 @@ current OAuth snapshot policy intentionally serializes OAuth-backed task runs.
 - Treat missing or misleading task/diff/test/review/custody evidence as a
   product defect even when the code change itself is correct.
 - A direct Pi/Codex client remains the recovery path during Phase 1.
+
+## First-run findings
+
+The first live project conversation successfully refined a reversible UI
+request into acceptance criteria and attempted automatic implementation. It
+then exposed three defects that must remain regression gates:
+
+- an orchestrator could name a syntactically valid but unconfigured provider,
+  causing a predictable authentication failure;
+- task settlement inherited a 30-second generic RPC timeout even while Pi was
+  emitting active progress; and
+- a terminal command failure remained visually `in_progress` instead of
+  projecting blocked attention.
+- task-run storage retained thousands of repeated partial `message_update`
+  payloads, including reasoning metadata that belongs only in native Pi
+  custody; and
+- the conversational orchestrator announced that test/review would follow,
+  but no event-driven continuation scheduled those phases after the original
+  turn ended (addressed by the model-less automatic phase coordinator); and
+- independent test scheduling accepted a task in `review`, while task startup
+  rejected that same state before a container or provider request.
+
+Runtime supervision must not rely only on a long wall-clock timeout. Pi or
+container exit and explicit protocol errors should fail immediately; a
+progress-aware inactivity watchdog should reset on meaningful RPC activity;
+and a longer hard ceiling should remain only as a final bound for an agent
+that is still demonstrably active.
+
+Normal operation should continue implementation → test → review from durable
+task events when gates become satisfied. The owner phase control remains an
+explicit override/recovery path, not the expected way to advance ordinary
+work.
+
+After applying the bounded recovery fixes, the same live task completed:
+
+- implementation produced host checkpoint
+  `fa2ceab26a529f7f032ea6e080e7e41811e298e7`;
+- independent test passed from that exact fixed revision;
+- independent review approved that revision with no findings;
+- completion gates moved the task to `done` and recorded a merge request; and
+- sanitized test/review projections retained 188 and 55 structured events,
+  respectively, instead of thousands of raw partial deltas.
+
+The source revision is retained by its task branch, recorded checkpoint, and
+artifact provenance. Completed run worktrees are disposable and may be removed
+after settlement; automatic worktree retirement remains Phase 2. Phase 1
+records the merge request but does not yet push or merge it, so external
+integration remains an owner action until Phase 2 policy is implemented.
 
 ## Exit evidence
 

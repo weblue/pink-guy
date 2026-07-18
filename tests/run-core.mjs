@@ -21,6 +21,8 @@ const probes = [
   "probe-phase1-task-graph-mutations.mjs",
   "probe-phase1-agent-prompt-profiles.mjs",
   "probe-phase1-dogfood-readiness.mjs",
+  "probe-phase1-automatic-continuation.mjs",
+  "probe-phase1-task-lifecycle.mjs",
   "probe-phase1-workflow-observer.mjs",
 ];
 
