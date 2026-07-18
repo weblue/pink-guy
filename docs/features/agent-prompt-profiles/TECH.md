@@ -23,14 +23,14 @@ returns the original revision; a reused key with different content fails.
 
 `src/server/prompt-profiles.mjs` owns:
 
-- default editable guidance;
-- the orchestrator policy envelope;
-- the task-agent policy envelope; and
+- deterministic loading from `config/prompts/`;
+- profile metadata; and
 - deterministic composition of envelope plus active guidance.
 
-The policy envelope is source-controlled platform policy, not an editable
-profile. Runtime code resolves the active profile once when creating a Pi
-process and retains that resolved object with the managed process.
+The policy envelopes and phase kickoff prompts are source-controlled text
+files, not editable database profiles. Runtime code resolves the active
+profile once when creating a Pi process and retains that resolved object with
+the managed process.
 
 The orchestrator claim context includes the active profile, but a cached Pi
 process keeps its original revision. `conversation_runs.metadata` records the
@@ -50,5 +50,6 @@ profiles` and `boss profile --key ...` provide terminal parity.
 
 1. Profiles, API, runtime pinning, deterministic coverage, and custody
    provenance are implemented.
-2. Add project/task overrides only after real dogfooding demonstrates that
-   global phase profiles are insufficient.
+2. Plain-text defaults and kickoff/policy extraction are implemented.
+3. Add project/task prompt overrides only after real dogfooding demonstrates
+   that global phase profiles are insufficient.

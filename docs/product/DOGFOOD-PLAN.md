@@ -1,6 +1,6 @@
 # Phase 1 dogfood plan
 
-Status: Ready after workspace-phase-flow PR lands
+Status: Ready after dogfood-readiness PR lands
 
 Last updated: 2026-07-18
 
@@ -19,8 +19,11 @@ cockpit, project orchestrators, Pi task agents, and audited controls.
   credential source is readable by the host process.
 - The API runs on loopback and each selected repository has one active project
   orchestrator.
-- Persistent orchestrator context is captured before Pi compaction. Until that
-  final custody gate lands, keep the first dogfood conversations bounded.
+- `probe-phase1-dogfood-readiness` proves plain-text prompt loading,
+  per-subagent route selection, blocking orchestrator pre-compaction custody,
+  and model-less system-intake → project transfer.
+- `probe-direct-live-provider` passes against the owner-managed login and
+  pinned ARM64 task image.
 
 ## Scenarios
 
@@ -37,7 +40,8 @@ schema migration, public networking, or major architecture decisions.
 For each scenario:
 
 1. Attach or select the repository and provide an immutable request/source
-   snapshot.
+   snapshot. For the prototype scenario, begin in system intake and use
+   **Snapshot + transfer** (or `boss bind`) after choosing the repository.
 2. Converse with the project orchestrator until acceptance criteria and any
    decision gates are explicit.
 3. Schedule implementation and observe its container, worktree, progress,
@@ -78,7 +82,9 @@ Phase 1 can close when both scenarios have:
 ## Deliberate boundaries
 
 - Use Pi's recorded per-run provider/model route, including a local model when
-  selected; no separate routing service is assumed.
+  configured; no separate routing service is assumed. The current host has no
+  local provider registered in `pi --list-models`, so local execution is not a
+  Phase 1 dogfood prerequisite.
 - Keep artifacts, context, native sessions, and memories in canonical storage;
   FTS remains the model-less retrieval projection.
 - The host daemon creates task containers dynamically. Task containers do not

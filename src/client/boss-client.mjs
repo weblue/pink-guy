@@ -245,6 +245,18 @@ export class BossManClient {
     });
   }
 
+  async bindTopicToProject(
+    topicId,
+    { projectId, expectedVersion },
+    { idempotencyKey = `terminal-topic-bind-${randomUUID()}` } = {},
+  ) {
+    return this.request(`/api/topics/${encodeURIComponent(topicId)}/project`, {
+      method: "POST",
+      idempotencyKey,
+      body: { projectId, expectedVersion },
+    });
+  }
+
   async switchConversationModel(
     conversationId,
     { modelProvider, modelId, thinkingLevel, expectedVersion },

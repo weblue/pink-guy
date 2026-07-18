@@ -133,7 +133,15 @@ async function executeCommand(command) {
   const response = await fetch(`${api}/api/tasks/${command.task_id}/sessions`, {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({ phase: command.phase, execute: true }),
+    body: JSON.stringify({
+      phase: command.phase,
+      execute: true,
+      modelProvider: command.payload?.modelRoute?.provider,
+      modelId: command.payload?.modelRoute?.model,
+      thinkingLevel: command.payload?.modelRoute?.thinking,
+      billingClass: command.payload?.modelRoute?.billingClass,
+      modelPolicySource: command.payload?.modelRoute?.policySource,
+    }),
   });
   const body = await responseJson(response);
   if (!response.ok) {
@@ -143,6 +151,7 @@ async function executeCommand(command) {
     sessionId: body?.session?.id ?? null,
     runId: body?.run?.id ?? null,
     phase: command.phase,
+    modelRoute: command.payload?.modelRoute ?? null,
     taskVersion: body?.task?.version ?? null,
     taskStatus: body?.task?.status ?? null,
     revision: body?.task?.revision ?? null,

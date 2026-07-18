@@ -2,7 +2,7 @@
 
 ## Core regression suite
 
-Run the nine deterministic Phase 1 probes together:
+Run the ten deterministic Phase 1 probes together:
 
 ```sh
 npm test
@@ -11,7 +11,8 @@ npm test
 The runner creates a temporary Git repository, exercises the command loop,
 local task controls, conversation/task projections, persistent fake-Pi RPC
 runtime, cockpit rendering, browser/terminal conversation parity, task-graph
-mutations, prompt provenance, and the fixed-revision phase workflow, then
+mutations, plain-text prompt defaults, per-agent model routes,
+pre-compaction/scope-transfer custody, and the fixed-revision phase workflow, then
 deletes the fixture. It makes no provider request and starts no task container.
 
 Watch the phase protocol as a standalone model-less baseline:
@@ -44,11 +45,23 @@ Then pass that absolute path to a probe:
 node ./tests/probes/probe-direct-context-custody.mjs /tmp/boss-man-fixture
 node ./tests/probes/probe-memory-fts.mjs /tmp/boss-man-fixture
 node ./tests/probes/probe-phase1-conversation-runtime.mjs /tmp/boss-man-fixture
+node ./tests/probes/probe-phase1-dogfood-readiness.mjs /tmp/boss-man-fixture
 ```
 
 The context and memory probes are model-less. Provider and container probes
 have explicit names and prerequisites; inspect their usage with no arguments
 before running them.
+
+After the model-less suite passes, the bounded authenticated task-container
+smoke is:
+
+```sh
+node ./tests/probes/probe-direct-live-provider.mjs \
+  /tmp/boss-man-fixture \
+  "$HOME/.pi/agent/auth.json" \
+  openai-codex \
+  gpt-5.4-mini
+```
 
 ## Container tests
 

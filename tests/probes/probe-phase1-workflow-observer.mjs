@@ -57,6 +57,13 @@ async function startObservedRun(phase, sequence) {
     taskId: "observer-task",
     phase,
     idempotencyKey: `observer-schedule-${phase}`,
+    modelRoute: {
+      provider: "model-less",
+      model: "workflow-observer",
+      thinking: "off",
+      billingClass: "local",
+      policySource: "workflow_observer",
+    },
   });
   const command = store.claimOrchestratorCommand(registration.token);
   assert(command?.id === scheduled.command.id, `${phase} command was not claimed`);
@@ -79,6 +86,11 @@ async function startObservedRun(phase, sequence) {
     promptProfileKey: phase,
     promptProfileVersion: 1,
     promptSha256: `observer-${phase}`,
+    modelProvider: "model-less",
+    modelId: "workflow-observer",
+    thinkingLevel: "off",
+    modelPolicySource: "workflow_observer",
+    billingClass: "local",
   });
   observe(phase, "running", `command=${command.id} run=${run.id} base=${workspace.base_revision.slice(0, 12)}`);
   return { command, run, sessionId, workspace };

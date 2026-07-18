@@ -72,7 +72,8 @@ Add loopback-profile routes:
 The queue endpoint does not claim tasks. A `start_task` command can be queued
 for a task before it is worker-claimed, but the existing session-start
 operation will fail and the orchestrator will durably report that failure.
-Automatic local task creation/claiming belongs to the next Phase 1 slice.
+Automatic local task creation/claiming was implemented by the later Phase 1
+task-control and orchestrator-conversation slices.
 
 ### Project orchestrator consumer
 

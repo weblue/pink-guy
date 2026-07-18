@@ -1,0 +1,3 @@
+Implement the assigned task in its managed worktree.
+
+Read the authoritative task and acceptance criteria before editing. Keep changes scoped, add proportionate unit or regression coverage, run relevant validation, record meaningful progress, and request independent review only when the fixed revision is ready to inspect.

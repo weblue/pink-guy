@@ -20,6 +20,7 @@ function usage(message) {
     [--expected-version N] [--api URL] [--json]
   boss model --topic ID --provider PROVIDER --model MODEL_ID --thinking LEVEL
     [--expected-version N] [--api URL] [--json]
+  boss bind --topic ID --project ID [--expected-version N] [--api URL] [--json]
   boss import --repo-url URL [--name NAME] [--description TEXT]
     [--api URL] [--json]
   boss chat (--topic ID | --project ID | --repo PATH | --new-topic TITLE)
@@ -37,7 +38,7 @@ function parseArguments(argv) {
   const command = argv[0];
   if (
     !command || command === "--help" || command === "-h"
-    || !["status", "topics", "profiles", "profile", "model", "import", "chat"].includes(command)
+    || !["status", "topics", "profiles", "profile", "model", "bind", "import", "chat"].includes(command)
   ) {
     usage(command ? `unknown command: ${command}` : null);
   }
@@ -83,6 +84,9 @@ function parseArguments(argv) {
     command === "model"
     && (!options.topicId || !options.modelProvider || !options.modelId || !options.thinkingLevel)
   ) usage("model requires --topic, --provider, --model, and --thinking");
+  if (command === "bind" && (!options.topicId || !options.projectId)) {
+    usage("bind requires --topic and --project");
+  }
   if (command === "import" && !options.repositoryUrl) usage("import requires --repo-url");
   if (options.prompt && options.promptFile) usage("choose --prompt or --prompt-file");
   if (
@@ -187,6 +191,23 @@ async function runModelSwitch(client, options) {
     + `Conversation now uses ${result.change.new_route.modelProvider}/`
     + `${result.change.new_route.modelId} (${result.change.new_route.thinkingLevel}).\n`
     + "The orchestrator restarts the durable Pi session before processing the next turn.\n",
+  );
+}
+
+async function runTopicBind(client, options) {
+  const detail = await client.topicDetail(options.topicId);
+  const result = await client.bindTopicToProject(options.topicId, {
+    projectId: options.projectId,
+    expectedVersion: options.expectedVersion ?? detail.conversation.version,
+  });
+  if (options.json) {
+    writeJson(result);
+    return;
+  }
+  process.stdout.write(
+    `Saved custody snapshot ${result.binding.custody_snapshot_id}.\n`
+    + `Topic now belongs to project ${result.binding.project_id}.\n`
+    + "The project orchestrator resumes the same native Pi session on its next turn.\n",
   );
 }
 
@@ -381,6 +402,8 @@ try {
     await runProfile(client, options);
   } else if (options.command === "model") {
     await runModelSwitch(client, options);
+  } else if (options.command === "bind") {
+    await runTopicBind(client, options);
   } else if (options.command === "import") {
     await runImport(client, options);
   } else {

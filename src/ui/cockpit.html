@@ -221,15 +221,23 @@
         <p class="muted">Boss Man verifies a model-less custody snapshot, then restarts the durable Pi session before the next turn.</p>
         <div id="model-route-status" class="status muted" aria-live="polite"></div>
       </details>
+      <details id="topic-bind-panel">
+        <summary>Bind intake topic to a project</summary>
+        <form id="topic-bind-form" class="controls">
+          <select id="topic-bind-project" required aria-label="Project for topic"></select>
+          <button type="submit">Snapshot + transfer</button>
+        </form>
+        <p class="muted">Boss Man verifies a model-less custody bundle before the project orchestrator resumes the same native Pi session.</p>
+      </details>
       <details id="source-snapshot-panel">
         <summary>Attach source snapshot</summary>
         <form id="source-snapshot-form">
-          <select id="source-kind"><option>manual</option><option>jira</option></select>
-          <input id="source-ref" maxlength="2000" placeholder="Ticket URL or source reference">
-          <textarea id="source-content" required maxlength="50000" placeholder="Immutable ticket or request snapshot"></textarea>
+          <select id="source-kind"><option>manual</option><option>external</option></select>
+          <input id="source-ref" maxlength="2000" placeholder="Work-item URL or source reference">
+          <textarea id="source-content" required maxlength="50000" placeholder="Immutable work-item or request snapshot"></textarea>
           <button type="submit">Attach to project</button>
         </form>
-        <p class="muted">Snapshots are read-only context. Boss Man does not write back to Jira.</p>
+        <p class="muted">Snapshots are read-only context. Boss Man does not synchronize or write back to the source system.</p>
       </details>
       <div id="conversation" class="conversation" data-testid="conversation-stream"></div>
       <form id="conversation-form" class="composer" data-testid="conversation-form">
@@ -299,6 +307,7 @@
     context: null,
     leases: [],
     promptProfiles: [],
+    modelRoutes: null,
     selectedPromptProfileKey: "orchestrator",
     custodySnapshots: [],
     selectedTask: null,
@@ -375,6 +384,8 @@
     document.querySelector("#task-project").innerHTML = options;
     document.querySelector("#topic-project").innerHTML =
       "<option value=\"\">New project or prototype</option>" + options;
+    document.querySelector("#topic-bind-project").innerHTML =
+      "<option value=\"\">Select project</option>" + options;
   }
 
   function renderTopics() {
@@ -435,10 +446,21 @@
       "<div class=\"muted\">" + esc(event.type) + " · " + esc(event.actor_id)
         + " · " + esc(event.created_at) + "</div>"
     ).join("") || "<p class=\"muted\">No activity yet.</p>";
+    const defaultPhase = (workspace?.allowed_phases || [])[0];
+    const defaultRoute = defaultPhase ? app.modelRoutes?.phases?.[defaultPhase] : null;
     const phaseControls = (workspace?.allowed_phases || []).length
       ? "<div class=\"controls\"><select id=\"schedule-task-phase\">"
         + workspace.allowed_phases.map((phase) => "<option>" + esc(phase) + "</option>").join("")
+        + "</select><input id=\"schedule-model-provider\" aria-label=\"Task provider\" value=\""
+        + esc(defaultRoute?.provider || "") + "\" placeholder=\"Provider\">"
+        + "<input id=\"schedule-model-id\" aria-label=\"Task model\" value=\""
+        + esc(defaultRoute?.model || "") + "\" placeholder=\"Model\">"
+        + "<select id=\"schedule-model-thinking\" aria-label=\"Task thinking level\">"
+        + ["off", "minimal", "low", "medium", "high", "xhigh"].map((thinking) =>
+          "<option" + (thinking === defaultRoute?.thinking ? " selected" : "") + ">" + thinking + "</option>"
+        ).join("")
         + "</select><button data-schedule-selected=\"" + esc(task.id) + "\">Schedule phase</button></div>"
+        + "<div class=\"muted\">The resolved provider, model, and thinking level are pinned to this sub-agent run.</div>"
       : "<p class=\"muted\">No phase is currently schedulable.</p>";
     const completionControl = workspace?.completion_evaluation?.allowed && task.status !== "done"
       ? "<button data-complete-task=\"" + esc(task.id) + "\">Complete validated + approved task</button>"
@@ -465,7 +487,9 @@
         : "<div class=\"muted\">No workspace receipt.</div>";
       return "<details class=\"row\"><summary><strong>" + esc(run.phase) + "</strong> · "
         + esc(run.state) + " · " + esc(run.model_provider + "/" + run.model_id) + "</summary>"
-        + "<div class=\"muted\">run " + esc(run.id) + " · prompt "
+        + "<div class=\"muted\">run " + esc(run.id) + " · "
+        + esc(run.thinking_level || "unknown") + " thinking · "
+        + esc(run.model_policy_source || "legacy route") + " · prompt "
         + esc((run.prompt_profile_key || "unknown") + "@v" + (run.prompt_profile_version || "?")) + "</div>"
         + workspaceDetail + "<h4>Git custody</h4>" + git + "<h4>Artifacts</h4>" + artifacts
         + "<div class=\"muted\">" + esc(run.events.length) + " recorded run events · "
@@ -532,6 +556,7 @@
       : "system intake";
     document.querySelector("#workspace-state").textContent = detail.conversation.state.replaceAll("_", " ");
     document.querySelector("#source-snapshot-panel").hidden = !detail.conversation.project_id;
+    document.querySelector("#topic-bind-panel").hidden = Boolean(detail.conversation.project_id);
     const lease = app.leases.find((item) =>
       item.scope_type === detail.conversation.scope_type
       && item.scope_id === detail.conversation.scope_id
@@ -631,7 +656,7 @@
   }
 
   async function refresh() {
-    const [projects, topics, orchestrators, leases, sessions, board, commands, promptProfiles] = await Promise.all([
+    const [projects, topics, orchestrators, leases, sessions, board, commands, promptProfiles, modelRoutes] = await Promise.all([
       request("/api/projects"),
       request("/api/topics"),
       request("/api/orchestrators"),
@@ -640,12 +665,14 @@
       request("/api/board"),
       request("/api/commands?limit=20"),
       request("/api/agent-profiles"),
+      request("/api/model-routes"),
     ]);
     app.projects = projects.projects;
     app.topics = topics.topics;
     app.leases = leases.leases;
     app.board = board;
     app.promptProfiles = promptProfiles.profiles;
+    app.modelRoutes = modelRoutes;
     renderProjects();
     renderTopics();
     renderBoard();
@@ -828,6 +855,33 @@
     }
   });
 
+  document.querySelector("#topic-bind-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = event.submitter;
+    button.disabled = true;
+    try {
+      const result = await request(
+        "/api/topics/" + encodeURIComponent(app.topicDetail.topic.id) + "/project",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": key("topic-project") },
+          body: JSON.stringify({
+            projectId: document.querySelector("#topic-bind-project").value,
+            expectedVersion: app.topicDetail.conversation.version,
+          }),
+        },
+      );
+      mutationStatus("Custody snapshot " + result.binding.custody_snapshot_id
+        + " verified. Start or use the matching project orchestrator.");
+      await refresh();
+      await loadTopic(app.selectedTopicId, { quiet: true });
+    } catch (error) {
+      mutationStatus(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   document.querySelector("#model-route-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const button = event.submitter;
@@ -933,6 +987,15 @@
     }
   });
 
+  document.querySelector("#task-detail").addEventListener("change", (event) => {
+    if (event.target.id !== "schedule-task-phase") return;
+    const route = app.modelRoutes?.phases?.[event.target.value];
+    if (!route) return;
+    document.querySelector("#schedule-model-provider").value = route.provider;
+    document.querySelector("#schedule-model-id").value = route.model;
+    document.querySelector("#schedule-model-thinking").value = route.thinking;
+  });
+
   document.querySelector("#task-detail").addEventListener("click", async (event) => {
     const resumeButton = event.target.closest("[data-resume-task]");
     if (resumeButton) {
@@ -958,7 +1021,12 @@
         await request("/api/tasks/" + encodeURIComponent(scheduleButton.dataset.scheduleSelected) + "/schedule", {
           method: "POST",
           headers: { "content-type": "application/json", "idempotency-key": key("schedule-task-phase") },
-          body: JSON.stringify({ phase: document.querySelector("#schedule-task-phase").value }),
+          body: JSON.stringify({
+            phase: document.querySelector("#schedule-task-phase").value,
+            modelProvider: document.querySelector("#schedule-model-provider").value,
+            modelId: document.querySelector("#schedule-model-id").value,
+            thinkingLevel: document.querySelector("#schedule-model-thinking").value,
+          }),
         });
         mutationStatus("Phase queued for the project orchestrator.");
         await refresh();

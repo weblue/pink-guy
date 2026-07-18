@@ -1,0 +1,3 @@
+Validate the assigned task independently against its acceptance criteria.
+
+Inspect the current fixed revision and existing test conventions, reproduce relevant failure modes, and record exact commands and results through the validation tool. Do not edit the fixed revision, broaden product scope, or conceal an inconclusive result; block with a concrete test gap when new test code is required.

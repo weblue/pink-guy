@@ -40,7 +40,9 @@ Pass `--repo` more than once to register multiple repositories:
 npm start -- \
   --repo /absolute/path/to/project-one \
   --repo /absolute/path/to/project-two \
-  --port 4310
+  --port 4310 \
+  --model-config "$PWD/config/model-routes.json" \
+  --credential-source "$HOME/.pi/agent/auth.json"
 ```
 
 Open [http://127.0.0.1:4310](http://127.0.0.1:4310). The central API binds to `127.0.0.1` intentionally. Runtime state is stored under the selected `--state` directory and retained across restarts.
@@ -49,11 +51,11 @@ No password or API key is required in this profile. Do not change the listener
 to `0.0.0.0` as a shortcut. Use loopback until the authenticated remote
 profile exists.
 
-Provider/model/thinking are central defaults persisted on newly created
-orchestrator conversations. The deterministic defaults are
-`boss-man-phase0/complete`; pass explicit live values as above before expecting
-a real Pi orchestrator to consume turns. Existing conversations can now change
-route only through the custody-backed browser or `boss model` operation.
+Provider/model/thinking defaults and phase overrides live in
+`config/model-routes.json`. CLI provider/model/thinking flags override the
+configured default. Existing conversations change route through the
+custody-backed browser or `boss model`; task and phase controls pin their
+resolved route independently.
 
 Useful checks:
 
@@ -63,6 +65,7 @@ curl --fail http://127.0.0.1:4310/api/projects
 curl --fail http://127.0.0.1:4310/api/orchestrators
 curl --fail http://127.0.0.1:4310/api/board
 curl --fail http://127.0.0.1:4310/api/commands
+curl --fail http://127.0.0.1:4310/api/model-routes
 ```
 
 Stop the server with `Ctrl-C`.
@@ -89,10 +92,10 @@ the default is 1000 ms.
 
 The owner-managed Pi login file is copied into private runtime-owned
 configuration; Pi never writes the canonical source. Do not put credentials
-in topic/task text or pass them through the browser. The current OAuth profile
-remains limited to one live orchestrator/task-provider run at a time until the
-credential concurrency/broker decision is resolved. API-key-backed profiles
-can later use a different declared concurrency policy.
+in topic/task text or pass them through the browser. OAuth-backed task-agent
+runs are serialized by the configured task credential profile. Orchestrator
+processes use private copies of the same owner-managed source; provider-turn
+concurrency remains a measured Phase 2 policy question.
 
 To process pre-project topics instead, run the system-intake orchestrator
 while no other OAuth-backed provider run is active:
@@ -225,11 +228,13 @@ cards. The orchestrator can create, update, split, link, annotate, and
 decision-gate tasks inside its project with exact turn provenance. The
 existing automated probes exercise real task claiming, Pi RPC,
 containers, worktrees, host Git checkpoints, RTK evidence, and context export.
-Conversation custody/model switching, repository/source intake, prompt
-editing, task detail, owner decisions, and command reconciliation now have
-first-class local controls. The fixed-revision implementation/checkpoint/test/
-review protocol and its diff/test/review/context/artifact inspector are
-implemented; live-provider dogfooding across real repositories is next. D-043
+Conversation custody/model switching, intake-to-project transfer, blocking
+pre-compaction export, repository/source intake, plain-text prompt defaults,
+per-agent model routes, task detail, owner decisions, and command
+reconciliation now have first-class local controls. The fixed-revision
+implementation/checkpoint/test/review protocol and its
+diff/test/review/context/artifact inspector are implemented; live-provider
+dogfooding across real repositories is next. D-043
 defers a browser PTY; tmux/SSH remains the current exact-session attach path.
 
 Watch the zero-provider baseline before scheduling live work:
