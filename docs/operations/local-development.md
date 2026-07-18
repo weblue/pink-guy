@@ -223,9 +223,16 @@ existing automated probes exercise real task claiming, Pi RPC,
 containers, worktrees, host Git checkpoints, RTK evidence, and context export.
 Conversation custody/model switching, repository/source intake, prompt
 editing, task detail, owner decisions, and command reconciliation now have
-first-class local controls. Deeper diff/test/review/context/artifact inspectors
-and a complete real-repository phase-flow dogfood are next. D-043 defers a
-browser PTY; tmux/SSH remains the current exact-session attach path.
+first-class local controls. The fixed-revision implementation/checkpoint/test/
+review protocol and its diff/test/review/context/artifact inspector are
+implemented; live-provider dogfooding across real repositories is next. D-043
+defers a browser PTY; tmux/SSH remains the current exact-session attach path.
+
+Watch the zero-provider baseline before scheduling live work:
+
+```sh
+npm run test:workflow
+```
 
 To exercise the complete model-less C0-04 context path:
 

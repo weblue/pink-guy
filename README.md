@@ -9,8 +9,9 @@ and review agents.
 Phase 1 currently includes a loopback web cockpit, durable SQLite state,
 persistent Pi RPC conversations, an agile task board, a shared terminal
 client, host-owned repository intake, editable agent profiles, safe model
-switching, task/reconciliation controls, managed worktrees/containers, and
-model-less context custody.
+switching, task/reconciliation controls, fixed-revision implementation/test/
+review handoffs, task workspace evidence inspectors, managed worktrees/
+containers, and model-less context custody.
 Authenticated remote access is a later phase.
 
 ## Objectives
@@ -167,11 +168,14 @@ The cockpit, terminal client, and orchestrators do not require Docker.
 
 ```sh
 npm test
+npm run test:workflow
 npm run test:baseline
 curl --fail http://127.0.0.1:4310/api/health
 ```
 
-The core suite is model-less and makes no provider requests.
+The core and workflow observer suites are model-less and make no provider
+requests. `test:workflow` prints each implementation, checkpoint, test, review,
+and completion transition as it verifies fixed-revision custody.
 
 ## Documentation
 

@@ -1,8 +1,8 @@
 # Boss Man v2 current state
 
-Status: Phase 1 in progress — P1-1 through P1-3 dogfood controls landed
+Status: Phase 1 in progress — P1-4 fixed-revision workflow ready for dogfood
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## Current position
 
@@ -42,6 +42,17 @@ manual/Jira context, edit task description and acceptance criteria, resolve
 decisions, stop/resume runs, and explicitly retry or reset failed or uncertain
 commands.
 
+P1-4 now executes each scheduled task phase through Pi settlement instead of
+stopping at container creation. Implementation checkpoints advance the
+authoritative task revision through an idempotent host receipt; test and review
+runs receive fresh worktrees rooted at that exact commit. A test-scoped
+validator records pass/fail evidence without commit authority, an independently
+identified reviewer submits the disposition, and the project orchestrator
+records completion when every gate passes. The task inspector retains phase
+commands, runs, models/prompts, workspaces, committed diffs, Git provenance,
+validation, review, context receipts, artifacts, decisions, activity, and
+source snapshots. A model-less observer baseline proves the policy flow.
+
 The repository has graduated from its Phase 0 research layout. Live platform
 code now has stable product paths under `src/`, operator entry points live
 under `scripts/`, and current documentation is indexed from `docs/`. Completed
@@ -55,15 +66,15 @@ the runtime structure.
 | Authority and tasks | One central Node API owns the SQLite task projection, capability-scoped agent mutations, audited loopback-owner task creation/scheduling/editing/decision resolution, review, validation, merge-request records, and per-project orchestrator leases. Explicit stop/resume and retry/reset controls preserve the no-automatic-replay rule. | Owner dependency editing, a consolidated attention queue, and richer command/run inspection remain. Actual merge/rebase/push is Phase 2. |
 | Pi sessions | Upstream Pi runs in RPC mode inside recorded task containers and as a host-managed persistent orchestrator session. Native JSONL lifecycle, model-less resume/import, child provenance, task and conversation custody, custody-backed model switching, and C0-04 bundle-child consumption pass. Runs pin provider/model/thinking and prompt key/version/checksum; deterministic two-turn coverage proves no transcript resend across a route restart. | Orchestrator pre-compaction/transfer triggers, true in-flight RPC reattachment, and production session controls remain. |
 | Containers | The daemon creates, inspects, stops, and removes pinned Linux/ARM64 containers with a non-root user, read-only root, resource limits, minimal mounts, and no Docker socket. Restart reconciliation proves recorded ID, image, label, and liveness before cleanup. | True process reattachment and explicit production egress policy remain. Containers are damage containment, not a malicious-code boundary. |
-| Git and workspaces | The daemon creates a worktree; the container edits files without usable shared Git metadata. Capability routes expose host-generated status/diff and idempotent host-owned checkpoint/commit requests with provenance trailers. A commit made immediately before daemon loss is recovered from parent/provenance identity without duplication. | Checkpoint-versus-final-commit policy, actual merge/rebase/push, conflicts, and worktree cleanup remain. |
+| Git and workspaces | Every phase worktree starts from the task's authoritative revision; the container edits files without usable shared Git metadata. Host checkpoints carry provenance, advance task revision, and invalidate stale validation/review evidence. | Final history policy, actual merge/rebase/push, conflicts, and worktree cleanup remain. |
 | Credentials | A human-owned auth file is materialized read-only per run, copied into private writable Pi state, checksum-verified, concurrency-limited to one for OAuth, and both run copies are deleted on a normal stop. Synthetic canaries and one owner-authorized OpenAI Codex turn pass without changing the canonical source. Reconciliation deletes known per-run copies. | Post-crash canonical-checksum receipt and OAuth refresh reconciliation or a credential broker are required before parallel OAuth-backed runs. |
 | RTK and command evidence | RTK 0.42.3 is pinned with telemetry disabled. Supervisor-managed commands and an actual Pi Bash tool call execute once and produce filtered output, redacted raw output, indexed artifacts, and receipts. | Production quotas, savings presentation, and operator bypass UX remain. |
 | Context custody | Task bundles retain native Pi bytes, branch, task/audit/context, decisions, memory/retrieval, artifacts, Git, manifest, and checksums. Conversation bundles retain topic, turns/events/runs, tasks/origins, used prompts, and native bytes. Clean import, bundle children, and route changes use no model or network. | Orchestrator pre-compaction/intake-transfer triggers plus production deletion/quota/backup/restore UX remain. |
 | Memory and retrieval | The canonical memory/evidence schema and FTS5 projection are integrated into the central SQLite store. Eligibility is filtered before BM25 rank; receipts retain filters, scores, revisions, source refs, exclusions, excerpt checksums, and token use. A clean import rebuilds FTS from canonical JSON. | Semantic/vector retrieval remains deferred and rebuildable. Promotion UI and production mutation policy remain. |
 | Restart recovery | SQLite records immutable intent/completion/reconciliation receipts. Startup checks container identity/liveness, pauses verified idle runs, holds uncertain response/tool effects without replay, recovers checksum-valid snapshots, and recovers parent/provenance-valid Git commits without duplication. | The prototype conservatively stops the old container; true Pi RPC reattachment and host/Docker power-cycle coverage remain production work. |
 | Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
-| Developer cockpit | The loopback cockpit combines projects/topics, persistent Pi conversation, multi-project board, repository import, immutable source intake, versioned prompt editor, custody-backed model switch, task detail/decisions/activity, session stop/resume, command retry/reset, and tmux/SSH attach guidance. The dependency-free `boss` client shares conversation, import, prompt, and model operations. | Diff/test/review/context/artifact workspace inspectors and optional trusted-LAN access remain. D-043 defers a browser PTY. |
-| Orchestrator interaction | First-class topic/conversation projections, central versioned model and prompt policy, ordered turns/events, scoped leases, persistent Pi RPC, sanitized reconnect streams, audited task-graph mutations, host-owned repository intake, and immutable source snapshots are implemented. | Intake-to-project transfer custody, source refresh semantics, scheduling priority, and resource-pressure controls remain. |
+| Developer cockpit | The loopback cockpit combines persistent Pi conversation, multi-project board, repository/source intake, prompt/model controls, fixed-revision phase controls, workspace/diff/test/review/context/artifact inspectors, command recovery, and tmux/SSH guidance. | Attention aggregation, richer artifact navigation, owner dependency editing, and optional trusted-LAN access remain. D-043 defers a browser PTY. |
+| Orchestrator interaction | First-class topic/conversation projections, central model/prompt policy, scoped leases, persistent Pi RPC, audited task-graph mutations, and settled implementation/test/review commands are implemented. Passing independent review completes the task only when all policy gates pass. | Intake-to-project transfer custody, source refresh semantics, scheduling priority, and resource-pressure controls remain. |
 
 ## Adoption readiness
 
@@ -73,8 +84,8 @@ session.
 
 | Checkpoint | Required capability | Recommended use |
 |---|---|---|
-| Current | Durable local API, project conversations, shared browser/terminal view, task graph, phase scheduling, managed runtime/Git/context foundations | Run alongside a direct coding client on noncritical work |
-| Phase 1 exit | Complete implementation → test → review → checkpoint flow across multiple real repositories, with diff/test/review/context/artifact inspectors and remaining custody/attention gaps closed | Prefer Boss Man for supervised local development; retain a direct client as recovery fallback |
+| Current | Durable local API, project conversations, shared browser/terminal view, fixed-revision phase workflow, evidence inspector, and managed runtime/Git/context foundations | Begin supervised real-repository workflow dogfooding alongside a direct coding client |
+| Phase 1 exit | Complete implementation → fixed checkpoint → test → review flow across multiple real repositories, with remaining custody/attention gaps closed | Prefer Boss Man for supervised local development; retain a direct client as recovery fallback |
 | Phase 2 exit | Dependable restart/resume, merge/rebase/push/conflicts/cleanup, credential concurrency, retention/backup, measured resource limits, provider drills, and second-host reproduction | Use Boss Man as the full-time local coding environment |
 | Phase 3 exit | Authenticated SWAG deployment with proxy, session/key, streaming, reconnect, rate-limit, and recovery controls | Use the intended remote-first experience |
 
@@ -132,11 +143,12 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
    and retention operations after the real workflow is stable.
 2. **Close residual P1-2/P1-3 UX.** Add explicit source refresh/diff,
    owner dependency editing, and a consolidated attention queue.
-3. **P1-4 — workspace inspectors and real-workflow dogfood.** Add
-   source/decision/custody navigation plus diff/test/review/context/artifact
-   inspectors. Prove the complete phase flow across at least two real
-   repositories without probe helpers or SQLite edits. D-043 keeps a browser
-   PTY out of the baseline; tmux/SSH remains the escape hatch.
+3. **Close P1-4 with real-workflow dogfood.** The fixed-revision protocol,
+   inspectors, and model-less observer baseline are implemented. Prove the
+   live Pi phase flow across at least two real repositories without probe
+   helpers or SQLite edits, then close any evidence-navigation gaps it finds.
+   D-043 keeps a browser PTY out of the baseline; tmux/SSH remains the escape
+   hatch.
 4. **Phase 2 — autonomy, recovery, and portability.** Add
    merge/rebase/push, recovery UX, credential concurrency, retention/backup,
    measured resource limits, and second-host reproduction.
@@ -157,6 +169,9 @@ Resolved or narrowed:
 - Canonical SQL/session/artifact records remain authoritative; FTS and future RAG/vector layers are rebuildable projections.
 - Side effects use durable intent/completion/reconciliation receipts. Only independently verifiable container, snapshot, and Git facts are recovered; uncertain provider/tool work is never replayed automatically.
 - One central API manages all projects; one active daemon/tmux orchestrator lease is allowed per project; task subagent runs are phase-scoped.
+- Implementation checkpoints are the custody boundary: test and review start
+  from that recorded revision, and a new checkpoint invalidates older
+  validation and review evidence.
 - Top-level intent uses a first-class pre-project topic. One system-intake
   orchestrator handles unbound conversations and transfers a model-less
   snapshot to the project orchestrator after binding.

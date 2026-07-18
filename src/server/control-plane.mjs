@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import { access, chmod, copyFile, mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
@@ -232,8 +232,15 @@ export class DirectControlPlane {
   }
 
   seed(options = {}) {
+    const repositoryPath = options.repositoryPath ?? this.fixturePath;
+    const revision = options.revision ?? execFileSync(
+      "git",
+      ["-C", repositoryPath, "rev-parse", "HEAD"],
+      { encoding: "utf8" },
+    ).trim();
     return this.store.seedProjectTask({
-      repositoryPath: options.repositoryPath ?? this.fixturePath,
+      repositoryPath,
+      revision,
       title: options.title ?? "Correct deterministic slug normalization",
       ...options,
     });
@@ -286,7 +293,7 @@ export class DirectControlPlane {
       ? this.store.authorizeProjectOrchestrator(orchestratorToken, task.project_id)
       : null;
     const promptProfile = this.store.getAgentPromptProfile(phase);
-    const capabilityRole = phase === "review" ? "reviewer" : "worker";
+    const capabilityRole = phase === "review" ? "reviewer" : phase === "test" ? "validator" : "worker";
 
     const runId = randomUUID();
     const instanceRoot = join(this.stateRoot, "runs", runId);
@@ -310,7 +317,7 @@ export class DirectControlPlane {
     });
     const capability = this.store.issueCapability({
       role: capabilityRole,
-      actorId: phase === "review" ? `task-agent:review:${runId}` : task.assigned_worker,
+      actorId: phase === "implementation" ? task.assigned_worker : `task-agent:${phase}:${runId}`,
       taskId,
       runId,
       expiresAt: new Date(Date.parse(this.store.clock()) + 8 * 60 * 60 * 1000).toISOString(),
@@ -476,6 +483,56 @@ export class DirectControlPlane {
     return { run: this.store.getRun(managed.run.id), events: this.store.runEvents(managed.run.id) };
   }
 
+  phaseKickoff(phase) {
+    if (phase === "implementation") {
+      return "Execute the assigned implementation phase now. Read the authoritative task, implement only its acceptance criteria, run proportionate checks, create a host-owned Git checkpoint or commit for the coherent result, then request independent review and record a concise completion proposal. Use Boss Man tools for every authoritative transition.";
+    }
+    if (phase === "test") {
+      return "Execute the assigned independent test phase now. Read the authoritative task, inspect the fixed revision, run the relevant deterministic checks, and record passed or failed validation with exact evidence using boss_test_record_validation. Do not edit the fixed revision; block with a concrete gap if test code changes are required.";
+    }
+    return "Execute the assigned independent review phase now. Read the authoritative task, inspect the fixed-revision diff, validation, and artifacts, then submit exactly one structured review disposition with concrete findings. Do not edit, checkpoint, or approve implementation performed by the same actor.";
+  }
+
+  async executeTaskPhase(taskId, { orchestratorToken, phase }) {
+    const started = await this.startTask(taskId, { orchestratorToken, phase });
+    try {
+      const execution = await this.prompt(started.session.id, this.phaseKickoff(phase));
+      let completion = null;
+      const evaluation = this.store.evaluateCompletion(taskId);
+      if (phase === "review" && evaluation.allowed && orchestratorToken) {
+        const task = this.store.getTask(taskId);
+        const orchestrator = this.store.authorizeProjectOrchestrator(orchestratorToken, task.project_id);
+        const capability = this.store.issueCapability({
+          role: "orchestrator",
+          actorId: `project-orchestrator:${orchestrator.id}`,
+          taskId,
+          runId: started.run.id,
+          expiresAt: new Date(Date.parse(this.store.clock()) + 60_000).toISOString(),
+        });
+        try {
+          completion = this.store.actOnTask({
+            token: capability.token,
+            taskId,
+            action: "complete",
+            idempotencyKey: `phase-auto-complete:${started.run.id}`,
+            expectedVersion: task.version,
+            payload: {},
+          });
+        } finally {
+          this.store.revokeCapability(capability.id);
+        }
+      }
+      return {
+        ...started,
+        execution,
+        completion,
+        task: this.store.getTaskDetails(taskId),
+      };
+    } finally {
+      await this.stopSession(started.session.id);
+    }
+  }
+
   async shell(sessionId, command, { rtkFilter = null } = {}) {
     const managed = this.sessions.get(sessionId);
     if (!managed) throw new Error(`session is not active: ${sessionId}`);
@@ -610,6 +667,7 @@ export class DirectControlPlane {
     this.store.verifyCredentialRun(managed.run.id, canonicalUnchanged);
     await rm(join(managed.configDirectory, "auth.json"), { force: true });
     await this.credentialVault.release(managed.run.id);
+    this.store.revokeCapability(managed.capability.id);
     if (record) this.store.finishRun(managed.run.id, "stopped");
     this.sessions.delete(sessionId);
   }
@@ -1298,6 +1356,30 @@ export class DirectControlPlane {
         return json(response, 200, { events: this.store.taskAudit(audit[1]) });
       }
 
+      const workspaceInspector = url.pathname.match(/^\/api\/tasks\/([^/]+)\/workspace$/);
+      if (request.method === "GET" && workspaceInspector) {
+        this.assertLocalOwnerProfile();
+        const projection = this.store.taskWorkspaceProjection(workspaceInspector[1]);
+        for (const run of projection.runs) {
+          if (!run.workspace) continue;
+          try {
+            const service = this.gitService(run.workspace.repository_path);
+            const [status, diff, revision] = await Promise.all([
+              service.status(run.workspace),
+              service.comparisonDiff(run.workspace),
+              service.revision(run.workspace),
+            ]);
+            run.workspace = { ...run.workspace, status_detail: status, diff: diff.diff, current_revision: revision };
+          } catch (error) {
+            run.workspace = {
+              ...run.workspace,
+              inspector_error: { code: error.code ?? "workspace_unavailable", message: error.message },
+            };
+          }
+        }
+        return json(response, 200, projection);
+      }
+
       const git = url.pathname.match(/^\/api\/tasks\/([^/]+)\/git\/(status|diff|checkpoint|commit)$/);
       if (git && ((request.method === "GET" && ["status", "diff"].includes(git[2]))
         || (request.method === "POST" && ["checkpoint", "commit"].includes(git[2])))) {
@@ -1324,10 +1406,13 @@ export class DirectControlPlane {
       const start = url.pathname.match(/^\/api\/tasks\/([^/]+)\/sessions$/);
       if (request.method === "POST" && start) {
         const body = await readBody(request);
-        return json(response, 201, await this.startTask(start[1], {
+        const options = {
           orchestratorToken: bearerToken(request),
           phase: body.phase ?? "implementation",
-        }));
+        };
+        return json(response, 201, body.execute
+          ? await this.executeTaskPhase(start[1], options)
+          : await this.startTask(start[1], options));
       }
 
       const prompt = url.pathname.match(/^\/api\/sessions\/([^/]+)\/prompt$/);

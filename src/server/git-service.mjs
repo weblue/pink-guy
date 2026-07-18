@@ -59,7 +59,11 @@ export class HostGitService {
     const shortRun = runId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12);
     const branch = `boss-man/${taskId.replace(/[^a-zA-Z0-9_.-]/g, "-")}/${shortRun}`;
     const path = join(this.workspaceRoot, runId);
-    const base = await runGit(this.repositoryPath, ["rev-parse", "HEAD"]);
+    const task = this.store.getTask(taskId);
+    if (!task?.revision) {
+      throw Object.assign(new Error("task has no authoritative Git revision"), { code: "revision_required" });
+    }
+    const base = await runGit(this.repositoryPath, ["rev-parse", `${task.revision}^{commit}`]);
     if (base.code !== 0) throw gitError("resolve workspace base", base);
     const created = await runGit(this.repositoryPath, ["worktree", "add", "-b", branch, path, base.stdout.trim()]);
     if (created.code !== 0) throw gitError("create worktree", created);
@@ -93,6 +97,21 @@ export class HostGitService {
     return { workspaceId: workspace.id, revision: await this.revision(workspace), diff: result.stdout };
   }
 
+  async comparisonDiff(workspace) {
+    await this.assertWorkspace(workspace);
+    const currentRevision = await this.revision(workspace);
+    const result = await runGit(workspace.workspace_path, [
+      "diff", "--no-ext-diff", "--binary", workspace.base_revision, currentRevision, "--",
+    ]);
+    if (result.code !== 0) throw gitError("compare workspace revision", result);
+    return {
+      workspaceId: workspace.id,
+      baseRevision: workspace.base_revision,
+      revision: currentRevision,
+      diff: result.stdout,
+    };
+  }
+
   async revision(workspace) {
     const result = await runGit(workspace.workspace_path, ["rev-parse", "HEAD"]);
     if (result.code !== 0) throw gitError("resolve workspace revision", result);
@@ -108,7 +127,7 @@ export class HostGitService {
       if (prior.request_sha256 !== requestSha256) {
         throw Object.assign(new Error("idempotency key was reused for a different Git request"), { code: "idempotency_conflict" });
       }
-      return { replayed: true, operation: prior };
+      return { replayed: true, operation: prior, revisionReceipt: this.store.recordHostGitRevision(prior) };
     }
     const status = await this.status(workspace);
     if (!status.dirty) throw Object.assign(new Error("workspace has no changes to checkpoint"), { code: "git_no_changes" });
@@ -132,7 +151,9 @@ export class HostGitService {
     if (journal.replayed) {
       if (journal.effect.state === "completed") {
         const operation = this.store.findGitOperation(idempotencyKey) ?? journal.effect.result?.operation;
-        if (operation) return { replayed: true, operation };
+        if (operation) {
+          return { replayed: true, operation, revisionReceipt: this.store.recordHostGitRevision(operation) };
+        }
       }
       throw Object.assign(new Error("prior Git side effect requires reconciliation before retry"), {
         code: "reconciliation_required",
@@ -166,7 +187,8 @@ export class HostGitService {
       metadata: { message: subject, evidence, changed: status.output },
     });
     this.store.completeSideEffect(journal.effect.id, { operation });
-    return { replayed: false, operation };
+    const revisionReceipt = this.store.recordHostGitRevision(operation);
+    return { replayed: false, operation, revisionReceipt };
   }
 
   async reconcileSideEffect(effect, workspace) {
@@ -219,6 +241,7 @@ export class HostGitService {
       },
     });
     this.store.completeSideEffect(effect.id, { operation }, { reconciled: true });
+    this.store.recordHostGitRevision(operation);
     return { state: "completed", operation, source: "git_provenance" };
   }
 }

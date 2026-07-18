@@ -36,8 +36,8 @@ Phase 0 does not require application authentication because its runnable profile
 
 ## Phase 1 — useful local-first developer cockpit
 
-Status: In progress — P1-1 through P1-3 usable increments implemented; P1-4
-inspectors and real-repository phase-flow dogfood next
+Status: In progress — P1-4 fixed-revision workflow and inspectors implemented;
+live-provider dogfood across real repositories next
 
 Purpose: make Boss Man useful for daily development on the host and, when explicitly enabled, a trusted LAN.
 
@@ -64,7 +64,9 @@ conversation by topic, project, or repository and exposes the cockpit deep
 link plus orchestrator tmux/process endpoint. Versioned agent prompts,
 custody-backed model switching, repository/source intake, task detail and
 owner reconciliation controls are also implemented. Deeper workspace
-inspectors and full real-repository phase-flow dogfooding remain.
+inspectors, phase execution to settlement, fixed-revision test/review
+handoffs, and the model-less workflow observer are implemented. Full
+live-provider phase-flow dogfooding remains.
 
 Scope:
 
