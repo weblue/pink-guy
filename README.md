@@ -6,7 +6,7 @@ projects, tasks, audit history, worktrees, agent runs, and context artifacts.
 Each project can run one orchestrator plus phase-scoped implementation, test,
 and review agents.
 
-Phase 1 currently includes a loopback web cockpit, durable SQLite state,
+Phase 1 is complete and includes a loopback web cockpit, durable SQLite state,
 persistent Pi RPC conversations, an agile task board, a shared terminal
 client, host-owned repository intake, editable agent profiles, safe model
 switching, task/reconciliation controls, fixed-revision implementation/test/

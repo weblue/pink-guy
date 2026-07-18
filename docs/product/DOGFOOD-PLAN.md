@@ -1,7 +1,6 @@
 # Phase 1 dogfood plan
 
-Status: Both Phase 1 repository scenarios and deterministic Ready scheduling
-complete; live automatic-release acceptance smoke remains
+Status: Complete — Phase 1 accepted for supervised local development
 
 Last updated: 2026-07-18
 
@@ -190,8 +189,36 @@ independent review, completion, and observable model-less phase continuation.
 That run sharpened the architecture boundary addressed by D-046. The
 conversational LLM still expresses release intent, but the implemented central
 scheduler now owns Ready eligibility, ordering, capacity, and initial
-sub-agent dispatch. A final small live smoke must use this path without the
-manual phase action.
+sub-agent dispatch.
+
+## Automatic-release closure result
+
+The owner asked the live Boss Man orchestrator to refine the cockpit's lease
+observability. The orchestrator created and released executable task
+`94613637-58af-4ba5-ae4e-b03503bf5a54` with automatic dispatch policy and
+priority 10.
+
+- The `task_released` event was recorded at `2026-07-18T22:03:55.734Z`; the
+  model-less scheduler created the implementation command two milliseconds
+  later without a manual phase action.
+- Implementation produced host checkpoint
+  `392df1763419a143523dd3a9512f8371bc6a2de1`.
+- Independent validation passed the 15-probe core suite and the new lease
+  projection probe at that exact revision.
+- An independently identified reviewer approved the same revision with no
+  findings.
+- Completion moved the task to Done and recorded merge request
+  `4c0eb5af-e68a-470f-8aba-0939320f2c17`.
+- The resulting lease-observability change was reviewed and merged as
+  [PR #15](https://github.com/weblue/pink-guy/pull/15).
+
+The run also found a Phase 2 recovery defect: the implementation command
+recorded `TypeError: fetch failed` while its Pi run remained alive and later
+emitted a checkpoint. The owner stopped the orphaned session and used the
+audited reset control; no SQLite edit, probe helper, or unrecorded transition
+was used. Validation and review then settled normally. Phase 2 must couple
+command failure to run cancellation and make late-evidence reconciliation
+explicit so a reset cannot race a still-running agent.
 
 ## Exit evidence
 
@@ -204,6 +231,10 @@ Phase 1 can close when both scenarios have:
 - no manual database repair or unrecorded state transition;
 - a human smoke result; and
 - documented defects classified as fixed, Phase 2, or explicitly deferred.
+
+All exit evidence is now satisfied. Boss Man is accepted as the preferred
+supervised local development path, with direct Pi/Codex retained as the
+recovery fallback until Phase 2 closes.
 
 ## Deliberate boundaries
 

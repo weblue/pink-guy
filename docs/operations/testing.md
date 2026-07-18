@@ -2,7 +2,7 @@
 
 ## Core regression suite
 
-Run the 14 deterministic Phase 1 probes together:
+Run the 15 deterministic Phase 1 probes together:
 
 ```sh
 npm test
