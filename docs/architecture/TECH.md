@@ -2,7 +2,7 @@
 
 Status: Direct-Pi foundation approved; Phase 0 closure
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## Context and evidence
 

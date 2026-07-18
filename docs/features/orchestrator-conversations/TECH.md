@@ -1,8 +1,9 @@
 # Phase 1 orchestrator conversations and project intake
 
-Status: Implementation in progress — conversation cockpit and audited task-graph mutations landed
+Status: Implementation in progress — shared browser/terminal conversation
+projection and audited task-graph mutations landed
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## Context
 

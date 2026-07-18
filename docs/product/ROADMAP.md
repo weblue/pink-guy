@@ -2,7 +2,7 @@
 
 Status: Active
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 This is the canonical phase sequence. Phase 0 research artifacts remain useful evidence, but they no longer make remote authentication or second-host reproduction prerequisites for local product development.
 
@@ -35,6 +35,9 @@ Completed outcomes:
 Phase 0 does not require application authentication because its runnable profile binds to loopback. The disposable remote-edge/auth probe remains research evidence, not a local closure gate. Second-host reproduction is moved to Phase 2 portability work.
 
 ## Phase 1 — useful local-first developer cockpit
+
+Status: In progress — control loop, task controls, conversations, cockpit, and
+shared terminal client implemented
 
 Purpose: make Boss Man useful for daily development on the host and, when explicitly enabled, a trusted LAN.
 
@@ -82,6 +85,11 @@ new idea or existing repository/ticket into observable tasks, manage multiple
 repositories, and complete an implementation → test → review workflow from
 the local cockpit without editing SQLite or calling internal probe helpers.
 
+Adoption result: this is the earliest point where Boss Man should be preferred
+for supervised local coding. Manual merge/recovery may remain acceptable, but
+the full workflow must be dogfooded across multiple real repositories and a
+direct coding client remains the emergency fallback.
+
 ## Phase 2 — autonomy, recovery, and portability
 
 Purpose: make unattended local operation dependable before adding a public edge.
@@ -97,6 +105,11 @@ Scope:
 - security review of terminal, artifact, capability, and trusted-LAN boundaries.
 
 Exit: local operation survives application/host restarts, preserves audit/context custody, and has measured resource and recovery policies.
+
+Adoption result: this is the threshold for using Boss Man as the full-time
+local coding environment instead of Codex. Routine work must not depend on
+direct SQLite repair, manual artifact recovery, or a single irreplaceable
+OAuth process.
 
 ## Phase 3 — authenticated remote access
 
@@ -116,6 +129,9 @@ Scope:
 Raw passwords and API keys are never checked into Git, stored in SQLite task/context records, or placed in browser `localStorage` by default. A browser UI should use an HttpOnly session after password login. API clients should use an OS keychain, environment/secret file, or an in-memory/session-scoped key. Persisting a bearer key in browser `localStorage` may be offered only as an explicit convenience mode after an XSS/CSP review because any script running in that origin can read it.
 
 Exit: all requests through the remote profile require a valid owner session or API key, while local and trusted-LAN profiles remain operationally independent.
+
+Adoption result: Boss Man is ready for its intended remote-first use through
+the home-server SWAG edge.
 
 ## Deferred beyond Phase 3
 
