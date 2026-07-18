@@ -10,8 +10,9 @@ Phase 1 currently includes a loopback web cockpit, durable SQLite state,
 persistent Pi RPC conversations, an agile task board, a shared terminal
 client, host-owned repository intake, editable agent profiles, safe model
 switching, task/reconciliation controls, fixed-revision implementation/test/
-review handoffs, task workspace evidence inspectors, managed worktrees/
-containers, and model-less context custody.
+review handoffs, automatic model-less phase continuation, task workspace
+evidence inspectors, managed worktrees/containers, and model-less context
+custody.
 Authenticated remote access is a later phase.
 
 ## Objectives
@@ -104,6 +105,12 @@ npm run boss -- profiles
 A practical cmux layout is one central-API pane, one orchestrator pane per
 active repository, and optional `boss chat` panes. Closing a chat pane does
 not stop Pi or lose history.
+
+After implementation records a fixed review-requested revision, the central
+API automatically schedules test and then independent review from durable
+task evidence. Failed validation, non-approved review, missing phase evidence,
+decisions, and dependencies stop the pipeline for explicit recovery. The
+cockpit's **Manually start phase** action is an override, not the normal flow.
 
 ## Select and swap models
 

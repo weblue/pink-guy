@@ -18,6 +18,7 @@ audited error, while preserving explicit owner retry/reset semantics.
 
 The recovered live workflow subsequently completed implementation, independent
 test, and independent review against one fixed revision. It also demonstrated
-that the manual phase control is currently required after implementation:
-event-driven automatic test/review continuation remains a dogfood-discovered
-Phase 1 gap.
+the need for model-less automatic phase continuation. That follow-up is
+specified and implemented in
+`docs/features/automatic-phase-continuation/`; manual phase start remains only
+an override and recovery control.

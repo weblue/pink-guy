@@ -267,6 +267,43 @@ export class DirectControlPlane {
     return resolveModelRoute(this.modelRoutePolicy, phase, route);
   }
 
+  reconcileAutomaticPipelines(orchestratorToken) {
+    const orchestrator = this.store.authorizeActiveProjectOrchestrator(orchestratorToken);
+    const directives = this.store.automaticPipelineDirectives(orchestrator.project_id);
+    const receipts = [];
+    for (const directive of directives) {
+      if (directive.action !== "schedule") {
+        receipts.push({ ...directive, scheduled: false });
+        continue;
+      }
+      const modelRoute = {
+        ...this.resolveModelRoute(directive.phase),
+        policySource: "automatic_phase_continuation",
+      };
+      const result = this.store.scheduleOwnerTaskRun({
+        taskId: directive.taskId,
+        phase: directive.phase,
+        modelRoute,
+        actor: "pipeline-coordinator",
+        source: "automatic_phase_continuation",
+        idempotencyKey: [
+          "automatic-phase",
+          directive.taskId,
+          directive.revision,
+          directive.phase,
+        ].join(":"),
+      });
+      receipts.push({
+        ...directive,
+        scheduled: true,
+        replayed: result.replayed,
+        commandId: result.command.id,
+        modelRoute,
+      });
+    }
+    return receipts;
+  }
+
   assertLocalOwnerProfile() {
     if (this.exposureProfile !== "local_smoke") {
       throw Object.assign(new Error("local owner mutations require the loopback local-smoke profile"), {
@@ -587,6 +624,17 @@ export class DirectControlPlane {
     const started = await this.startTask(taskId, { orchestratorToken, phase, modelRoute });
     try {
       const execution = await this.prompt(started.session.id, this.phaseKickoff(phase));
+      const phaseOutcome = this.store.taskPhaseOutcome(taskId, phase);
+      if (!phaseOutcome.recorded) {
+        throw Object.assign(new Error(
+          `${phase} phase settled without recording its required authoritative outcome`,
+        ), {
+          code: "phase_protocol_violation",
+          phase,
+          taskId,
+          revision: phaseOutcome.revision,
+        });
+      }
       let completion = null;
       const evaluation = this.store.evaluateCompletion(taskId);
       if (phase === "review" && evaluation.allowed && orchestratorToken) {
@@ -615,6 +663,7 @@ export class DirectControlPlane {
       return {
         ...started,
         execution,
+        phaseOutcome,
         completion,
         task: this.store.getTaskDetails(taskId),
       };
@@ -1288,7 +1337,9 @@ export class DirectControlPlane {
         return json(response, 200, { released: true });
       }
       if (request.method === "POST" && url.pathname === "/api/orchestrators/commands/claim") {
-        const command = this.store.claimOrchestratorCommand(bearerToken(request));
+        const token = bearerToken(request);
+        this.reconcileAutomaticPipelines(token);
+        const command = this.store.claimOrchestratorCommand(token);
         if (!command) {
           response.writeHead(204);
           return response.end();
@@ -1299,13 +1350,18 @@ export class DirectControlPlane {
       const completeCommand = url.pathname.match(/^\/api\/orchestrators\/commands\/([^/]+)\/complete$/);
       if (request.method === "POST" && completeCommand) {
         const body = await readBody(request);
+        const token = bearerToken(request);
+        const command = this.store.completeOrchestratorCommand({
+          token,
+          commandId: completeCommand[1],
+          state: body.state,
+          result: body.result ?? {},
+        });
         return json(response, 200, {
-          command: this.store.completeOrchestratorCommand({
-            token: bearerToken(request),
-            commandId: completeCommand[1],
-            state: body.state,
-            result: body.result ?? {},
-          }),
+          command,
+          continuation: body.state === "succeeded"
+            ? this.reconcileAutomaticPipelines(token)
+            : [],
         });
       }
 

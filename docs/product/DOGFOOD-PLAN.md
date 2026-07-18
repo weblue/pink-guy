@@ -48,10 +48,11 @@ For each scenario:
    its container, worktree, progress, host checkpoint, artifacts, and final
    fixed revision. Use the manual phase control only as an explicit override
    or recovery action.
-4. Schedule test and verify that its fresh worktree base equals that revision
-   and that exact pass/fail evidence is recorded.
-5. Schedule independent review and inspect reviewer identity, findings,
-   disposition, diff, validation, context receipts, and artifacts.
+4. Observe automatic test scheduling and verify that its fresh worktree base
+   equals that revision and that exact pass/fail evidence is recorded.
+5. Observe automatic independent review scheduling and inspect reviewer
+   identity, findings, disposition, diff, validation, context receipts, and
+   artifacts.
 6. Confirm the orchestrator marks the task Done only when every completion
    gate passes and records—not executes—the merge request.
 7. Smoke-test the resulting revision outside the agent container, then record
@@ -86,7 +87,7 @@ then exposed three defects that must remain regression gates:
   custody; and
 - the conversational orchestrator announced that test/review would follow,
   but no event-driven continuation scheduled those phases after the original
-  turn ended; and
+  turn ended (addressed by the model-less automatic phase coordinator); and
 - independent test scheduling accepted a task in `review`, while task startup
   rejected that same state before a container or provider request.
 

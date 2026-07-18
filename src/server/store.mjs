@@ -3622,6 +3622,134 @@ export class Phase0Store {
     return { allowed: reasons.length === 0, reasons, reviewedRevision: latestReview?.disposition === "approve" ? latestReview.revision : null };
   }
 
+  taskPhaseOutcome(taskId, phase) {
+    if (!RUN_PHASES.has(phase)) {
+      throw codedError("invalid_request", `unsupported run phase: ${phase}`);
+    }
+    const task = this.getTask(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    const validation = task.revision
+      ? this.database.prepare(`SELECT * FROM validations
+        WHERE task_id=? AND revision=? ORDER BY created_at DESC,rowid DESC LIMIT 1`).get(
+        taskId,
+        task.revision,
+      ) ?? null
+      : null;
+    const review = task.revision
+      ? this.database.prepare(`SELECT * FROM reviews
+        WHERE task_id=? AND revision=? ORDER BY created_at DESC,rowid DESC LIMIT 1`).get(
+        taskId,
+        task.revision,
+      ) ?? null
+      : null;
+    const recorded = phase === "implementation"
+      ? Boolean(task.revision && task.requested_review_revision === task.revision)
+      : phase === "test" ? Boolean(validation) : Boolean(review);
+    return {
+      taskId,
+      phase,
+      revision: task.revision,
+      recorded,
+      requestedReviewRevision: task.requested_review_revision,
+      validation: validation ? {
+        id: validation.id,
+        revision: validation.revision,
+        status: validation.status,
+      } : null,
+      review: review ? {
+        id: review.id,
+        revision: review.revision,
+        disposition: review.disposition,
+        reviewerId: review.reviewer_id,
+      } : null,
+    };
+  }
+
+  automaticPipelineDirectives(projectId) {
+    if (!this.getProject(projectId)) {
+      throw codedError("not_found", `unknown project: ${projectId}`);
+    }
+    const tasks = this.database.prepare(`SELECT * FROM tasks
+      WHERE project_id=? AND status NOT IN ('done','blocked')
+        AND revision IS NOT NULL
+        AND requested_review_revision=revision
+      ORDER BY updated_at,id`).all(projectId);
+    return tasks.map((task) => {
+      const activeCommand = this.database.prepare(`SELECT id,phase,state
+        FROM orchestrator_commands
+        WHERE task_id=? AND state IN ('queued','claimed')
+        ORDER BY sequence LIMIT 1`).get(task.id);
+      const running = this.database.prepare(`SELECT r.id,r.phase FROM runs r
+        JOIN sessions s ON s.id=r.session_id
+        WHERE s.task_id=? AND r.state='running'
+        ORDER BY r.started_at LIMIT 1`).get(task.id);
+      if (activeCommand || running) {
+        return {
+          taskId: task.id,
+          revision: task.revision,
+          action: "wait",
+          reason: "phase_active",
+        };
+      }
+      const openDecision = this.database.prepare(`SELECT id FROM decision_gates
+        WHERE task_id=? AND status='decision_required' LIMIT 1`).get(task.id);
+      if (openDecision) {
+        return {
+          taskId: task.id,
+          revision: task.revision,
+          action: "stop",
+          reason: "human_decision_required",
+        };
+      }
+      const unresolvedDependency = this.database.prepare(`SELECT t.id FROM task_dependencies d
+        JOIN tasks t ON t.id=d.depends_on_task_id
+        WHERE d.task_id=? AND t.status<>'done' LIMIT 1`).get(task.id);
+      if (unresolvedDependency) {
+        return {
+          taskId: task.id,
+          revision: task.revision,
+          action: "stop",
+          reason: "unresolved_dependency",
+        };
+      }
+      const outcome = this.taskPhaseOutcome(task.id, "test");
+      if (!outcome.validation) {
+        return {
+          taskId: task.id,
+          revision: task.revision,
+          action: "schedule",
+          phase: "test",
+          reason: "validation_required",
+        };
+      }
+      if (outcome.validation.status !== "passed") {
+        return {
+          taskId: task.id,
+          revision: task.revision,
+          action: "stop",
+          reason: "validation_failed",
+        };
+      }
+      if (!outcome.review) {
+        return {
+          taskId: task.id,
+          revision: task.revision,
+          action: "schedule",
+          phase: "review",
+          reason: "independent_review_required",
+        };
+      }
+      return {
+        taskId: task.id,
+        revision: task.revision,
+        action: "stop",
+        reason: outcome.review.disposition === "approve"
+          ? "completion_gate_pending"
+          : `review_${outcome.review.disposition}`,
+      };
+    });
+  }
+
   parseAuditEvent(row) {
     return {
       ...row,

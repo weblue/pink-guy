@@ -54,6 +54,14 @@ commands, runs, models/prompts, workspaces, committed diffs, Git provenance,
 validation, review, context receipts, artifacts, decisions, activity, and
 source snapshots. A model-less observer baseline proves the policy flow.
 
+Successful implementation now continues automatically to test and then
+independent review without another LLM turn or owner click. The central API
+reconciles durable phase evidence after command completion and before command
+claims, so an API/daemon restart cannot lose the transition. Failed validation,
+non-approved review, missing required phase evidence, decisions, and
+dependencies stop for explicit recovery. Untouched Ready tasks are never
+auto-started.
+
 The final pre-dogfood gates are implemented. Every task phase resolves its own
 provider/model/thinking/billing route before command creation, the orchestrator
 can select that route for a sub-agent, and the effective route is checked
@@ -83,7 +91,7 @@ the runtime structure.
 | Restart recovery | SQLite records immutable intent/completion/reconciliation receipts. Startup checks container identity/liveness, pauses verified idle runs, holds uncertain response/tool effects without replay, recovers checksum-valid snapshots, and recovers parent/provenance-valid Git commits without duplication. | The prototype conservatively stops the old container; true Pi RPC reattachment and host/Docker power-cycle coverage remain production work. |
 | Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
 | Developer cockpit | The loopback cockpit combines persistent Pi conversation, multi-project board, repository/source intake, prompt/model controls, fixed-revision phase controls, workspace/diff/test/review/context/artifact inspectors, command recovery, and tmux/SSH guidance. | Attention aggregation, richer artifact navigation, and owner dependency editing remain usage-driven. D-043 defers a browser PTY. |
-| Orchestrator interaction | First-class topic/conversation projections, central model/prompt policy, scoped leases, persistent Pi RPC, audited task-graph mutations, intake-to-project transfer, per-subagent route selection, and settled implementation/test/review commands are implemented. Passing independent review completes the task only when all policy gates pass. | Source refresh semantics, scheduling priority, and resource-pressure controls remain. |
+| Orchestrator interaction | First-class topic/conversation projections, central model/prompt policy, scoped leases, persistent Pi RPC, audited task-graph mutations, intake-to-project transfer, per-subagent route selection, settled implementation/test/review commands, and model-less automatic phase continuation are implemented. Passing independent review completes the task only when all policy gates pass. | Ready-queue lifecycle for umbrella/intake artifacts, source refresh semantics, scheduling priority, and resource-pressure controls remain. |
 
 ## Adoption readiness
 
@@ -150,7 +158,7 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 The executable checklist is
 [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
-1. **Merge the dogfood-readiness slice and establish the baseline.** Start the
+1. **Merge the automatic-continuation dogfood recovery slice.** Start the
    normal API plus one project orchestrator per selected repository and rerun
    the model-less suite from `main`.
 2. **Dogfood two real repositories.** Use one bounded maintenance task and one
@@ -225,7 +233,8 @@ Still open, but assigned to explicit gates rather than blocking current work:
   owner configuration. Add a routing intermediary only for a concrete Pi
   compatibility or policy gap.
 - **Project orchestration:** the durable command protocol and conservative
-  lease-loss policy are implemented. Per-project task concurrency, scheduling
-  priority, richer recovery diagnosis, and global host-pressure limits remain
-  to be specified and measured.
+  lease-loss policy plus model-less successful-phase continuation are
+  implemented. Per-project task concurrency, scheduling priority, explicit
+  umbrella/intake task lifecycle, richer recovery diagnosis, and global
+  host-pressure limits remain to be specified and measured.
 - **Remote credential UX:** Phase 3 must choose password-session mode, API-key mode, or both. Browser `localStorage` persistence remains an explicit convenience/security decision, not the default.

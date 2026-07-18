@@ -19,8 +19,8 @@ by hand.
 
 - Make task workspaces, diffs, runs, tests, reviews, context custody, artifacts,
   source context, and decisions inspectable from one task detail view.
-- Let the owner explicitly schedule implementation, test, and review phases
-  while the project orchestrator executes each phase to settlement.
+- Let the owner or project orchestrator explicitly start implementation, then
+  let the platform continue successful test and review phases to settlement.
 - Make the implementation checkpoint the authoritative revision handed to
   every later phase.
 - Permit a test-scoped agent to record pass/fail validation evidence.
@@ -31,7 +31,7 @@ by hand.
 ## Non-goals
 
 - Automatic merging, rebasing, pushing, or remote pull-request management.
-- Automatic phase advancement without an explicit owner action.
+- Automatically starting untouched Ready tasks.
 - Editing a completed implementation from the test or review phase.
 - A browser terminal emulator or terminal-scrollback-derived state.
 - Remote authentication or public deployment.
@@ -42,12 +42,12 @@ by hand.
 2. The project orchestrator starts the phase agent and sends a short,
    deterministic kickoff. The agent reads authoritative task state, works in
    its managed worktree, and requests a host-owned checkpoint.
-3. The checkpoint updates the task's authoritative revision. The owner can
-   inspect its diff and evidence, then schedule **test**.
+3. The checkpoint updates the task's authoritative revision. After the
+   implementation requests review, the platform schedules **test**.
 4. The test agent receives a fresh worktree at the fixed revision and records
    passed or failed validation with exact evidence.
-5. The implementer requests review, or the owner advances the task to review
-   once the checkpoint is ready. The owner schedules **review**.
+5. After passed validation, the platform schedules **review**. The owner can
+   still use the manual phase action as an override or recovery control.
 6. A separately identified review agent inspects the fixed revision and
    submits approve, request-changes, or blocked.
 7. When validation passed, review approved, dependencies are complete, and

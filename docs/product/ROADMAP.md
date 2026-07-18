@@ -68,7 +68,9 @@ handoffs, and the model-less workflow observer are implemented. Blocking
 pre-compaction custody, atomic intake-to-project transfer, independently
 routed task phases, source-controlled plain-text prompts, deterministic
 dogfood coverage, and one bounded provider/container smoke are implemented.
-Supervised phase-flow dogfooding on two real repositories remains.
+Automatic model-less implementation → test → review continuation is
+implemented with deterministic restart reconciliation and explicit stop
+conditions. Supervised phase-flow dogfooding on two real repositories remains.
 
 Scope:
 

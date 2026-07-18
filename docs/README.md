@@ -33,10 +33,12 @@ verification results.
 - [Conversation custody and model switching](features/conversation-custody/)
 - [Repository intake and dogfood controls](features/dogfood-controls/)
 - [Workspace inspectors and phase flow](features/workspace-phase-flow/)
+- [Automatic phase continuation](features/automatic-phase-continuation/)
 
 P1-1 through P1-3 are usable. P1-4 now has its fixed-revision phase protocol,
-workspace inspector, and model-less observer baseline; the implementation
-frontier is live-provider dogfooding across real repositories.
+model-less automatic test/review continuation, workspace inspector, and
+observer baseline; the implementation frontier is live-provider dogfooding
+across real repositories.
 
 ## Adoption checkpoints
 
