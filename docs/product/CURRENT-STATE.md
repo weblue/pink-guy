@@ -138,21 +138,33 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 
 ## Next steps
 
-1. **Close residual P1-1 boundaries.** Trigger conversation custody before
-   orchestrator compaction and system-intake → project transfer; add restore
-   and retention operations after the real workflow is stable.
-2. **Close residual P1-2/P1-3 UX.** Add explicit source refresh/diff,
-   owner dependency editing, and a consolidated attention queue.
-3. **Close P1-4 with real-workflow dogfood.** The fixed-revision protocol,
-   inspectors, and model-less observer baseline are implemented. Prove the
-   live Pi phase flow across at least two real repositories without probe
-   helpers or SQLite edits, then close any evidence-navigation gaps it finds.
-   D-043 keeps a browser PTY out of the baseline; tmux/SSH remains the escape
-   hatch.
-4. **Phase 2 — autonomy, recovery, and portability.** Add
+The executable checklist is
+[`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
+
+1. **Land P1-4 and establish the dogfood baseline.** Merge the fixed-revision
+   workflow, start the normal API plus one project orchestrator per selected
+   repository, and rerun the zero-provider observer before consuming live
+   usage.
+2. **Close the remaining custody gate.** Capture the persistent orchestrator
+   session before Pi compaction and preserve the system-intake → project
+   transfer as a model-less custody event. This is the only residual P1-1 item
+   that blocks relying on a long-running dogfood conversation.
+3. **Dogfood two real repositories.** Use one bounded maintenance task and one
+   new-feature/prototype task. Exercise implementation → fixed checkpoint →
+   test → review through the cockpit, audit the inspector, and use only normal
+   owner/orchestrator controls.
+4. **Fix evidence-backed Phase 1 blockers.** Prioritize failures that prevent
+   task ingestion, phase advancement, validation/review, custody, or audit.
+   Source refresh UX, owner dependency editing, attention aggregation, richer
+   artifact navigation, and a workspace shell are not Phase 1 blockers unless
+   dogfooding proves otherwise.
+5. **Close Phase 1.** Record both dogfood receipts, update results/runbooks,
+   and declare the supervised local workflow the preferred development path
+   while retaining direct Pi/Codex as recovery.
+6. **Phase 2 — autonomy, recovery, and portability.** Add
    merge/rebase/push, recovery UX, credential concurrency, retention/backup,
    measured resource limits, and second-host reproduction.
-5. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
+7. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
    configured password verifier or API-key hash after the local product is
    mature.
 
@@ -189,11 +201,15 @@ Still open, but assigned to explicit gates rather than blocking current work:
 
 - **Credential refresh:** locked reconciliation versus a host broker before parallel OAuth runs.
 - **Recovery UX and reattachment:** how the owner resolves uncertain effects, how a paused session starts a new Pi RPC process, and whether true in-flight process reattachment is worth its operational complexity.
-- **Terminal semantics:** the current shell preserves filesystem state but executes each API command in a subshell; production needs a true PTY with durable `cwd`, environment, resize, scrollback, and reconnect behavior.
+- **Optional workspace shell:** D-043 rejects a browser PTY as a Phase 1
+  requirement. Add a durable interactive shell only if dogfooding exposes work
+  that cannot be performed through Pi RPC, cockpit controls, or tmux/SSH.
 - **Git policy:** distinction between checkpoints and final commits, squash/history policy, merge/rebase execution, conflicts, push authorization, and worktree cleanup.
 - **Network policy:** which provider/control-plane destinations are allowed and how egress is enforced and displayed.
 - **Retention operations:** deletion semantics, quotas, backup destination, encryption, and storage-pressure behavior while honoring retain-until-delete.
-- **Production dependencies:** supported SQLite binding and migrations, web/PTY/diff components, and whether a credential broker creates a Compose-worthy service boundary.
+- **Production dependencies:** supported SQLite binding and migrations, diff
+  rendering, and whether a future credential broker creates a Compose-worthy
+  service boundary.
 - **Reproduction:** which second clean ARM64 host will be used for Phase 2 portability validation.
 - **Provider fallback:** manual custody-backed switching is implemented;
   automatic OpenRouter routing and paid-spend policy remain deferred.
@@ -201,5 +217,7 @@ Still open, but assigned to explicit gates rather than blocking current work:
   lease-loss policy are implemented. Per-project task concurrency, scheduling
   priority, richer recovery diagnosis, and global host-pressure limits remain
   to be specified and measured.
-- **Trusted LAN:** the selected private interface/CIDR configuration and host-firewall enforcement need a Phase 1 design before binding beyond loopback.
+- **Trusted LAN:** no longer a Phase 1 deliverable. Keep loopback for local
+  dogfooding; implement authenticated SWAG access in Phase 3 unless an earlier
+  private-LAN need is demonstrated.
 - **Remote credential UX:** Phase 3 must choose password-session mode, API-key mode, or both. Browser `localStorage` persistence remains an explicit convenience/security decision, not the default.

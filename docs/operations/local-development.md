@@ -43,7 +43,10 @@ npm start -- \
 
 Open [http://127.0.0.1:4310](http://127.0.0.1:4310). The central API binds to `127.0.0.1` intentionally. Runtime state is stored under the selected `--state` directory and retained across restarts.
 
-No password or API key is required in this profile. Do not change the listener to `0.0.0.0` as a shortcut. Phase 1 will add an explicit private-interface/CIDR-aware trusted-LAN profile.
+No password or API key is required in this profile. Do not change the listener
+to `0.0.0.0` as a shortcut. Trusted-LAN exposure is not a Phase 1 requirement;
+use loopback until an authenticated remote profile or a separately approved
+private-interface/CIDR contract exists.
 
 Provider/model/thinking are central defaults persisted on newly created
 orchestrator conversations. The deterministic defaults are

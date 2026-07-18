@@ -10,6 +10,8 @@ and retained history.
 - [Current state](product/CURRENT-STATE.md) — implemented capabilities, stored
   artifacts, known gaps, and the next delivery slices.
 - [Roadmap](product/ROADMAP.md) — canonical phase and exposure sequence.
+- [Phase 1 dogfood plan](product/DOGFOOD-PLAN.md) — entry gates, two real-work
+  scenarios, evidence, and explicit non-requirements.
 - [Decision log](architecture/DECISIONS.md) — owner-approved, proposed, and
   deferred decisions.
 
