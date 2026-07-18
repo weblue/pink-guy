@@ -67,7 +67,7 @@ assert(
     && shell.value.includes("data-reconcile-command")
     && shell.value.includes("data-stop-session")
     && shell.value.includes("npm run boss -- chat --topic ")
-    && shell.value.includes("item.endpoint + \" · conversations\"")
+    && shell.value.includes('import { renderOrchestratorLeasesPanel } from "/ui/lease-view.mjs";')
     && !shell.value.includes("new Terminal(")
     && !shell.value.includes("xterm"),
   "cockpit does not expose the approved structured conversation workspace",

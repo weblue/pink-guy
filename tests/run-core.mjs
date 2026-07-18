@@ -17,6 +17,7 @@ const probes = [
   "probe-phase1-orchestrator-conversations.mjs",
   "probe-phase1-conversation-runtime.mjs",
   "probe-phase1-conversation-cockpit.mjs",
+  "probe-phase1-orchestrator-lease-history.mjs",
   "probe-phase1-terminal-client.mjs",
   "probe-phase1-task-graph-mutations.mjs",
   "probe-phase1-agent-prompt-profiles.mjs",

@@ -63,6 +63,9 @@ Chat never occupies all three answers.
   exposes created/updated/blocked tasks and links to their board/workspace.
 - Direct task creation remains available as a compact fast path and recovery
   tool.
+- Lease presentation treats `status === "active"` as the live lease; released,
+  expired, and any other non-active rows stay durable and collapse into the
+  lease-history disclosure without rewriting stored records.
 
 ## Required desktop surfaces
 
