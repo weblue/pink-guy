@@ -36,17 +36,15 @@ verification results.
 - [Automatic phase continuation](features/automatic-phase-continuation/)
 - [Task lifecycle and planning artifacts](features/task-lifecycle-artifacts/)
 - [Safe managed-project deletion](features/safe-project-deletion/)
-
-## Proposed closing slice
-
 - [Deterministic Ready scheduler](features/deterministic-ready-scheduler/) —
-  proposed D-046 moves eligibility, ordering, capacity, and sub-agent dispatch
-  out of the LLM while keeping conversational task refinement.
+  accepted D-046 moves eligibility, ordering, capacity, and sub-agent dispatch
+  out of the LLM while keeping conversational task refinement and release.
 
 P1-1 through P1-3 are usable. P1-4 now has its fixed-revision phase protocol,
 model-less automatic test/review continuation, workspace inspector, and
-observer baseline; the implementation frontier is live-provider dogfooding
-across real repositories.
+observer baseline and deterministic initial Ready dispatch. The remaining
+Phase 1 evidence is one live automatic-release smoke through the normal Pi
+orchestrator and project daemon.
 
 ## Adoption checkpoints
 

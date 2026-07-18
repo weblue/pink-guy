@@ -1,6 +1,6 @@
-# Deterministic Ready scheduler — proposed product specification
+# Deterministic Ready scheduler — product specification
 
-Status: Proposed for owner approval
+Status: Approved and implemented for Phase 1
 
 Last updated: 2026-07-18
 
@@ -34,7 +34,8 @@ runs next.
    - higher explicit priority first;
    - earlier release timestamp next; and
    - task ID as the stable final tie-breaker.
-6. Priority is a bounded integer with a visible normal default. Changing it is
+6. Priority is an integer from `-100` through `100`, with visible normal
+   default `0`. Changing it is
    audited and never interrupts an already running phase.
 7. Dispatch also requires a live project-orchestrator lease, available
    per-project/global capacity, and a configured implementation model route.

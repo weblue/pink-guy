@@ -233,6 +233,7 @@ export class DirectControlPlane {
     modelRoutePolicy = null,
     runtimeOffline = true,
     faultInjector = async () => undefined, enforceOrchestratorLease = false,
+    schedulerProjectCapacity = 1, schedulerGlobalCapacity = 1,
   }) {
     this.store = new Phase0Store(databasePath);
     this.stateRoot = stateRoot;
@@ -251,6 +252,8 @@ export class DirectControlPlane {
     this.runtimeOffline = runtimeOffline;
     this.faultInjector = faultInjector;
     this.enforceOrchestratorLease = enforceOrchestratorLease;
+    this.schedulerProjectCapacity = schedulerProjectCapacity;
+    this.schedulerGlobalCapacity = schedulerGlobalCapacity;
     this.credentialVault = new RunCredentialVault({ stateRoot, profile: credentialProfile });
     this.gitServices = new Map();
     this.git = fixturePath ? this.gitService(fixturePath) : null;
@@ -302,6 +305,23 @@ export class DirectControlPlane {
       });
     }
     return receipts;
+  }
+
+  reconcileReadyDispatch(orchestratorToken) {
+    const orchestrator = this.store.authorizeActiveProjectOrchestrator(orchestratorToken);
+    return this.reconcileReadyProject(orchestrator.project_id);
+  }
+
+  reconcileReadyProject(projectId) {
+    return this.store.dispatchNextReadyTask({
+      projectId,
+      modelRoute: {
+        ...this.resolveModelRoute("implementation"),
+        policySource: "automatic_dispatch_default",
+      },
+      projectCapacity: this.schedulerProjectCapacity,
+      globalCapacity: this.schedulerGlobalCapacity,
+    });
   }
 
   assertLocalOwnerProfile() {
@@ -474,6 +494,63 @@ export class DirectControlPlane {
         revision: await repositoryRevision(project.repository_path),
         idempotencyKey,
       });
+    }
+    if (["release", "pause_dispatch", "manualize_dispatch", "set_priority"].includes(body.operation)) {
+      const active = this.store.activeConversationTurnForLease(token, turnId);
+      const task = this.store.getTask(body.taskId);
+      if (!task || task.project_id !== active.conversation.project_id) {
+        throw Object.assign(new Error("task is outside the active conversation project"), {
+          code: "orchestrator_denied",
+        });
+      }
+      const modelRoute = body.operation === "release"
+        ? this.resolveModelRoute("implementation", {
+          provider: body.modelProvider ?? undefined,
+          model: body.modelId ?? undefined,
+          thinking: body.thinkingLevel ?? undefined,
+          billingClass: body.billingClass ?? undefined,
+          policySource: "orchestrator_release",
+        })
+        : null;
+      if (modelRoute) {
+        assertConfiguredModelSelection(this.modelRoutePolicy, "implementation", modelRoute);
+      }
+      const result = this.store.setTaskDispatch({
+        taskId: task.id,
+        operation: body.operation,
+        expectedVersion: body.expectedVersion,
+        priority: body.priority ?? null,
+        modelRoute,
+        idempotencyKey,
+        actor: `orchestrator:${active.conversation.id}`,
+        actorRole: "orchestrator",
+      });
+      if (!result.replayed) {
+        this.store.appendConversationEvent(
+          active.conversation.id,
+          active.turn.id,
+          "task_mutation_applied",
+          "orchestrator",
+          {
+            operation: body.operation,
+            taskId: task.id,
+            taskVersion: result.task.version,
+            dispatchPolicy: result.task.dispatch_policy,
+            priority: result.task.priority,
+          },
+        );
+      }
+      const dispatch = body.operation === "release"
+        ? this.reconcileReadyProject(task.project_id)
+        : null;
+      return {
+        ...result,
+        task: this.store.getTaskDetails(task.id),
+        operation: body.operation,
+        childTask: null,
+        dispatch,
+        queue: this.store.taskDispatchProjection(task.id),
+      };
     }
     return this.store.mutateConversationTask({
       token,
@@ -1478,6 +1555,7 @@ export class DirectControlPlane {
       if (request.method === "POST" && url.pathname === "/api/orchestrators/commands/claim") {
         const token = bearerToken(request);
         this.reconcileAutomaticPipelines(token);
+        this.reconcileReadyDispatch(token);
         const command = this.store.claimOrchestratorCommand(token);
         if (!command) {
           response.writeHead(204);
@@ -1496,11 +1574,16 @@ export class DirectControlPlane {
           state: body.state,
           result: body.result ?? {},
         });
+        const continuation = body.state === "succeeded"
+          ? this.reconcileAutomaticPipelines(token)
+          : [];
+        const readyDispatch = body.state === "succeeded"
+          ? this.reconcileReadyDispatch(token)
+          : { scheduled: false, reason: "prior_command_failed" };
         return json(response, 200, {
           command,
-          continuation: body.state === "succeeded"
-            ? this.reconcileAutomaticPipelines(token)
-            : [],
+          continuation,
+          readyDispatch,
         });
       }
 
@@ -1681,6 +1764,44 @@ export class DirectControlPlane {
         });
         return json(response, result.replayed ? 200 : 201, result);
       }
+      const dispatchTask = url.pathname.match(/^\/api\/tasks\/([^/]+)\/dispatch$/);
+      if (request.method === "POST" && dispatchTask) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const task = this.store.getTask(dispatchTask[1]);
+        if (!task) {
+          throw Object.assign(new Error(`unknown task: ${dispatchTask[1]}`), { code: "not_found" });
+        }
+        const modelRoute = body.operation === "release"
+          ? this.resolveModelRoute("implementation", {
+            provider: body.modelProvider ?? undefined,
+            model: body.modelId ?? undefined,
+            thinking: body.thinkingLevel ?? undefined,
+            billingClass: body.billingClass ?? undefined,
+            policySource: "owner_release",
+          })
+          : null;
+        if (modelRoute) {
+          assertConfiguredModelSelection(this.modelRoutePolicy, "implementation", modelRoute);
+        }
+        const result = this.store.setTaskDispatch({
+          taskId: task.id,
+          operation: body.operation,
+          expectedVersion: body.expectedVersion,
+          priority: body.priority ?? null,
+          modelRoute,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        const dispatch = body.operation === "release"
+          ? this.reconcileReadyProject(task.project_id)
+          : null;
+        return json(response, result.replayed ? 200 : 201, {
+          ...result,
+          task: this.store.getTaskDetails(task.id),
+          dispatch,
+          queue: this.store.taskDispatchProjection(task.id),
+        });
+      }
       const resumeTask = url.pathname.match(/^\/api\/tasks\/([^/]+)\/resume$/);
       if (request.method === "POST" && resumeTask) {
         this.assertLocalOwnerProfile();
@@ -1708,7 +1829,11 @@ export class DirectControlPlane {
         else this.assertLocalOwnerProfile();
         const task = this.store.getTaskDetails(taskDetail[1]);
         return task
-          ? json(response, 200, { ...task, activity: this.store.taskAudit(task.id) })
+          ? json(response, 200, {
+            ...task,
+            dispatch: this.store.taskDispatchProjection(task.id),
+            activity: this.store.taskAudit(task.id),
+          })
           : json(response, 404, { error: "not_found" });
       }
       if (request.method === "PUT" && taskDetail) {

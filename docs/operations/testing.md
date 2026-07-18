@@ -2,7 +2,7 @@
 
 ## Core regression suite
 
-Run the 13 deterministic Phase 1 probes together:
+Run the 14 deterministic Phase 1 probes together:
 
 ```sh
 npm test
@@ -12,10 +12,10 @@ The runner creates a temporary Git repository, exercises the command loop,
 local task controls, conversation/task projections, persistent fake-Pi RPC
 runtime, cockpit rendering, browser/terminal conversation parity, task-graph
 mutations, plain-text prompt defaults, per-agent model routes,
-pre-compaction/scope-transfer custody, and the fixed-revision phase workflow, then
-deletes the fixture. The suite also fault-tests safe managed-project deletion,
-quarantine restoration, and cleanup retry. It makes no provider request and
-starts no task container.
+pre-compaction/scope-transfer custody, deterministic Ready scheduling, and the
+fixed-revision phase workflow, then deletes the fixture. The suite also
+fault-tests safe managed-project deletion, quarantine restoration, and cleanup
+retry. It makes no provider request and starts no task container.
 
 Watch the phase protocol as a standalone model-less baseline:
 
@@ -48,6 +48,7 @@ node ./tests/probes/probe-direct-context-custody.mjs /tmp/boss-man-fixture
 node ./tests/probes/probe-memory-fts.mjs /tmp/boss-man-fixture
 node ./tests/probes/probe-phase1-conversation-runtime.mjs /tmp/boss-man-fixture
 node ./tests/probes/probe-phase1-dogfood-readiness.mjs /tmp/boss-man-fixture
+node ./tests/probes/probe-phase1-ready-scheduler.mjs /tmp/boss-man-fixture
 ```
 
 The context and memory probes are model-less. Provider and container probes

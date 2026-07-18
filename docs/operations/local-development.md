@@ -229,7 +229,7 @@ checks.
 ## Current execution boundary
 
 The served Phase 1 cockpit shows projects, topics, the task board, sessions,
-project-orchestrator leases, recent commands, local create/schedule controls,
+project-orchestrator leases, recent commands, local create/release controls,
 and a reconnectable Pi RPC conversation workspace with structured task-change
 cards. The orchestrator can create, update, split, link, annotate, and
 decision-gate tasks inside its project with exact turn provenance. The
@@ -239,9 +239,9 @@ Conversation custody/model switching, intake-to-project transfer, blocking
 pre-compaction export, repository/source intake, plain-text prompt defaults,
 per-agent model routes, task detail, owner decisions, and command
 reconciliation now have first-class local controls. The fixed-revision
-implementation/checkpoint/test/review protocol and its
-diff/test/review/context/artifact inspector are implemented; live-provider
-dogfooding across real repositories is next. D-043
+implementation/checkpoint/test/review protocol, deterministic initial Ready
+dispatch, and its diff/test/review/context/artifact inspector are implemented;
+one live automatic-release acceptance smoke remains. D-043
 defers a browser PTY; tmux/SSH remains the current exact-session attach path.
 
 Watch the zero-provider baseline before scheduling live work:

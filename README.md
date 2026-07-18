@@ -11,8 +11,8 @@ persistent Pi RPC conversations, an agile task board, a shared terminal
 client, host-owned repository intake, editable agent profiles, safe model
 switching, task/reconciliation controls, fixed-revision implementation/test/
 review handoffs, automatic model-less phase continuation, task workspace
-evidence inspectors, managed worktrees/containers, and model-less context
-custody.
+evidence inspectors, deterministic Ready scheduling, managed
+worktrees/containers, and model-less context custody.
 Authenticated remote access is a later phase.
 
 ## Objectives
@@ -100,6 +100,8 @@ npm run boss -- chat --new-topic "Prototype a new tool"
 npm run boss -- import --repo-url git@github.com:OWNER/REPO.git
 npm run boss -- delete-project --project PROJECT_ID \
   --confirm "Exact project name" --reason "Canceled unused import"
+npm run boss -- dispatch --task TASK_ID --policy automatic --priority 0
+npm run boss -- dispatch --task TASK_ID --policy paused
 npm run boss -- bind --topic TOPIC_ID --project PROJECT_ID
 npm run boss -- profiles
 ```
@@ -108,11 +110,14 @@ A practical cmux layout is one central-API pane, one orchestrator pane per
 active repository, and optional `boss chat` panes. Closing a chat pane does
 not stop Pi or lose history.
 
-After implementation records a fixed review-requested revision, the central
-API automatically schedules test and then independent review from durable
-task evidence. Failed validation, non-approved review, missing phase evidence,
-decisions, and dependencies stop the pipeline for explicit recovery. The
-cockpit's **Manually start phase** action is an override, not the normal flow.
+After the orchestrator refines and explicitly releases concrete work, the
+central model-less scheduler selects eligible Ready tasks by priority, release
+time, then task ID. It waits visibly for lease or capacity rather than failing.
+After implementation records a fixed review-requested revision, the API
+automatically schedules test and independent review from durable evidence.
+Failed validation, non-approved review, missing phase evidence, decisions, and
+dependencies stop the pipeline for explicit recovery. The cockpit's
+**Manually start phase** action is an override, not the normal flow.
 
 The active board distinguishes executable work from umbrella and intake
 artifacts. Optional task tags are organizational only. Settled planning records

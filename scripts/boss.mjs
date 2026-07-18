@@ -25,6 +25,9 @@ function usage(message) {
     [--api URL] [--json]
   boss delete-project --project ID --confirm EXACT_NAME --reason TEXT
     [--api URL] [--json]
+  boss dispatch --task ID --policy automatic|manual|paused [--priority -100..100]
+    [--provider PROVIDER --model MODEL_ID --thinking LEVEL] [--expected-version N]
+    [--api URL] [--json]
   boss chat (--topic ID | --project ID | --repo PATH | --new-topic TITLE)
     [--description TEXT] [--message TEXT | --message-file PATH]
     [--no-wait] [--poll-ms 750] [--timeout-seconds 600] [--api URL] [--json]
@@ -40,7 +43,7 @@ function parseArguments(argv) {
   const command = argv[0];
   if (
     !command || command === "--help" || command === "-h"
-    || !["status", "topics", "profiles", "profile", "model", "bind", "import", "delete-project", "chat"].includes(command)
+    || !["status", "topics", "profiles", "profile", "model", "bind", "import", "delete-project", "dispatch", "chat"].includes(command)
   ) {
     usage(command ? `unknown command: ${command}` : null);
   }
@@ -73,6 +76,9 @@ function parseArguments(argv) {
     else if (argument === "--name") options.projectName = value();
     else if (argument === "--confirm") options.confirmName = value();
     else if (argument === "--reason") options.reason = value();
+    else if (argument === "--task") options.taskId = value();
+    else if (argument === "--policy") options.dispatchPolicy = value();
+    else if (argument === "--priority") options.priority = Number(value());
     else if (argument === "--no-wait") options.noWait = true;
     else if (argument === "--poll-ms") options.pollMs = Number(value());
     else if (argument === "--timeout-seconds") options.timeoutMs = Number(value()) * 1_000;
@@ -96,6 +102,20 @@ function parseArguments(argv) {
     command === "delete-project"
     && (!options.projectId || !options.confirmName || !options.reason)
   ) usage("delete-project requires --project, --confirm, and --reason");
+  if (
+    command === "dispatch"
+    && (!options.taskId || !["automatic", "manual", "paused"].includes(options.dispatchPolicy))
+  ) usage("dispatch requires --task and --policy automatic, manual, or paused");
+  if (
+    command === "dispatch"
+    && options.priority !== undefined
+    && (!Number.isInteger(options.priority) || options.priority < -100 || options.priority > 100)
+  ) usage("dispatch priority must be an integer from -100 to 100");
+  if (
+    command === "dispatch"
+    && [options.modelProvider, options.modelId, options.thinkingLevel].some(Boolean)
+    && ![options.modelProvider, options.modelId, options.thinkingLevel].every(Boolean)
+  ) usage("dispatch model override requires --provider, --model, and --thinking together");
   if (options.prompt && options.promptFile) usage("choose --prompt or --prompt-file");
   if (
     options.expectedVersion !== undefined
@@ -257,6 +277,42 @@ async function runProjectDelete(client, options) {
     result.cleanupPending
       ? `Project tombstoned; checkout cleanup remains pending (${result.receipt.id}).\n`
       : `Project deleted safely; retained receipt ${result.receipt.id}.\n`,
+  );
+}
+
+async function runDispatch(client, options) {
+  const current = await client.taskDetail(options.taskId);
+  let operation;
+  if (options.dispatchPolicy === "automatic") operation = "release";
+  else if (options.dispatchPolicy === "paused") operation = "pause_dispatch";
+  else operation = "manualize_dispatch";
+  const result = await client.setTaskDispatch(options.taskId, {
+    operation,
+    expectedVersion: options.expectedVersion ?? current.version,
+    priority: options.priority ?? null,
+    modelProvider: options.modelProvider ?? null,
+    modelId: options.modelId ?? null,
+    thinkingLevel: options.thinkingLevel ?? null,
+  });
+  if (options.json) {
+    writeJson(result);
+    return;
+  }
+  const task = result.task;
+  const dispatch = result.dispatch;
+  const queue = result.queue;
+  process.stdout.write(
+    `${task.title}\n`
+    + `Dispatch: ${task.dispatch_policy} · priority ${task.priority}\n`
+    + (queue?.rank ? `Queue: #${queue.rank}\n` : "")
+    + (queue?.blockers?.length
+      ? `Blockers: ${queue.blockers.map((value) => value.replaceAll("_", " ")).join(", ")}\n`
+      : "")
+    + (dispatch?.scheduled
+      ? `Scheduled implementation command ${dispatch.command.id}.\n`
+      : dispatch
+        ? `Waiting: ${String(dispatch.reason).replaceAll("_", " ")}.\n`
+        : ""),
   );
 }
 
@@ -432,6 +488,8 @@ try {
     await runImport(client, options);
   } else if (options.command === "delete-project") {
     await runProjectDelete(client, options);
+  } else if (options.command === "dispatch") {
+    await runDispatch(client, options);
   } else {
     await runChat(client, options);
   }

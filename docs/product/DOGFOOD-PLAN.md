@@ -1,7 +1,7 @@
 # Phase 1 dogfood plan
 
-Status: Both Phase 1 repository scenarios complete; deterministic Ready
-scheduling is the remaining proposed closure slice
+Status: Both Phase 1 repository scenarios and deterministic Ready scheduling
+complete; live automatic-release acceptance smoke remains
 
 Last updated: 2026-07-18
 
@@ -187,11 +187,11 @@ schedule, remote push, or merge was used. The run proved checkout, scoped
 conversation refinement, implementation, fixed-revision validation,
 independent review, completion, and observable model-less phase continuation.
 
-It also sharpened one architecture boundary: the conversational LLM still
-released the initial implementation task, while the central coordinator
-deterministically selected test and review. Proposed D-046 makes Ready
-eligibility, ordering, capacity, and initial sub-agent dispatch model-less as
-the Phase 1 closure slice.
+That run sharpened the architecture boundary addressed by D-046. The
+conversational LLM still expresses release intent, but the implemented central
+scheduler now owns Ready eligibility, ordering, capacity, and initial
+sub-agent dispatch. A final small live smoke must use this path without the
+manual phase action.
 
 ## Exit evidence
 

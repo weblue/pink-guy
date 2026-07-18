@@ -1,7 +1,7 @@
 # Boss Man v2 current state
 
-Status: Phase 1 repository dogfood complete — deterministic Ready scheduling
-proposed as the remaining closure slice
+Status: Phase 1 implementation and repository dogfood complete — one live
+automatic-release acceptance smoke remains
 
 Last updated: 2026-07-18
 
@@ -71,11 +71,12 @@ independent review approved, completion recorded a merge request, and host
 smoke passed all six tracked Bash scripts. The canceled PowerToys import was
 removed through the audited safe-delete path without direct state edits.
 
-The remaining scheduling asymmetry is explicit. Initial Ready selection still
-requires an owner or conversational orchestrator release, while later phase
-selection is model-less. Proposed D-046 keeps Pi responsible for refinement
-and release intent but moves eligibility, priority/order, capacity claims,
-command creation, and sub-agent spawning into a deterministic scheduler.
+Initial Ready selection is now model-less after explicit release. Accepted
+D-046 keeps Pi responsible for refinement and release intent, while durable
+manual/automatic/paused policy, priority/release ordering, lease and capacity
+checks, atomic command creation, and sub-agent dispatch belong to the central
+scheduler. Existing tasks remain manual; the cockpit and terminal show rank
+and wait reasons. Direct phase scheduling remains an explicit recovery path.
 
 Task lifecycle is now explicit and orthogonal to execution status. Executable
 tasks can run phases; umbrella and intake artifacts cannot. Tags are optional,
@@ -115,7 +116,7 @@ the runtime structure.
 | Restart recovery | SQLite records immutable intent/completion/reconciliation receipts. Startup checks container identity/liveness, pauses verified idle runs, holds uncertain response/tool effects without replay, recovers checksum-valid snapshots, and recovers parent/provenance-valid Git commits without duplication. | The prototype conservatively stops the old container; true Pi RPC reattachment and host/Docker power-cycle coverage remain production work. |
 | Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
 | Developer cockpit | The loopback cockpit combines persistent Pi conversation, multi-project board, repository/source intake, prompt/model controls, fixed-revision phase controls, workspace/diff/test/review/context/artifact inspectors, command recovery, and tmux/SSH guidance. | Attention aggregation, richer artifact navigation, and owner dependency editing remain usage-driven. D-043 defers a browser PTY. |
-| Orchestrator interaction | First-class topic/conversation projections, central model/prompt policy, scoped leases, persistent Pi RPC, audited task-graph/lifecycle mutations, intake-to-project transfer, per-subagent route selection, settled implementation/test/review commands, and model-less automatic phase continuation are implemented. Passing independent review completes the task only when all policy gates pass. | A deterministic model-less Ready scheduler, source refresh semantics, scheduling priority, and resource-pressure controls remain. The LLM should propose/refine work, not pop the runnable queue. |
+| Orchestrator interaction | First-class topic/conversation projections, central model/prompt policy, scoped leases, persistent Pi RPC, audited task-graph/lifecycle/dispatch mutations, intake-to-project transfer, per-subagent route selection, deterministic Ready selection, settled implementation/test/review commands, and model-less automatic phase continuation are implemented. Passing independent review completes the task only when all policy gates pass. | One live automatic-release acceptance smoke remains. Source refresh semantics and wider measured resource-pressure/concurrency controls are later work; Pi refines and releases work but does not pop the runnable queue. |
 
 ## Adoption readiness
 
@@ -182,21 +183,18 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 The executable checklist is
 [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
-1. **Publish and merge the current dogfood recovery slice.** It contains the
-   progress-aware runtime fixes, successful-phase continuation, explicit task
-   lifecycle, and the retained UI dogfood reconciliation. After merge, rerun
-   the model-less suite from `main`.
-2. **Dogfood one maintenance repository.** The new-project `doc-map` scenario
-   completed with an approved fixed revision and recorded recovery defects.
-   Select one bounded maintenance task with deterministic regression coverage,
-   exercise implementation → fixed checkpoint → test → review, and use only
-   normal owner/orchestrator controls.
-3. **Fix evidence-backed Phase 1 blockers.** Prioritize failures that prevent
-   task ingestion, phase advancement, validation/review, custody, or audit.
+1. **Publish and merge D-046.** Rerun all 14 model-less probes from `main`.
+2. **Run one live automatic-release acceptance smoke.** Use a bounded task
+   with deterministic validation, let the Pi orchestrator refine and release
+   it, and observe model-less implementation selection followed by automatic
+   test and review. Do not use the manual phase override.
+3. **Fix only evidence-backed Phase 1 blockers.** Prioritize failures that
+   prevent release, dispatch, phase advancement, validation/review, custody,
+   or audit.
    Source refresh UX, owner dependency editing, attention aggregation, richer
    artifact navigation, and a workspace shell are not Phase 1 blockers unless
    dogfooding proves otherwise.
-4. **Close Phase 1.** Record both dogfood receipts, update results/runbooks,
+4. **Close Phase 1.** Record the automatic-release receipt, update results/runbooks,
    and declare the supervised local workflow the preferred development path
    while retaining direct Pi/Codex as recovery.
 5. **Phase 2 — autonomy, recovery, and portability.** Add
@@ -258,10 +256,9 @@ Still open, but assigned to explicit gates rather than blocking current work:
   OpenAI Codex routes but no local provider, so a real local-model smoke awaits
   owner configuration. Add a routing intermediary only for a concrete Pi
   compatibility or policy gap.
-- **Project orchestration:** the durable command protocol and conservative
-  lease-loss policy plus model-less successful-phase continuation are
-  implemented. Explicit executable/umbrella/intake kinds and archival are also
-  implemented. Per-project task concurrency, scheduling priority, richer
-  recovery diagnosis, and global host-pressure limits remain to be specified
-  and measured.
+- **Project orchestration:** durable model-less initial dispatch and successful
+  phase continuation are implemented with explicit policy, bounded priority,
+  stable ordering, lease checks, and conservative one-command global/project
+  capacity. Wider concurrency, richer recovery diagnosis, and host-pressure
+  limits are Phase 2 measurement work.
 - **Remote credential UX:** Phase 3 must choose password-session mode, API-key mode, or both. Browser `localStorage` persistence remains an explicit convenience/security decision, not the default.

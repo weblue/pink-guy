@@ -164,6 +164,38 @@ export class BossManClient {
     });
   }
 
+  async taskDetail(taskId) {
+    return this.request(`/api/tasks/${encodeURIComponent(taskId)}`);
+  }
+
+  async setTaskDispatch(
+    taskId,
+    {
+      operation,
+      expectedVersion,
+      priority = null,
+      modelProvider = null,
+      modelId = null,
+      thinkingLevel = null,
+      billingClass = null,
+    },
+    { idempotencyKey = `terminal-dispatch-${randomUUID()}` } = {},
+  ) {
+    return this.request(`/api/tasks/${encodeURIComponent(taskId)}/dispatch`, {
+      method: "POST",
+      idempotencyKey,
+      body: {
+        operation,
+        expectedVersion,
+        priority,
+        modelProvider,
+        modelId,
+        thinkingLevel,
+        billingClass,
+      },
+    });
+  }
+
   async topicDetail(topicId) {
     return this.request(`/api/topics/${encodeURIComponent(topicId)}`);
   }

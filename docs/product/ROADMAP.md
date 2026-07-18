@@ -35,8 +35,9 @@ Phase 0 does not require application authentication because its runnable profile
 
 ## Phase 1 — useful local-first developer cockpit
 
-Status: In progress — implementation gates and both repository dogfood
-scenarios complete; deterministic Ready scheduling is proposed for closure
+Status: In progress — implementation gates, both repository dogfood scenarios,
+and deterministic Ready scheduling are complete; one live automatic-release
+acceptance smoke remains
 
 Purpose: make Boss Man useful for supervised daily development on its host.
 
@@ -74,9 +75,10 @@ conditions. Explicit executable/umbrella/intake task kinds, normalized tags,
 and reversible archive/restore keep retained planning artifacts off the active
 board. Activity-free managed imports can be safely removed through an audited
 tombstone/quarantine workflow. The `doc-map` new-project and
-`inspector-gadget` maintenance phase-flow runs are complete. Proposed D-046
-makes initial Ready selection and dispatch deterministic/model-less before
-Phase 1 closes.
+`inspector-gadget` maintenance phase-flow runs are complete. Accepted D-046
+now makes initial Ready selection and dispatch deterministic/model-less.
+Phase 1 closes after one normal Pi-orchestrator release proves the integrated
+live implementation → test → review path and the receipt is recorded.
 
 Scope:
 

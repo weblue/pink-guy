@@ -1,6 +1,6 @@
-# Deterministic Ready scheduler — proposed technical specification
+# Deterministic Ready scheduler — technical specification
 
-Status: Proposed for owner approval
+Status: Implemented; live automatic-release dogfood pending
 
 Last updated: 2026-07-18
 
@@ -17,18 +17,18 @@ The current system is deterministic after implementation starts:
 - `automaticPipelineDirectives()` derives test/review/completion from fixed
   revision evidence without an LLM.
 
-Initial Ready selection is still an explicit owner or conversational-
-orchestrator schedule tool call. That makes queue popping a model decision and
-leaves priority/capacity behavior implicit.
+Before this slice, initial Ready selection was an explicit owner or
+conversational-orchestrator schedule tool call. That made queue popping a
+model decision and left priority/capacity behavior implicit.
 
-## Proposed changes
+## Implemented changes
 
 ### Durable dispatch fields
 
 Add task fields:
 
 - `dispatch_policy`: `manual | automatic | paused`, default `manual`;
-- `priority`: bounded integer, default `0`;
+- `priority`: integer from `-100` through `100`, default `0`;
 - `released_at` and `released_by`; and
 - optional `dispatch_model_route_json` validated through the existing route
   policy.
@@ -64,9 +64,9 @@ Run the scheduler:
   resolution, lease acquisition, and capacity release; and
 - before each project command claim as a restart/crash reconciliation path.
 
-No background broker is required for Phase 1. A low-frequency model-less
-reconciliation tick may be added only to recover from missed host events; it
-derives the same idempotent transaction.
+No background broker is required for Phase 1. Project daemons reconcile before
+every command claim, and successful command settlement triggers another
+selection. Both paths derive the same idempotent transaction.
 
 Generalize the existing automatic phase coordinator so initial implementation
 dispatch and later test/review continuation share route, capacity, blocker,
@@ -95,12 +95,6 @@ audit, and idempotency primitives without sharing eligibility rules.
 - Add cockpit/terminal parity assertions for rank and blockers (PRODUCT 12).
 - Repeat the `inspector-gadget` maintenance shape with two released tasks and
   verify the LLM is not called between release and implementation spawn.
-
-## Parallelization
-
-Parallel agents are not proposed for the first implementation. Schema,
-eligibility projection, atomic scheduling, phase continuation, and concurrency
-tests are one state-machine boundary and should land as one coherent slice.
 
 ## Risks and mitigations
 
