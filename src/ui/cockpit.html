@@ -95,6 +95,7 @@
     padding: .65rem;
   }
   .row + .row, .task + .task, .topic-button + .topic-button, .change-card + .change-card { margin-top: .45rem; }
+  details.row > summary { cursor: pointer; }
   .topic-button {
     border-left-color: var(--purple);
     display: block;
@@ -327,7 +328,9 @@
     </details>
   </aside>
 </main>
-<script>
+<script type="module">
+  import { renderOrchestratorLeasesPanel } from "/ui/lease-view.mjs";
+
   const app = {
     projects: [],
     topics: [],
@@ -787,16 +790,10 @@
     renderTopics();
     renderBoard();
     renderPromptProfiles();
-    document.querySelector("#orchestrators").innerHTML =
-      orchestrators.orchestrators.map((item) => row(
-        item.project_name,
-        item.transport + " · " + item.status + " · task commands",
-      )).join("")
-      + leases.leases.map((item) => row(
-        item.scope_type + ":" + item.scope_id,
-        item.transport + " · " + item.status + " · " + item.endpoint + " · conversations",
-      )).join("")
-      || "<p class=\"muted\">No active leases.</p>";
+    document.querySelector("#orchestrators").innerHTML = renderOrchestratorLeasesPanel({
+      projectOrchestrators: orchestrators.orchestrators,
+      conversationLeases: leases.leases,
+    });
     document.querySelector("#sessions").innerHTML = sessions.sessions.map((session) =>
       "<div class=\"row\"><strong>" + esc(session.id) + "</strong><div class=\"muted\">"
       + esc(session.project_id + " · " + (session.latest_run_state || session.state)) + "</div>"

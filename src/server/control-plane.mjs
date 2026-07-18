@@ -223,6 +223,7 @@ function repositoryDisplayName(source) {
 }
 
 const BOARD_HTML = await readFile(resolve(moduleDirectory, "../ui/cockpit.html"), "utf8");
+const LEASE_VIEW_MODULE = await readFile(resolve(moduleDirectory, "../ui/lease-view.mjs"), "utf8");
 
 export class DirectControlPlane {
   constructor({
@@ -1175,6 +1176,10 @@ export class DirectControlPlane {
       if (request.method === "GET" && url.pathname === "/") {
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         return response.end(BOARD_HTML);
+      }
+      if (request.method === "GET" && url.pathname === "/ui/lease-view.mjs") {
+        response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+        return response.end(LEASE_VIEW_MODULE);
       }
       if (request.method === "GET" && url.pathname === "/api/health") {
         return json(response, 200, {
