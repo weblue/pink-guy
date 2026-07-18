@@ -1,6 +1,6 @@
 # Boss Man local development runbook
 
-Status: Phase 1 local cockpit (first control-loop slice)
+Status: Phase 1 local cockpit (conversation and task-graph slice)
 
 The current application can be served locally for multi-project observability
 and durable project-orchestrator command delivery. The local-smoke profile
@@ -26,7 +26,10 @@ From this repository:
 node ./phase0/scripts/serve-direct.mjs \
   --repo /Users/ND139178/Documents/boss-man \
   --state "$HOME/.local/share/boss-man/dev" \
-  --port 4310
+  --port 4310 \
+  --provider openai-codex \
+  --model gpt-5.4-mini \
+  --thinking medium
 ```
 
 Pass `--repo` more than once to register multiple repositories:
@@ -41,6 +44,12 @@ node ./phase0/scripts/serve-direct.mjs \
 Open [http://127.0.0.1:4310](http://127.0.0.1:4310). The central API binds to `127.0.0.1` intentionally. Runtime state is stored under the selected `--state` directory and retained across restarts.
 
 No password or API key is required in this profile. Do not change the listener to `0.0.0.0` as a shortcut. Phase 1 will add an explicit private-interface/CIDR-aware trusted-LAN profile.
+
+Provider/model/thinking are central defaults persisted on newly created
+orchestrator conversations. The deterministic defaults are
+`boss-man-phase0/complete`; pass explicit live values as above before expecting
+a real Pi orchestrator to consume turns. Changing an existing conversation's
+model remains a later safe-boundary custody operation.
 
 Useful checks:
 
@@ -61,14 +70,36 @@ Each project may hold one active orchestrator lease. The process can run directl
 ```sh
 node ./phase0/scripts/project-orchestrator.mjs \
   --api http://127.0.0.1:4310 \
-  --repo /Users/ND139178/Documents/boss-man
+  --repo /Users/ND139178/Documents/boss-man \
+  --state-root "$HOME/.local/share/boss-man/dev" \
+  --credential-source "$HOME/.pi/agent/auth.json"
 ```
 
-The process registers through the central API, keeps its in-memory bearer token
-private, heartbeats the lease, polls for project-scoped commands, executes one
-at a time, and releases the lease on a normal stop. A second orchestrator for
-the same project is rejected until the first lease is released or expires.
-Use `--poll-ms` to change the local polling interval; the default is 1000 ms.
+The one project process registers both the compatibility command lease and
+the new conversation-scope lease, keeps their bearer tokens private,
+heartbeats them, consumes task commands, and runs persistent project
+conversation turns through Pi RPC. It releases both leases on a normal stop.
+A second orchestrator for the same project is rejected until the first leases
+are released or expire. Use `--poll-ms` to change the local polling interval;
+the default is 1000 ms.
+
+The owner-managed Pi login file is copied into private runtime-owned
+configuration; Pi never writes the canonical source. Do not put credentials
+in topic/task text or pass them through the browser. The current OAuth profile
+remains limited to one live orchestrator/task-provider run at a time until the
+credential concurrency/broker decision is resolved. API-key-backed profiles
+can later use a different declared concurrency policy.
+
+To process pre-project topics instead, run the system-intake orchestrator
+while no other OAuth-backed provider run is active:
+
+```sh
+node ./phase0/scripts/conversation-orchestrator.mjs \
+  --api http://127.0.0.1:4310 \
+  --state-root "$HOME/.local/share/boss-man/dev" \
+  --system-intake \
+  --credential-source "$HOME/.pi/agent/auth.json"
+```
 
 For cmux, create or select a tmux-backed workspace and run the same command there. cmux/tmux and SSH are attach and process-management transports; they do not own durable Boss Man state.
 
@@ -118,17 +149,29 @@ node ./phase0/scripts/probe-phase1-command-loop.mjs \
   /Users/ND139178/Documents/boss-man
 node ./phase0/scripts/probe-phase1-local-task-controls.mjs \
   /Users/ND139178/Documents/boss-man
+node ./phase0/scripts/probe-phase1-orchestrator-conversations.mjs \
+  /Users/ND139178/Documents/boss-man
+node ./phase0/scripts/probe-phase1-conversation-runtime.mjs \
+  /Users/ND139178/Documents/boss-man
+node ./phase0/scripts/probe-phase1-conversation-cockpit.mjs \
+  /Users/ND139178/Documents/boss-man
+node ./phase0/scripts/probe-phase1-task-graph-mutations.mjs \
+  /Users/ND139178/Documents/boss-man
 ```
 
 ## Current execution boundary
 
-The served Phase 1 shell shows projects, tasks, sessions, project-orchestrator
-leases, recent commands, and local create/schedule controls. The existing
-automated probes exercise real task claiming, Pi RPC, containers, worktrees,
-host Git checkpoints, RTK evidence, and context export. The shell does not yet
-provide task editing/dependencies, reconciliation actions, or a persistent
-PTY; those are the next local-product slices, not authentication
-prerequisites.
+The served Phase 1 cockpit shows projects, topics, the task board, sessions,
+project-orchestrator leases, recent commands, local create/schedule controls,
+and a reconnectable Pi RPC conversation workspace with structured task-change
+cards. The orchestrator can create, update, split, link, annotate, and
+decision-gate tasks inside its project with exact turn provenance. The
+existing automated probes exercise real task claiming, Pi RPC,
+containers, worktrees, host Git checkpoints, RTK evidence, and context export.
+Conversation custody, owner reconciliation/decision controls, and deeper
+diff/test/review/source/custody inspectors are the next local-product slices,
+not authentication prerequisites. D-043 defers a browser PTY; tmux/SSH remains
+the current exact-session attach path.
 
 To exercise the complete model-less C0-04 context path:
 

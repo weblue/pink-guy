@@ -1,16 +1,25 @@
 #!/usr/bin/env node
 
-import { resolve } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { ConversationOrchestratorRuntime } from "../direct/conversation-runtime.mjs";
 
 function usage() {
   console.error(`usage: node phase0/scripts/project-orchestrator.mjs --api http://127.0.0.1:4310
-  (--project-id PROJECT_ID | --repo /absolute/repository) [--lease-seconds 90] [--poll-ms 1000]`);
+  (--project-id PROJECT_ID | --repo /absolute/repository)
+  [--state-root /absolute/state] [--credential-source /absolute/pi-auth.json]
+  [--pi-command pi] [--lease-seconds 90] [--poll-ms 1000]`);
   process.exit(64);
 }
 
 let api;
 let projectId;
 let repositoryPath;
+let stateRoot = join(homedir(), ".local", "share", "boss-man", "dev");
+let credentialSource;
+let piCommand = "pi";
 let leaseSeconds = 90;
 let pollMs = 1000;
 for (let index = 2; index < process.argv.length; index += 1) {
@@ -18,6 +27,9 @@ for (let index = 2; index < process.argv.length; index += 1) {
   if (argument === "--api") api = process.argv[++index];
   else if (argument === "--project-id") projectId = process.argv[++index];
   else if (argument === "--repo") repositoryPath = resolve(process.argv[++index] ?? usage());
+  else if (argument === "--state-root") stateRoot = resolve(process.argv[++index] ?? usage());
+  else if (argument === "--credential-source") credentialSource = resolve(process.argv[++index] ?? usage());
+  else if (argument === "--pi-command") piCommand = process.argv[++index];
   else if (argument === "--lease-seconds") leaseSeconds = Number(process.argv[++index]);
   else if (argument === "--poll-ms") pollMs = Number(process.argv[++index]);
   else usage();
@@ -68,6 +80,29 @@ Endpoint: ${endpoint}
 Central API: ${api}
 Command polling: ${pollMs}ms
 `);
+
+const moduleDirectory = dirname(fileURLToPath(import.meta.url));
+const conversationRuntime = new ConversationOrchestratorRuntime({
+  api,
+  scopeType: "project",
+  scopeId: projectId,
+  stateRoot,
+  piCommand,
+  piExtension: resolve(moduleDirectory, "../pi/orchestrator-extension.ts"),
+  credentialSource,
+  leaseSeconds,
+  pollMs,
+});
+try {
+  await conversationRuntime.register();
+} catch (error) {
+  await fetch(`${api}/api/orchestrators/lease`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${token}` },
+  }).catch(() => undefined);
+  throw error;
+}
+process.stdout.write("Conversation polling: persistent Pi RPC (same project daemon)\n");
 
 let stopping = false;
 const heartbeat = setInterval(async () => {
@@ -145,12 +180,28 @@ async function pollCommands() {
   }
 }
 
+async function pollConversations() {
+  while (!stopping) {
+    try {
+      const result = await conversationRuntime.runOnce();
+      if (!result) await sleep(pollMs);
+    } catch (error) {
+      if (!stopping) {
+        process.stderr.write(`orchestrator conversation poll failed: ${error.message}\n`);
+        await sleep(pollMs);
+      }
+    }
+  }
+}
+
 void pollCommands();
+void pollConversations();
 
 async function stop(signal) {
   if (stopping) return;
   stopping = true;
   clearInterval(heartbeat);
+  await conversationRuntime.close();
   await fetch(`${api}/api/orchestrators/lease`, {
     method: "DELETE",
     headers: { authorization: `Bearer ${token}` },

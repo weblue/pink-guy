@@ -2,9 +2,18 @@ import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 
 export class PiRpcProcess {
-  constructor({ child = null, command = "pi", args, cwd, env, onEvent = () => {} }) {
+  constructor({
+    child = null,
+    command = "pi",
+    args,
+    cwd,
+    env,
+    onEvent = () => {},
+    onProtocolError = () => {},
+  }) {
     this.child = child ?? spawn(command, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
     this.onEvent = onEvent;
+    this.onProtocolError = onProtocolError;
     this.messages = [];
     this.waiters = [];
     this.stderr = "";
@@ -23,7 +32,15 @@ export class PiRpcProcess {
       const line = this.buffer.slice(0, boundary);
       this.buffer = this.buffer.slice(boundary + 1);
       if (!line) continue;
-      const message = JSON.parse(line);
+      let message;
+      try {
+        message = JSON.parse(line.endsWith("\r") ? line.slice(0, -1) : line);
+      } catch (error) {
+        this.onProtocolError(Object.assign(new Error(`invalid Pi RPC JSON: ${error.message}`), {
+          line: line.slice(0, 2_000),
+        }));
+        continue;
+      }
       this.messages.push(message);
       this.onEvent(message);
       for (let index = this.waiters.length - 1; index >= 0; index -= 1) {
@@ -58,6 +75,10 @@ export class PiRpcProcess {
     );
     if (!response.success) throw new Error(`${payload.type}: ${response.error}`);
     return response.data;
+  }
+
+  setEventHandler(onEvent) {
+    this.onEvent = onEvent;
   }
 
   async terminate() {

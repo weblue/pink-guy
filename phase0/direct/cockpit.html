@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>Boss Man cockpit</title>
+<style>
+  :root {
+    color-scheme: dark;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: #090d11;
+    color: #e7edf3;
+    --panel: #11171d;
+    --panel-2: #182129;
+    --border: #293641;
+    --muted: #8a9aa8;
+    --green: #8ce99a;
+    --blue: #74c0fc;
+    --yellow: #ffd43b;
+    --red: #ff8787;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  header {
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    padding: .9rem 1.2rem;
+  }
+  main {
+    display: grid;
+    gap: .85rem;
+    grid-template-columns: 18rem minmax(32rem, 1fr) 21rem;
+    padding: .85rem;
+  }
+  .stack { display: grid; gap: .75rem; align-content: start; }
+  .panel, .column {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: .5rem;
+    padding: .8rem;
+  }
+  h1, h2, h3, p { margin: .1rem 0 .65rem; }
+  h1 { color: var(--green); font-size: 1rem; }
+  h2 { color: #a8b8c5; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
+  h3 { font-size: .82rem; text-transform: capitalize; }
+  button, input, select, textarea {
+    background: #0b1116;
+    border: 1px solid #3a4956;
+    border-radius: .35rem;
+    color: inherit;
+    font: inherit;
+    padding: .48rem;
+  }
+  button { background: #244b37; border-color: #3c7e58; cursor: pointer; }
+  button.secondary { background: #18242d; border-color: #3a5265; }
+  button.ghost { background: transparent; border-color: transparent; color: var(--blue); padding: .25rem; }
+  button:disabled { cursor: wait; opacity: .55; }
+  form { display: grid; gap: .45rem; }
+  textarea { min-height: 5rem; resize: vertical; }
+  .muted { color: var(--muted); }
+  .good { color: var(--green); }
+  .warn { color: var(--yellow); }
+  .error { color: var(--red); }
+  .tag, .state {
+    border: 1px solid #42515d;
+    border-radius: 1rem;
+    display: inline-block;
+    font-size: .68rem;
+    padding: .1rem .4rem;
+  }
+  .state { color: var(--blue); }
+  .row, .task, .topic-button, .change-card {
+    background: var(--panel-2);
+    border-radius: .35rem;
+    margin-top: .42rem;
+    padding: .58rem;
+  }
+  .topic-button {
+    border: 1px solid transparent;
+    display: block;
+    text-align: left;
+    width: 100%;
+  }
+  .topic-button.selected { border-color: var(--blue); }
+  .project-row { display: grid; gap: .35rem; }
+  .project-actions { display: flex; justify-content: flex-start; }
+  .workspace-head { align-items: start; display: flex; gap: .75rem; justify-content: space-between; }
+  .workspace-head h2 { color: var(--green); font-size: 1rem; letter-spacing: 0; text-transform: none; }
+  .conversation {
+    background: #090d11;
+    border: 1px solid #26343e;
+    border-radius: .45rem;
+    display: grid;
+    gap: .7rem;
+    max-height: 31rem;
+    min-height: 12rem;
+    overflow-y: auto;
+    padding: .75rem;
+  }
+  .message { max-width: 88%; white-space: pre-wrap; }
+  .message.owner {
+    background: #183047;
+    border-radius: .5rem .5rem .1rem .5rem;
+    justify-self: end;
+    padding: .65rem;
+  }
+  .message.assistant {
+    border-left: 3px solid var(--green);
+    justify-self: start;
+    padding: .25rem .65rem;
+  }
+  .message-meta { color: var(--muted); font-size: .67rem; margin-top: .25rem; }
+  .composer { grid-template-columns: minmax(0, 1fr) auto; margin-top: .65rem; }
+  .composer textarea { min-height: 4rem; }
+  .composer button { min-width: 7rem; }
+  #board { display: grid; gap: .5rem; grid-template-columns: repeat(6, minmax(9rem, 1fr)); overflow-x: auto; }
+  .column { min-height: 10rem; }
+  .task { border-left: 3px solid #5c7cfa; }
+  .task.focused { outline: 2px solid var(--yellow); outline-offset: 2px; }
+  .controls { display: flex; gap: .35rem; margin-top: .5rem; }
+  .controls select { min-width: 0; flex: 1; }
+  .change-card { border-left: 3px solid var(--green); }
+  .status { min-height: 1.1rem; margin-top: .4rem; }
+  .empty { border: 1px dashed #3a4956; border-radius: .4rem; padding: 1rem; }
+  [hidden] { display: none !important; }
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 17rem minmax(0, 1fr); }
+    .inspector { grid-column: 1 / -1; grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; }
+    .inspector { display: grid; grid-template-columns: 1fr; }
+    #board { grid-template-columns: 1fr; }
+    .composer { grid-template-columns: 1fr; }
+  }
+</style>
+<header>
+  <div><h1>Boss Man <span class="tag">Phase 1 local cockpit</span></h1></div>
+  <span class="warn">localhost only · no auth in local smoke profile</span>
+</header>
+<main>
+  <aside class="stack">
+    <section class="panel">
+      <h2>Projects</h2>
+      <div id="projects" data-testid="projects"></div>
+    </section>
+    <section class="panel">
+      <h2>Topics</h2>
+      <div id="topics" data-testid="topics"></div>
+    </section>
+    <section class="panel">
+      <h2>New topic</h2>
+      <form id="new-topic" data-testid="new-topic-form">
+        <input id="topic-title" required maxlength="500" placeholder="What are we working on?">
+        <textarea id="topic-description" maxlength="20000" placeholder="Optional context or desired outcome"></textarea>
+        <select id="topic-project" aria-label="Bind topic to project">
+          <option value="">New project or prototype</option>
+        </select>
+        <button type="submit">Start topic</button>
+      </form>
+    </section>
+    <details class="panel">
+      <summary>Create task directly</summary>
+      <form id="create-task">
+        <select id="task-project" required aria-label="Project"></select>
+        <input id="task-title" required maxlength="500" placeholder="Task title">
+        <textarea id="task-criteria" placeholder="Acceptance criteria, one per line"></textarea>
+        <button type="submit">Create ready task</button>
+      </form>
+    </details>
+    <div id="mutation-status" class="status muted" aria-live="polite"></div>
+  </aside>
+
+  <section class="stack">
+    <section id="workspace-empty" class="panel empty" data-testid="workspace-empty">
+      <h2>Orchestrator workspace</h2>
+      <p>Start a topic for a prototype, or choose <strong>Ask orchestrator</strong> on an existing project.</p>
+      <p class="muted">Conversation is the primary task-ingress path. The board remains authoritative.</p>
+    </section>
+    <section id="topic-workspace" class="panel" hidden data-testid="topic-workspace">
+      <div class="workspace-head">
+        <div>
+          <h2 id="workspace-title"></h2>
+          <p id="workspace-description" class="muted"></p>
+        </div>
+        <div><span id="workspace-scope" class="tag"></span> <span id="workspace-state" class="state"></span></div>
+      </div>
+      <div id="conversation" class="conversation" data-testid="conversation-stream"></div>
+      <form id="conversation-form" class="composer" data-testid="conversation-form">
+        <textarea id="conversation-message" required maxlength="32000" placeholder="Describe work, refine a task, or ask about project state"></textarea>
+        <button type="submit">Send to Pi</button>
+      </form>
+      <div id="conversation-status" class="status muted" aria-live="polite"></div>
+    </section>
+    <section class="panel">
+      <h2>Task board</h2>
+      <div id="board" data-testid="task-board"></div>
+    </section>
+  </section>
+
+  <aside class="stack inspector">
+    <section class="panel">
+      <h2>Conversation changes</h2>
+      <div id="changes"><p class="muted">Select a topic to inspect task changes.</p></div>
+    </section>
+    <section class="panel">
+      <h2>Project orchestrators</h2>
+      <div id="orchestrators"></div>
+    </section>
+    <section class="panel">
+      <h2>Sessions</h2>
+      <div id="sessions"></div>
+    </section>
+    <section class="panel">
+      <h2>Recent commands</h2>
+      <div id="commands"></div>
+    </section>
+    <section class="panel">
+      <h2>Session attach</h2>
+      <p>Pi RPC owns the browser conversation stream.</p>
+      <p class="muted">Use tmux/cmux or SSH for exact-session operations and recovery. No browser terminal emulator is required.</p>
+    </section>
+  </aside>
+</main>
+<script>
+  const app = {
+    projects: [],
+    topics: [],
+    board: null,
+    selectedTopicId: null,
+    topicDetail: null,
+    conversationEvents: [],
+    context: null,
+    poll: null,
+  };
+  const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;",
+  })[character]);
+  const key = (prefix) => prefix + "-" + (globalThis.crypto?.randomUUID?.() || Date.now() + "-" + Math.random());
+  const row = (title, detail) => "<div class=\"row\"><strong>" + esc(title)
+    + "</strong><div class=\"muted\">" + esc(detail) + "</div></div>";
+  const request = async (url, options = {}) => {
+    const response = await fetch(url, options);
+    if (response.status === 204) return null;
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.message || body.error || ("HTTP " + response.status));
+    return body;
+  };
+  const mutationStatus = (message, error = false) => {
+    const target = document.querySelector("#mutation-status");
+    target.textContent = message;
+    target.className = "status " + (error ? "error" : "good");
+  };
+  const conversationStatus = (message, error = false) => {
+    const target = document.querySelector("#conversation-status");
+    target.textContent = message;
+    target.className = "status " + (error ? "error" : "muted");
+  };
+
+  function renderProjects() {
+    document.querySelector("#projects").innerHTML = app.projects.map((project) =>
+      "<div class=\"row project-row\"><strong>" + esc(project.name) + "</strong>"
+      + "<div class=\"muted\">" + esc(project.task_count) + " tasks · " + esc(project.repository_path) + "</div>"
+      + "<div class=\"project-actions\"><button class=\"ghost\" data-ask-project=\"" + esc(project.id)
+      + "\">Ask orchestrator</button></div></div>"
+    ).join("") || "<p class=\"muted\">No projects registered.</p>";
+    const options = app.projects.map((project) =>
+      "<option value=\"" + esc(project.id) + "\">" + esc(project.name) + "</option>"
+    ).join("");
+    document.querySelector("#task-project").innerHTML = options;
+    document.querySelector("#topic-project").innerHTML =
+      "<option value=\"\">New project or prototype</option>" + options;
+  }
+
+  function renderTopics() {
+    document.querySelector("#topics").innerHTML = app.topics.map((topic) =>
+      "<button class=\"topic-button " + (topic.id === app.selectedTopicId ? "selected" : "")
+      + "\" data-topic-id=\"" + esc(topic.id) + "\"><strong>" + esc(topic.title) + "</strong>"
+      + "<div class=\"muted\">" + esc(topic.project_id ? "project" : "intake") + " · "
+      + esc(topic.conversation?.state || topic.state) + " · " + esc(topic.turn_count) + " turns</div></button>"
+    ).join("") || "<p class=\"muted\">No topics yet.</p>";
+  }
+
+  function renderBoard() {
+    const target = document.querySelector("#board");
+    target.innerHTML = "";
+    if (!app.board) return;
+    for (const [state, tasks] of Object.entries(app.board.columns)) {
+      const column = document.createElement("section");
+      column.className = "column";
+      column.innerHTML = "<h3>" + esc(state.replaceAll("_", " ")) + "</h3>";
+      for (const task of tasks) {
+        const card = document.createElement("article");
+        card.className = "task";
+        card.dataset.taskId = task.id;
+        card.innerHTML = "<strong>" + esc(task.title) + "</strong><div class=\"muted\">"
+          + esc(task.project_id) + " · v" + esc(task.version) + "</div>"
+          + ((state === "ready" || state === "backlog")
+            ? "<div class=\"controls\"><select aria-label=\"Agent phase\"><option>implementation</option>"
+              + "<option>test</option><option>review</option></select><button data-schedule=\""
+              + esc(task.id) + "\">Schedule</button></div>"
+            : "");
+        column.append(card);
+      }
+      target.append(column);
+    }
+  }
+
+  function streamedText(turnId) {
+    return app.conversationEvents
+      .filter((event) => event.turn_id === turnId && event.type === "pi_text_delta")
+      .map((event) => event.payload?.delta || "")
+      .join("");
+  }
+
+  function renderWorkspace() {
+    const detail = app.topicDetail;
+    document.querySelector("#workspace-empty").hidden = Boolean(detail);
+    document.querySelector("#topic-workspace").hidden = !detail;
+    if (!detail) return;
+    document.querySelector("#workspace-title").textContent = detail.topic.title;
+    document.querySelector("#workspace-description").textContent =
+      detail.topic.owner_description || "No owner description supplied.";
+    document.querySelector("#workspace-scope").textContent = detail.conversation.scope_type === "project"
+      ? "project · " + detail.conversation.scope_id
+      : "system intake";
+    document.querySelector("#workspace-state").textContent = detail.conversation.state.replaceAll("_", " ");
+    const conversation = document.querySelector("#conversation");
+    conversation.innerHTML = detail.turns.map((turn) => {
+      const assistantText = turn.result?.assistantText || streamedText(turn.id);
+      return "<div class=\"message owner\">" + esc(turn.owner_message)
+        + "<div class=\"message-meta\">owner · turn " + esc(turn.sequence) + "</div></div>"
+        + (assistantText
+          ? "<div class=\"message assistant\">" + esc(assistantText)
+            + "<div class=\"message-meta\">Pi · " + esc(turn.state.replaceAll("_", " ")) + "</div></div>"
+          : "<div class=\"message assistant muted\">"
+            + (turn.state === "queued" ? "Waiting for the orchestrator…" : esc(turn.state.replaceAll("_", " ")))
+            + "<div class=\"message-meta\">Pi · turn " + esc(turn.sequence) + "</div></div>");
+    }).join("") || "<p class=\"muted\">No turns yet. Describe the desired outcome below.</p>";
+    conversation.scrollTop = conversation.scrollHeight;
+    const mutations = app.conversationEvents.filter((event) => event.type === "task_mutation_applied");
+    const mutationDetail = (payload) => {
+      if (payload.operation === "add_dependency") return "Depends on " + (payload.dependsOnTaskId || "another task");
+      if (payload.operation === "record_assumption") return payload.assumption || "Assumption recorded";
+      if (payload.operation === "require_decision") {
+        return (payload.decisionCategory ? payload.decisionCategory + " · " : "")
+          + (payload.decisionQuestion || "Owner decision required");
+      }
+      if (payload.operation === "split") return "Created child " + (payload.childTaskId || "");
+      return payload.title || payload.taskId;
+    };
+    document.querySelector("#changes").innerHTML = mutations.map((event) =>
+      "<div class=\"change-card\"><strong>" + esc((event.payload?.operation || "changed").replaceAll("_", " "))
+      + " task</strong><div>" + esc(mutationDetail(event.payload || {})) + "</div>"
+      + "<div class=\"muted\">turn " + esc(
+        detail.turns.find((turn) => turn.id === event.turn_id)?.sequence || "?",
+      ) + " · v" + esc(event.payload?.taskVersion || "?") + "</div>"
+      + "<button class=\"ghost\" data-focus-task=\"" + esc(event.payload?.childTaskId || event.payload?.taskId)
+      + "\">Show on board</button></div>"
+    ).join("") || "<p class=\"muted\">No structured task changes from this conversation yet.</p>";
+  }
+
+  async function loadTopic(topicId, { quiet = false } = {}) {
+    const [detail, events, context, board] = await Promise.all([
+      request("/api/topics/" + encodeURIComponent(topicId)),
+      request("/api/conversations/" + encodeURIComponent(
+        app.topics.find((topic) => topic.id === topicId)?.conversation?.id
+          || app.topicDetail?.conversation?.id,
+      ) + "/events"),
+      request("/api/conversations/" + encodeURIComponent(
+        app.topics.find((topic) => topic.id === topicId)?.conversation?.id
+          || app.topicDetail?.conversation?.id,
+      ) + "/context"),
+      request("/api/board"),
+    ]);
+    app.selectedTopicId = topicId;
+    app.topicDetail = detail;
+    app.conversationEvents = events.events;
+    app.context = context;
+    app.board = board;
+    const topicIndex = app.topics.findIndex((topic) => topic.id === topicId);
+    if (topicIndex >= 0) {
+      app.topics[topicIndex] = {
+        ...detail.topic,
+        conversation: detail.conversation,
+        turn_count: detail.turns.length,
+      };
+    }
+    renderTopics();
+    renderBoard();
+    renderWorkspace();
+    if (!quiet) history.replaceState(null, "", "#" + topicId);
+  }
+
+  async function refresh() {
+    const [projects, topics, orchestrators, leases, sessions, board, commands] = await Promise.all([
+      request("/api/projects"),
+      request("/api/topics"),
+      request("/api/orchestrators"),
+      request("/api/orchestration/leases"),
+      request("/api/sessions"),
+      request("/api/board"),
+      request("/api/commands?limit=20"),
+    ]);
+    app.projects = projects.projects;
+    app.topics = topics.topics;
+    app.board = board;
+    renderProjects();
+    renderTopics();
+    renderBoard();
+    document.querySelector("#orchestrators").innerHTML =
+      orchestrators.orchestrators.map((item) => row(
+        item.project_name,
+        item.transport + " · " + item.status + " · task commands",
+      )).join("")
+      + leases.leases.map((item) => row(
+        item.scope_type + ":" + item.scope_id,
+        item.transport + " · " + item.status + " · conversations",
+      )).join("")
+      || "<p class=\"muted\">No active leases.</p>";
+    document.querySelector("#sessions").innerHTML = sessions.sessions.map((session) =>
+      row(session.id, session.project_id + " · " + (session.latest_run_state || session.state))
+    ).join("") || "<p class=\"muted\">No task sessions yet.</p>";
+    document.querySelector("#commands").innerHTML = commands.commands.map((command) =>
+      row(command.kind + " · " + command.phase, command.project_name + " · " + command.state)
+    ).join("") || "<p class=\"muted\">No commands yet.</p>";
+    const hashTopic = location.hash.slice(1);
+    const desired = app.selectedTopicId || (app.topics.some((topic) => topic.id === hashTopic) ? hashTopic : null);
+    if (desired && app.topics.some((topic) => topic.id === desired)) await loadTopic(desired, { quiet: true });
+  }
+
+  document.querySelector("#topics").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-topic-id]");
+    if (button) void loadTopic(button.dataset.topicId).catch((error) => mutationStatus(error.message, true));
+  });
+
+  document.querySelector("#projects").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-ask-project]");
+    if (!button) return;
+    button.disabled = true;
+    try {
+      const project = app.projects.find((item) => item.id === button.dataset.askProject);
+      const existing = app.topics.find((topic) => topic.project_id === project.id);
+      if (existing) return await loadTopic(existing.id);
+      const created = await request("/api/topics", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": key("project-topic") },
+        body: JSON.stringify({
+          title: project.name + " orchestrator",
+          ownerDescription: "Durable project conversation for new work and board refinement.",
+          projectId: project.id,
+        }),
+      });
+      await refresh();
+      await loadTopic(created.topic.id);
+    } catch (error) {
+      mutationStatus(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector("#new-topic").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = event.submitter;
+    button.disabled = true;
+    try {
+      const created = await request("/api/topics", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": key("new-topic") },
+        body: JSON.stringify({
+          title: document.querySelector("#topic-title").value,
+          ownerDescription: document.querySelector("#topic-description").value || null,
+          projectId: document.querySelector("#topic-project").value || null,
+        }),
+      });
+      event.target.reset();
+      mutationStatus("Topic created.");
+      await refresh();
+      await loadTopic(created.topic.id);
+    } catch (error) {
+      mutationStatus(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector("#conversation-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = event.submitter;
+    button.disabled = true;
+    try {
+      const message = document.querySelector("#conversation-message").value;
+      await request("/api/conversations/" + encodeURIComponent(app.topicDetail.conversation.id) + "/turns", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": key("owner-turn") },
+        body: JSON.stringify({ message }),
+      });
+      document.querySelector("#conversation-message").value = "";
+      conversationStatus("Message queued in the persistent Pi session.");
+      await loadTopic(app.selectedTopicId, { quiet: true });
+    } catch (error) {
+      conversationStatus(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector("#create-task").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = event.submitter;
+    button.disabled = true;
+    try {
+      const project = document.querySelector("#task-project").value;
+      const acceptanceCriteria = document.querySelector("#task-criteria").value
+        .split("\n").map((value) => value.trim()).filter(Boolean);
+      await request("/api/projects/" + encodeURIComponent(project) + "/tasks", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": key("create-task") },
+        body: JSON.stringify({ title: document.querySelector("#task-title").value, acceptanceCriteria }),
+      });
+      mutationStatus("Task created.");
+      event.target.reset();
+      await refresh();
+    } catch (error) {
+      mutationStatus(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector("#board").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-schedule]");
+    if (!button) return;
+    button.disabled = true;
+    try {
+      const phase = button.parentElement.querySelector("select").value;
+      await request("/api/tasks/" + encodeURIComponent(button.dataset.schedule) + "/schedule", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": key("schedule-task") },
+        body: JSON.stringify({ phase }),
+      });
+      mutationStatus("Task scheduled.");
+      await refresh();
+    } catch (error) {
+      mutationStatus(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector("#changes").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-focus-task]");
+    if (!button) return;
+    const task = [...document.querySelectorAll("#board [data-task-id]")]
+      .find((item) => item.dataset.taskId === button.dataset.focusTask);
+    if (!task) {
+      mutationStatus("The changed task is not on the current board.", true);
+      return;
+    }
+    document.querySelectorAll("#board .focused").forEach((item) => item.classList.remove("focused"));
+    task.classList.add("focused");
+    task.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+  });
+
+  refresh().then(() => {
+    app.poll = setInterval(() => {
+      if (app.selectedTopicId) void loadTopic(app.selectedTopicId, { quiet: true }).catch(() => undefined);
+    }, 1500);
+  }).catch((error) => mutationStatus("Cockpit load failed: " + error.message, true));
+</script>
+</html>

@@ -44,12 +44,18 @@ define the durable project-orchestrator command loop that began this phase.
 The completed local task-control slice is
 [`../phase1-local-task-controls/PRODUCT.md`](../phase1-local-task-controls/PRODUCT.md)
 and [`../phase1-local-task-controls/TECH.md`](../phase1-local-task-controls/TECH.md).
-The next proposed slice is
+The active conversation slice is
 [`../phase1-orchestrator-conversations/PRODUCT.md`](../phase1-orchestrator-conversations/PRODUCT.md)
 and
 [`../phase1-orchestrator-conversations/TECH.md`](../phase1-orchestrator-conversations/TECH.md);
 its durable topic/intake scope was approved as D-039 through D-041 on
-2026-07-17 and is ready for implementation.
+2026-07-17. Its additive topic/conversation store, local API, scoped leases,
+managed persistent Pi RPC bridge, sanitized reconnect stream, and audited
+create/update/split/dependency/assumption/decision task mutations are
+implemented. The first New topic/Ask orchestrator workspace, conversation
+stream, navigable change cards, and synchronized board projection are also
+implemented. Repository/source intake, conversation custody, and deeper
+inspectors remain.
 
 Scope:
 
@@ -58,7 +64,8 @@ Scope:
   including new-project discovery, repository intake, and read-only external
   work-item snapshots;
 - usable project/task creation, editing, assignment, dependencies, attention queue, and phase selection;
-- persistent PTY with resize, reconnect, scrollback, and tmux/cmux attach information;
+- persistent Pi RPC conversation reconnect plus tmux/cmux/SSH attach
+  information; D-043 defers a browser PTY until a demonstrated workflow gap;
 - task workspace with diffs, tests, review, artifacts, context snapshots, decisions, and raw evidence;
 - host-owned checkpoint/commit operations and manual merge preparation;
 - centrally assigned per-run provider/model selection and current run/resource

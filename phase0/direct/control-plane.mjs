@@ -54,6 +54,88 @@ function bearerToken(request) {
   return value?.startsWith("Bearer ") ? value.slice("Bearer ".length) : null;
 }
 
+function clippedText(value, limit = 16_000) {
+  if (typeof value !== "string") return null;
+  return value.length <= limit ? value : `${value.slice(0, limit)}…`;
+}
+
+function sanitizePiConversationEvent(event) {
+  if (!event || typeof event !== "object" || typeof event.type !== "string") return null;
+  if (event.type === "message_update") {
+    const update = event.assistantMessageEvent;
+    if (update?.type === "text_delta") {
+      return { type: "text_delta", payload: { delta: clippedText(update.delta) ?? "" } };
+    }
+    if (update?.type === "thinking_start" || update?.type === "thinking_end") {
+      return { type: update.type, payload: {} };
+    }
+    if (update?.type === "toolcall_end") {
+      return {
+        type: "tool_call",
+        payload: {
+          toolCallId: update.toolCall?.id ?? null,
+          toolName: update.toolCall?.name ?? null,
+        },
+      };
+    }
+    return null;
+  }
+  if (event.type === "tool_execution_start") {
+    return {
+      type: "tool_start",
+      payload: { toolCallId: event.toolCallId ?? null, toolName: event.toolName ?? null },
+    };
+  }
+  if (event.type === "tool_execution_end") {
+    return {
+      type: "tool_end",
+      payload: {
+        toolCallId: event.toolCallId ?? null,
+        toolName: event.toolName ?? null,
+        isError: Boolean(event.isError),
+      },
+    };
+  }
+  if (event.type === "compaction_start") {
+    return { type: "compaction_start", payload: { reason: event.reason ?? null } };
+  }
+  if (event.type === "compaction_end") {
+    return {
+      type: "compaction_end",
+      payload: {
+        reason: event.reason ?? null,
+        aborted: Boolean(event.aborted),
+        willRetry: Boolean(event.willRetry),
+        tokensBefore: event.result?.tokensBefore ?? null,
+        estimatedTokensAfter: event.result?.estimatedTokensAfter ?? null,
+      },
+    };
+  }
+  if (event.type === "auto_retry_start" || event.type === "auto_retry_end") {
+    return {
+      type: event.type,
+      payload: {
+        attempt: event.attempt ?? null,
+        maxAttempts: event.maxAttempts ?? null,
+        success: event.success ?? null,
+      },
+    };
+  }
+  if (["agent_start", "agent_end", "agent_settled", "turn_start", "turn_end"].includes(event.type)) {
+    return { type: event.type, payload: {} };
+  }
+  if (event.type === "extension_error") {
+    return {
+      type: "extension_error",
+      payload: {
+        event: event.event ?? null,
+        error: clippedText(event.error, 2_000),
+      },
+    };
+  }
+  return null;
+}
+
 async function repositoryRevision(repositoryPath) {
   try {
     const { stdout } = await execFileAsync("git", ["-C", repositoryPath, "rev-parse", "HEAD"], {
@@ -67,66 +149,15 @@ async function repositoryRevision(repositoryPath) {
   }
 }
 
-const BOARD_HTML = `<!doctype html>
-<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
-<title>Boss Man operator shell</title>
-<style>
-:root{color-scheme:dark;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#0a0d10;color:#e8edf2}
-*{box-sizing:border-box}body{margin:0}header{padding:1rem 1.25rem;border-bottom:1px solid #26303a;display:flex;justify-content:space-between}
-main{padding:1rem;display:grid;grid-template-columns:18rem minmax(0,1fr) 22rem;gap:1rem}
-.panel,.column{border:1px solid #26303a;background:#11161b;border-radius:.45rem;padding:.8rem}.stack{display:grid;gap:.7rem}
-h1,h2,h3,p{margin:.1rem 0 .65rem}h1{font-size:1rem;color:#8ce99a}h2{font-size:.82rem;text-transform:uppercase;color:#93a4b5}
-.muted{color:#8492a0}.good{color:#8ce99a}.warn{color:#ffd43b}.tag{font-size:.72rem;border:1px solid #384552;padding:.1rem .35rem;border-radius:1rem}
-#board{display:grid;grid-template-columns:repeat(6,minmax(9rem,1fr));gap:.55rem;overflow:auto}.column{min-height:12rem}
-.task,.row{background:#192129;padding:.55rem;border-radius:.3rem;margin-top:.45rem}.task{border-left:3px solid #5c7cfa}
-.terminal{min-height:10rem;background:#07090b;color:#99e9f2;padding:.75rem;white-space:pre-wrap}
-form{display:grid;gap:.45rem}input,textarea,select,button{font:inherit;color:inherit;background:#0c1116;border:1px solid #384552;border-radius:.3rem;padding:.45rem}
-textarea{min-height:5rem;resize:vertical}button{cursor:pointer;background:#244a36;border-color:#3b7d57}button:disabled{opacity:.55;cursor:wait}
-.controls{display:flex;gap:.35rem;margin-top:.55rem}.controls select{min-width:0;flex:1}.status{min-height:1.2rem;margin-top:.45rem}
-@media(max-width:1050px){main{grid-template-columns:1fr}.inspector{order:3}}@media(max-width:700px){#board{grid-template-columns:1fr}}
-</style>
-<header><div><strong>Boss Man</strong> <span class="tag">Phase 1 local cockpit</span></div><span class="warn">localhost only · no auth in local smoke profile</span></header>
-<main>
-  <aside class="stack"><section class="panel"><h2>Projects</h2><div id="projects"></div></section>
-  <section class="panel"><h2>Create task</h2><form id="create-task">
-    <select id="task-project" required aria-label="Project"></select>
-    <input id="task-title" required maxlength="500" placeholder="Task title">
-    <textarea id="task-criteria" placeholder="Acceptance criteria, one per line"></textarea>
-    <button type="submit">Create ready task</button>
-  </form><div id="mutation-status" class="status muted" aria-live="polite"></div></section>
-  <section class="panel"><h2>Project orchestrators</h2><div id="orchestrators"></div></section></aside>
-  <section class="stack"><div class="panel"><h2>Task board</h2><div id="board"></div></div>
-  <div class="panel"><h2>Terminal / session attach</h2><div class="terminal">$ Central API ready
-tmux/cmux and SSH remain attach transports.
-Project orchestrators own execution; this API owns durable state.</div></div></section>
-  <aside class="stack inspector"><section class="panel"><h2>Sessions</h2><div id="sessions"></div></section>
-  <section class="panel"><h2>Recent commands</h2><div id="commands"></div></section>
-  <section class="panel"><h2>Context custody</h2><p>Atomic native Pi, task, memory, artifact, Git, and retrieval receipts.</p><p class="muted">Select/export controls are API-first in C0-04; the full inspector is Phase 1.</p></section></aside>
-</main>
-<script>
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-const row=(title,detail)=>'<div class="row"><strong>'+esc(title)+'</strong><div class="muted">'+esc(detail)+'</div></div>';
-const key=prefix=>prefix+'-'+(globalThis.crypto?.randomUUID?.()||Date.now()+'-'+Math.random());
-const request=async(url,options={})=>{const response=await fetch(url,options);const body=await response.json();if(!response.ok)throw new Error(body.message||body.error||('HTTP '+response.status));return body};
-const status=(message,error=false)=>{const target=document.querySelector('#mutation-status');target.textContent=message;target.className='status '+(error?'warn':'good')};
-Promise.all(['/api/projects','/api/orchestrators','/api/sessions','/api/board','/api/commands?limit=20'].map(u=>fetch(u).then(r=>r.json()))).then(([projects,orchestrators,sessions,board,commands])=>{
- document.querySelector('#projects').innerHTML=projects.projects.map(p=>row(p.name,p.repository_path+' · '+p.task_count+' tasks')).join('')||'<p class="muted">No projects</p>';
- document.querySelector('#task-project').innerHTML=projects.projects.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>').join('');
- document.querySelector('#orchestrators').innerHTML=orchestrators.orchestrators.map(o=>row(o.project_name,o.transport+' · '+o.status+' · '+o.endpoint)).join('')||'<p class="muted">No active leases</p>';
- document.querySelector('#sessions').innerHTML=sessions.sessions.map(s=>row(s.id,s.project_id+' · '+(s.latest_run_state||s.state))).join('')||'<p class="muted">No sessions yet</p>';
- document.querySelector('#commands').innerHTML=commands.commands.map(c=>row(c.kind+' · '+c.phase,c.project_name+' · '+c.task_id+' · '+c.state)).join('')||'<p class="muted">No commands yet</p>';
- for(const [state,tasks] of Object.entries(board.columns)){const c=document.createElement('section');c.className='column';c.innerHTML='<h3>'+esc(state.replaceAll('_',' '))+'</h3>';for(const task of tasks){const t=document.createElement('article');t.className='task';t.innerHTML='<strong>'+esc(task.title)+'</strong><div class="muted">'+esc(task.project_id)+' · v'+esc(task.version)+'</div>'+((state==='ready'||state==='backlog')?'<div class="controls"><select aria-label="Agent phase"><option>implementation</option><option>test</option><option>review</option></select><button data-schedule="'+esc(task.id)+'">Schedule</button></div>':'');c.append(t)}document.querySelector('#board').append(c)}
-}).catch(error=>document.querySelector('.terminal').textContent+='\\nUI load failed: '+error.message);
-document.querySelector('#create-task').addEventListener('submit',async event=>{event.preventDefault();const button=event.submitter;button.disabled=true;try{const project=document.querySelector('#task-project').value;const title=document.querySelector('#task-title').value;const acceptanceCriteria=document.querySelector('#task-criteria').value.split('\\n').map(v=>v.trim()).filter(Boolean);await request('/api/projects/'+encodeURIComponent(project)+'/tasks',{method:'POST',headers:{'content-type':'application/json','idempotency-key':key('create-task')},body:JSON.stringify({title,acceptanceCriteria})});status('Task created. Reloading…');location.reload()}catch(error){status(error.message,true);button.disabled=false}});
-document.querySelector('#board').addEventListener('click',async event=>{const button=event.target.closest('button[data-schedule]');if(!button)return;button.disabled=true;try{const phase=button.parentElement.querySelector('select').value;await request('/api/tasks/'+encodeURIComponent(button.dataset.schedule)+'/schedule',{method:'POST',headers:{'content-type':'application/json','idempotency-key':key('schedule-task')},body:JSON.stringify({phase})});status('Task scheduled. Reloading…');location.reload()}catch(error){status(error.message,true);button.disabled=false}});
-</script></html>`;
+const BOARD_HTML = await readFile(resolve(moduleDirectory, "cockpit.html"), "utf8");
 
 export class DirectControlPlane {
   constructor({
     databasePath, stateRoot, fixturePath, environment = process.env,
     runtimeImage = "boss-man-phase0:pi-0.80.9-rtk-0.42.3",
     dockerCommand = "docker", credentialProfile = null,
-    runtimeProvider = "boss-man-phase0", runtimeModel = "complete", runtimeOffline = true,
+    runtimeProvider = "boss-man-phase0", runtimeModel = "complete", runtimeThinking = "medium",
+    runtimeOffline = true,
     faultInjector = async () => undefined, enforceOrchestratorLease = false,
   }) {
     this.store = new Phase0Store(databasePath);
@@ -137,6 +168,7 @@ export class DirectControlPlane {
     this.dockerCommand = dockerCommand;
     this.runtimeProvider = runtimeProvider;
     this.runtimeModel = runtimeModel;
+    this.runtimeThinking = runtimeThinking;
     this.runtimeOffline = runtimeOffline;
     this.faultInjector = faultInjector;
     this.enforceOrchestratorLease = enforceOrchestratorLease;
@@ -178,6 +210,40 @@ export class DirectControlPlane {
       repositoryPath: options.repositoryPath ?? this.fixturePath,
       title: options.title ?? "Correct deterministic slug normalization",
       ...options,
+    });
+  }
+
+  async applyConversationTaskMutation({ token, turnId, body, idempotencyKey }) {
+    if (body.operation === "create") {
+      const active = this.store.activeConversationTurnForLease(token, turnId);
+      if (!active.conversation.project_id) {
+        throw Object.assign(new Error("an unbound topic cannot create executable tasks"), {
+          code: "project_required",
+        });
+      }
+      const project = this.store.getProject(active.conversation.project_id);
+      return this.store.createConversationTask({
+        token,
+        turnId,
+        title: body.title,
+        acceptanceCriteria: body.acceptanceCriteria ?? [],
+        revision: await repositoryRevision(project.repository_path),
+        idempotencyKey,
+      });
+    }
+    return this.store.mutateConversationTask({
+      token,
+      turnId,
+      operation: body.operation,
+      taskId: body.taskId,
+      expectedVersion: body.expectedVersion,
+      title: body.title,
+      acceptanceCriteria: body.acceptanceCriteria,
+      dependsOnTaskId: body.dependsOnTaskId,
+      body: body.body,
+      category: body.category,
+      question: body.question,
+      idempotencyKey,
     });
   }
 
@@ -686,6 +752,29 @@ export class DirectControlPlane {
       if (request.method === "GET" && url.pathname === "/api/projects") {
         return json(response, 200, { projects: this.store.projects() });
       }
+      if (request.method === "GET" && url.pathname === "/api/topics") {
+        return json(response, 200, {
+          topics: this.store.topics({ includeArchived: url.searchParams.get("archived") === "true" }),
+        });
+      }
+      if (request.method === "POST" && url.pathname === "/api/topics") {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.createTopic({
+          title: body.title,
+          ownerDescription: body.ownerDescription ?? null,
+          projectId: body.projectId ?? null,
+          idempotencyKey: request.headers["idempotency-key"],
+          modelProvider: body.modelProvider ?? this.runtimeProvider,
+          modelId: body.modelId ?? this.runtimeModel,
+          thinkingLevel: body.thinkingLevel ?? this.runtimeThinking,
+          modelPolicy: {
+            source: "control_plane_default",
+            billingClass: body.billingClass ?? "unknown",
+          },
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
       if (request.method === "GET" && url.pathname === "/api/sessions") {
         return json(response, 200, { sessions: this.store.sessions() });
       }
@@ -698,6 +787,121 @@ export class DirectControlPlane {
           commands: this.store.orchestratorCommands({
             projectId: url.searchParams.get("projectId"),
             limit,
+          }),
+        });
+      }
+      if (request.method === "GET" && url.pathname === "/api/orchestration/leases") {
+        return json(response, 200, { leases: this.store.orchestrationLeases() });
+      }
+      if (request.method === "POST" && url.pathname === "/api/orchestration/leases") {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        return json(response, 201, this.store.registerOrchestrationLease({
+          scopeType: body.scopeType,
+          scopeId: body.scopeId ?? null,
+          transport: body.transport,
+          endpoint: body.endpoint,
+          metadata: body.metadata ?? {},
+          leaseSeconds: body.leaseSeconds,
+        }));
+      }
+      if (request.method === "POST" && url.pathname === "/api/orchestration/leases/heartbeat") {
+        const body = await readBody(request);
+        return json(response, 200, this.store.heartbeatOrchestrationLease({
+          token: bearerToken(request),
+          leaseSeconds: body.leaseSeconds,
+        }));
+      }
+      if (request.method === "DELETE" && url.pathname === "/api/orchestration/leases/current") {
+        return json(response, 200, {
+          lease: this.store.releaseOrchestrationLease(bearerToken(request)),
+        });
+      }
+      if (request.method === "POST" && url.pathname === "/api/orchestration/turns/claim") {
+        const turn = this.store.claimConversationTurn(bearerToken(request));
+        if (!turn) {
+          response.writeHead(204);
+          return response.end();
+        }
+        return json(response, 200, {
+          turn,
+          context: this.store.conversationContext(turn.conversation_id),
+        });
+      }
+
+      const startConversationRun = url.pathname.match(/^\/api\/orchestration\/turns\/([^/]+)\/runtime$/);
+      if (request.method === "POST" && startConversationRun) {
+        const body = await readBody(request);
+        const result = this.store.startConversationRun({
+          token: bearerToken(request),
+          turnId: startConversationRun[1],
+          runId: body.runId,
+          processId: body.processId ?? null,
+          nativeSessionPath: body.nativeSessionPath,
+          metadata: body.metadata ?? {},
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const conversationRuntimeEvent = url.pathname.match(/^\/api\/orchestration\/turns\/([^/]+)\/events$/);
+      if (request.method === "POST" && conversationRuntimeEvent) {
+        const body = await readBody(request);
+        const event = sanitizePiConversationEvent(body.event);
+        if (!event) {
+          return json(response, 202, { retained: false, reason: "event_not_projected" });
+        }
+        const result = this.store.appendConversationRuntimeEvent({
+          token: bearerToken(request),
+          turnId: conversationRuntimeEvent[1],
+          runId: body.runId,
+          eventKey: body.eventKey,
+          type: event.type,
+          payload: event.payload,
+        });
+        return json(response, result.replayed ? 200 : 201, { retained: true, ...result });
+      }
+
+      const conversationTaskMutation = url.pathname.match(
+        /^\/api\/orchestration\/turns\/([^/]+)\/task-mutations$/,
+      );
+      if (request.method === "POST" && conversationTaskMutation) {
+        const body = await readBody(request);
+        const result = await this.applyConversationTaskMutation({
+          token: bearerToken(request),
+          turnId: conversationTaskMutation[1],
+          body,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const activeConversationTaskMutation = url.pathname.match(
+        /^\/api\/orchestration\/conversations\/([^/]+)\/task-mutations$/,
+      );
+      if (request.method === "POST" && activeConversationTaskMutation) {
+        const body = await readBody(request);
+        const active = this.store.activeConversationTurnForConversation(
+          bearerToken(request),
+          activeConversationTaskMutation[1],
+        );
+        const result = await this.applyConversationTaskMutation({
+          token: bearerToken(request),
+          turnId: active.turn.id,
+          body,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const completeTurn = url.pathname.match(/^\/api\/orchestration\/turns\/([^/]+)\/complete$/);
+      if (request.method === "POST" && completeTurn) {
+        const body = await readBody(request);
+        return json(response, 200, {
+          turn: this.store.completeConversationTurn({
+            token: bearerToken(request),
+            turnId: completeTurn[1],
+            state: body.state,
+            result: body.result ?? {},
           }),
         });
       }
@@ -757,6 +961,58 @@ export class DirectControlPlane {
           idempotencyKey: request.headers["idempotency-key"],
         });
         return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const topicDetail = url.pathname.match(/^\/api\/topics\/([^/]+)$/);
+      if (request.method === "GET" && topicDetail) {
+        const result = this.store.topicDetails(topicDetail[1]);
+        return result ? json(response, 200, result) : json(response, 404, { error: "not_found" });
+      }
+
+      const archiveTopic = url.pathname.match(/^\/api\/topics\/([^/]+)\/archive$/);
+      if (request.method === "POST" && archiveTopic) {
+        this.assertLocalOwnerProfile();
+        const result = this.store.archiveTopic({
+          topicId: archiveTopic[1],
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const conversationTurns = url.pathname.match(/^\/api\/conversations\/([^/]+)\/turns$/);
+      if (request.method === "GET" && conversationTurns) {
+        if (!this.store.getConversation(conversationTurns[1])) {
+          return json(response, 404, { error: "not_found" });
+        }
+        return json(response, 200, { turns: this.store.conversationTurns(conversationTurns[1]) });
+      }
+      if (request.method === "POST" && conversationTurns) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.submitConversationTurn({
+          conversationId: conversationTurns[1],
+          message: body.message,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const conversationEvents = url.pathname.match(/^\/api\/conversations\/([^/]+)\/events$/);
+      if (request.method === "GET" && conversationEvents) {
+        const after = url.searchParams.has("after") ? Number(url.searchParams.get("after")) : 0;
+        if (!Number.isInteger(after) || after < 0) {
+          throw Object.assign(new Error("event cursor must be a non-negative integer"), { code: "invalid_request" });
+        }
+        return json(response, 200, {
+          events: this.store.conversationEvents(conversationEvents[1], { after }),
+        });
+      }
+
+      const conversationContext = url.pathname.match(/^\/api\/conversations\/([^/]+)\/context$/);
+      if (request.method === "GET" && conversationContext) {
+        const token = bearerToken(request);
+        if (token) this.store.authorizeOrchestrationConversation(token, conversationContext[1]);
+        return json(response, 200, this.store.conversationContext(conversationContext[1]));
       }
 
       const createTask = url.pathname.match(/^\/api\/projects\/([^/]+)\/tasks$/);
@@ -888,7 +1144,7 @@ export class DirectControlPlane {
     } catch (error) {
       const status = error.code === "not_found" ? 404
         : ["capability_denied", "self_approval_denied", "orchestrator_denied", "local_operator_denied"].includes(error.code) ? 403
-          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict"].includes(error.code) ? 409
+          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict", "project_required"].includes(error.code) ? 409
             : 400;
       return json(response, status, { error: error.code ?? "request_failed", message: error.message });
     }
