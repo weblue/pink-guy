@@ -1,6 +1,7 @@
 # Phase 1 dogfood plan
 
-Status: Active dogfood — first project workflow completed with recovery defects
+Status: Active dogfood — first project workflow completed and its recovery
+defects are regression-covered; two cross-repository scenarios remain
 
 Last updated: 2026-07-18
 
@@ -112,9 +113,11 @@ After applying the bounded recovery fixes, the same live task completed:
 - sanitized test/review projections retained 188 and 55 structured events,
   respectively, instead of thousands of raw partial deltas.
 
-The source revision is retained in its managed task worktree. Phase 1 records
-the merge request but does not yet push or merge it; external integration
-remains an owner action until Phase 2 policy is implemented.
+The source revision is retained by its task branch, recorded checkpoint, and
+artifact provenance. Completed run worktrees are disposable and may be removed
+after settlement; automatic worktree retirement remains Phase 2. Phase 1
+records the merge request but does not yet push or merge it, so external
+integration remains an owner action until Phase 2 policy is implemented.
 
 ## Exit evidence
 

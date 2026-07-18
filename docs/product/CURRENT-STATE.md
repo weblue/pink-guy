@@ -167,8 +167,9 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 The executable checklist is
 [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
-1. **Merge the automatic-continuation dogfood recovery slice.** Start the
-   normal API plus one project orchestrator per selected repository and rerun
+1. **Publish and merge the current dogfood recovery slice.** It contains the
+   progress-aware runtime fixes, successful-phase continuation, explicit task
+   lifecycle, and the retained UI dogfood reconciliation. After merge, rerun
    the model-less suite from `main`.
 2. **Dogfood two real repositories.** Use one bounded maintenance task and one
    new-feature/prototype task. Exercise implementation → fixed checkpoint →
