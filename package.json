@@ -1,0 +1,17 @@
+{
+  "name": "pink-guy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first Pi agent orchestration platform",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node ./scripts/serve.mjs",
+    "orchestrator:project": "node ./scripts/project-orchestrator.mjs",
+    "orchestrator:system": "node ./scripts/system-orchestrator.mjs",
+    "test": "node ./tests/run-core.mjs",
+    "test:baseline": "node ./tests/probes/probe-baseline.mjs"
+  }
+}

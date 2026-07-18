@@ -1,50 +1,157 @@
-# Boss Man v2
+# Boss Man
 
-This repository contains the specification, selected direct-Pi foundation, and
-executable local application for Boss Man v2. Phase 0 is complete for the
-unauthenticated loopback-smoke profile. Phase 1 is in progress: a task-first
-cockpit now opens durable topic/project conversations backed by persistent Pi
-RPC sessions, projects structured task changes onto the authoritative board,
-and retains the existing phase-scoped project-orchestrator command loop. Serve
-it using [`RUNBOOK.md`](RUNBOOK.md).
+Boss Man is a local-first developer cockpit for orchestrating Pi sessions across
+multiple Git repositories. One central API owns projects, tasks, audit history,
+worktrees, agent runs, and context artifacts; each project may have one active
+Pi orchestrator plus phase-scoped implementation, test, and review agents.
 
-Current code also includes deterministic fixtures, Pi lifecycle/custody
-probes, authoritative task policy, governed memory and FTS retrieval, atomic
-context export/import, a pinned task image, host-owned Git and credential
-boundaries, RTK evidence, and the Phase 0 manifests used to select the
-foundation.
+The current Phase 1 build provides a loopback-only web UI, durable SQLite
+state, persistent Pi RPC conversations, an agile task board, task scheduling,
+managed worktrees and containers, and model-less context custody. It is ready
+for local development, but it is not yet the authenticated remote deployment.
 
-Start with the [`specification index`](specs/README.md), then use
-[`specs/boss-man-v2/CURRENT-STATE.md`](specs/boss-man-v2/CURRENT-STATE.md) for
-the current capability and next-step inventory. The longer-lived design is
-organized under [`specs/boss-man-v2`](specs/boss-man-v2):
+## Run it locally
 
-- [`PRODUCT.md`](specs/boss-man-v2/PRODUCT.md) defines the intended user experience and behavioral contract.
-- [`TECH.md`](specs/boss-man-v2/TECH.md) proposes the architecture and implementation sequence.
-- [`UI.md`](specs/boss-man-v2/UI.md) defines the developer cockpit and evaluates existing dashboard foundations.
-- [`ROADMAP.md`](specs/boss-man-v2/ROADMAP.md) is the canonical local-first phase sequence and exposure/authentication boundary.
-- [`FOUNDATION.md`](specs/boss-man-v2/FOUNDATION.md) evaluates Agent of Empires against the specification and defines the fork/no-fork decision gate.
-- [`PHASE0.md`](specs/boss-man-v2/PHASE0.md) is the active feasibility program, shared fixture, hard-gate scorecard, evidence contract, and execution tracker.
-- [`PHASE0-RESULTS.md`](specs/boss-man-v2/PHASE0-RESULTS.md) is the evidence-linked owner checkpoint and remaining-gate audit.
-- [`ADR-FOUNDATION.md`](specs/boss-man-v2/ADR-FOUNDATION.md) records the approved thin direct-Pi foundation and its pre-production conditions.
-- [`PHASE0-CLOSURE.md`](specs/boss-man-v2/PHASE0-CLOSURE.md) turns those conditions into the ordered implementation milestone before broad Phase 1 work.
-- [`RESEARCH.md`](specs/boss-man-v2/RESEARCH.md) records source inspection, current provider policy, comparable projects, and the memory/context-management landscape.
-- [`DECISIONS.md`](specs/boss-man-v2/DECISIONS.md) separates proposed decisions, assumptions, and questions that still need owner input.
-- [`phase1-local-control-loop`](specs/phase1-local-control-loop) defines and
-  verifies the first Phase 1 product slice.
-- [`phase1-local-task-controls`](specs/phase1-local-task-controls) defines and
-  verifies the local create/claim/schedule slice.
-- [`phase1-orchestrator-conversations`](specs/phase1-orchestrator-conversations)
-  is the approved and active conversation-first topic, task-graph, repository,
-  and work-item intake slice.
+### Prerequisites
 
-The upstream source reviewed for this baseline was:
+- macOS on Apple Silicon;
+- Node.js 24 or newer;
+- Git;
+- [Pi](https://pi.dev/) installed and authenticated;
+- Docker Desktop when running sandboxed task agents (not required to open the
+  cockpit or run the core test suite).
 
-- `weblue/boss-man` at `59f8282654f9b4cea90f2ba830aa6d56106e25b4`
-- `weblue/inspector-gadget` at `3df39382ceb147aa411f9c578ef4131fc91912f2`
-- `agent-of-empires/agent-of-empires` inspected at `7803b25451bc836ad40ad9ad9d5efad11de83764`; Phase 0 pinned at `90855a59360f46652786a49f54a56df002d8ef98`
-- `svkozak/pi-acp` at `49d6ec804d40b52317d873360654054c5d2387a3`
-- `earendil-works/pi` at v0.80.9 / `2d16f92973230a7e095aa984f150ba8702784f50`, matching the current Phase 0 executable
-- prior Pi v0.79.1 / `28df940f0d07b65284849a483be7b06e2ca046ee` evidence retained as a compatibility baseline
+No dependency installation is currently required; the application uses Node's
+built-in modules.
 
-Research was last verified on 2026-07-16.
+### 1. Start the central API and cockpit
+
+From the repository root:
+
+```sh
+npm start -- \
+  --repo "$PWD" \
+  --state "$HOME/.local/share/boss-man/dev" \
+  --port 4310 \
+  --provider openai-codex \
+  --model gpt-5.4-mini \
+  --thinking medium
+```
+
+Use any absolute Git worktree path for `--repo`. Repeat `--repo` to register
+more than one project:
+
+```sh
+npm start -- \
+  --repo "$HOME/projects/project-one" \
+  --repo "$HOME/projects/project-two" \
+  --state "$HOME/.local/share/boss-man/dev" \
+  --port 4310 \
+  --provider openai-codex \
+  --model gpt-5.4-mini
+```
+
+Open [http://127.0.0.1:4310](http://127.0.0.1:4310). The UI is useful
+immediately for project, board, task, session, and command inspection.
+
+The server intentionally listens only on `127.0.0.1` and has no application
+authentication in this profile. Do not expose this listener publicly.
+
+### 2. Start a project orchestrator
+
+Start one process per project that should accept conversation turns or launch
+task agents:
+
+```sh
+npm run orchestrator:project -- \
+  --api http://127.0.0.1:4310 \
+  --repo "$PWD" \
+  --state-root "$HOME/.local/share/boss-man/dev" \
+  --credential-source "$HOME/.pi/agent/auth.json"
+```
+
+Run this command in tmux or cmux when you want a reconnectable operational
+session. A second orchestrator for the same project is rejected while its
+lease is active. Each additional registered project gets its own process.
+
+For a new topic that is not yet attached to a repository, start the shared
+system-intake orchestrator instead:
+
+```sh
+npm run orchestrator:system -- \
+  --api http://127.0.0.1:4310 \
+  --state-root "$HOME/.local/share/boss-man/dev" \
+  --system-intake \
+  --credential-source "$HOME/.pi/agent/auth.json"
+```
+
+Stop any foreground process with `Ctrl-C`. State survives under the directory
+passed to `--state`/`--state-root`.
+
+### 3. Build the task-agent image when needed
+
+The cockpit and project orchestrator do not require Docker. Before starting a
+sandboxed task-agent run, build the pinned ARM64 image:
+
+```sh
+docker build \
+  --platform linux/arm64 \
+  --tag boss-man:pi-0.80.9-rtk-0.42.3 \
+  ./infra/container
+```
+
+## Verify the checkout
+
+Run the deterministic Phase 1 core suite. It creates and removes its own
+temporary Git fixture and makes no provider request:
+
+```sh
+npm test
+```
+
+Check a running server:
+
+```sh
+curl --fail http://127.0.0.1:4310/api/health
+```
+
+More operational commands and troubleshooting live in the
+[local development runbook](docs/operations/local-development.md).
+
+## Repository map
+
+| Path | Purpose |
+|---|---|
+| `src/server/` | Central API, SQLite authority, conversations, runtime, Git, credentials, artifacts, and context custody |
+| `src/ui/` | Browser developer cockpit |
+| `src/pi/` | Pi extensions for orchestration, custody, task authority, and RTK |
+| `scripts/` | Stable operator entry points |
+| `config/` | Versioned schemas and redacted configuration examples |
+| `infra/` | Task-container and future remote-edge assets |
+| `tests/` | Core runner, deterministic fixtures, probes, and baseline metadata |
+| `docs/` | Product, architecture, feature, operations, research, and historical records |
+
+Start with the [documentation index](docs/README.md). The most useful
+documents are:
+
+- [current capabilities and next steps](docs/product/CURRENT-STATE.md);
+- [delivery roadmap](docs/product/ROADMAP.md);
+- [decision log](docs/architecture/DECISIONS.md);
+- [active orchestrator conversation contract](docs/features/orchestrator-conversations/PRODUCT.md);
+- [local development runbook](docs/operations/local-development.md).
+
+Completed Phase 0 plans and evidence remain under
+[`docs/history/phase0/`](docs/history/phase0/). They explain why the platform
+uses a direct Pi foundation, but they are no longer the repository's front
+door or its code layout.
+
+## Security and retention boundaries
+
+Tracked files must not contain credentials, SSH keys, native user sessions,
+runtime databases, provider transcripts, unredacted command output, worktrees,
+or container filesystems. Owner-managed Pi authentication remains outside the
+repository and is copied into private run state only when needed.
+
+The product direction is to retain complete sessions and artifacts until
+explicit deletion. Production deletion, quota, backup, authenticated remote
+access, and SWAG deployment are later milestones.
