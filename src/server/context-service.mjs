@@ -202,6 +202,136 @@ export class ContextCustodyService {
     }
   }
 
+  async exportConversation({
+    conversationId,
+    trigger = "manual",
+  }) {
+    const conversation = this.store.getConversation(conversationId);
+    if (!conversation) {
+      throw Object.assign(new Error(`unknown conversation: ${conversationId}`), { code: "not_found" });
+    }
+    const topic = this.store.database.prepare(
+      "SELECT * FROM topics WHERE id=?",
+    ).get(conversation.topic_id);
+    const turns = this.store.conversationTurns(conversationId);
+    const events = this.store.conversationEvents(conversationId);
+    const runs = this.store.conversationRuns(conversationId);
+    const tasks = conversation.project_id
+      ? this.store.database.prepare("SELECT id FROM tasks WHERE project_id=? ORDER BY id")
+        .all(conversation.project_id)
+        .map((row) => ({
+          ...this.store.getTaskDetails(row.id),
+          activity: this.store.taskAudit(row.id),
+        }))
+      : [];
+    const origins = this.store.database.prepare(`SELECT o.* FROM task_origins o
+      WHERE o.conversation_id=? OR o.task_id IN (
+        SELECT id FROM tasks WHERE project_id=?
+      ) ORDER BY o.task_id,o.task_version`).all(conversationId, conversation.project_id);
+    const promptVersions = new Set([this.store.getAgentPromptProfile("orchestrator").active_version]);
+    for (const run of runs) {
+      const version = run.metadata?.promptProfileVersion;
+      if (Number.isInteger(version)) promptVersions.add(version);
+    }
+    const promptRevisions = [...promptVersions].sort((left, right) => left - right)
+      .map((version) => this.store.getAgentPromptRevision("orchestrator", version));
+    const payloads = new Map([
+      ["topic.json", `${stableJson(topic, 2)}\n`],
+      ["conversation.json", `${stableJson(conversation, 2)}\n`],
+      ["turns.json", `${stableJson(turns, 2)}\n`],
+      ["events.json", `${stableJson(events, 2)}\n`],
+      ["runs.json", `${stableJson(runs, 2)}\n`],
+      ["tasks.json", `${stableJson(tasks, 2)}\n`],
+      ["task-origins.json", `${stableJson(origins, 2)}\n`],
+      ["prompt-revisions.json", `${stableJson(promptRevisions, 2)}\n`],
+    ]);
+    if (conversation.native_session_path) {
+      payloads.set("native.pi-session.jsonl", await readFile(conversation.native_session_path));
+    }
+    const payloadChecksums = Object.fromEntries(
+      [...payloads].map(([name, content]) => [name, sha256(content)]),
+    );
+    const identity = {
+      schema_version: "boss-man-conversation-custody-identity-v1",
+      conversation_id: conversationId,
+      conversation_version: conversation.version,
+      trigger,
+      payload_checksums: payloadChecksums,
+    };
+    const snapshotId = `conversation-${sha256(stableJson(identity)).slice(0, 24)}`;
+    const parent = join(this.stateRoot, "conversation-context", conversationId);
+    const target = join(parent, snapshotId);
+    await mkdir(parent, { recursive: true, mode: 0o700 });
+    const temporary = await mkdtemp(join(parent, `.pending-${snapshotId}-`));
+    try {
+      for (const [name, content] of payloads) {
+        await writeFile(join(temporary, name), content, { mode: 0o600 });
+      }
+      const manifest = {
+        schema_version: "boss-man-conversation-custody-manifest-v1",
+        snapshot_id: snapshotId,
+        created_at: this.store.clock(),
+        trigger,
+        authority: "boss-man-central-api",
+        topic: { id: topic.id, project_id: topic.project_id, version: topic.version },
+        conversation: {
+          id: conversation.id,
+          version: conversation.version,
+          scope_type: conversation.scope_type,
+          scope_id: conversation.scope_id,
+          model_provider: conversation.model_provider,
+          model_id: conversation.model_id,
+          thinking_level: conversation.thinking_level,
+          native_session_path: conversation.native_session_path,
+        },
+        record_counts: {
+          turns: turns.length,
+          events: events.length,
+          runs: runs.length,
+          tasks: tasks.length,
+          task_origins: origins.length,
+          prompt_revisions: promptRevisions.length,
+        },
+        files: payloadChecksums,
+      };
+      const manifestContent = `${stableJson(manifest, 2)}\n`;
+      await writeFile(join(temporary, "manifest.json"), manifestContent, { mode: 0o600 });
+      const allChecksums = { ...payloadChecksums, "manifest.json": sha256(manifestContent) };
+      await writeFile(
+        join(temporary, "checksums.sha256"),
+        `${Object.entries(allChecksums).sort()
+          .map(([name, digest]) => `${digest}  ${name}`).join("\n")}\n`,
+        { mode: 0o600 },
+      );
+      try {
+        await rename(temporary, target);
+      } catch (error) {
+        if (error.code !== "EEXIST" && error.code !== "ENOTEMPTY") throw error;
+        await rm(temporary, { recursive: true, force: true });
+      }
+      const verified = await this.verifyBundle(target);
+      const manifestSha256 = verified.checksums["manifest.json"];
+      this.store.recordConversationCustodySnapshot({
+        snapshotId,
+        conversationId,
+        trigger,
+        path: target,
+        manifestSha256,
+        nativeSha256: payloadChecksums["native.pi-session.jsonl"] ?? null,
+      });
+      return {
+        snapshot_id: snapshotId,
+        path: target,
+        manifest_sha256: manifestSha256,
+        native_sha256: payloadChecksums["native.pi-session.jsonl"] ?? null,
+        conversation_version: conversation.version,
+      };
+    } catch (error) {
+      await rm(temporary, { recursive: true, force: true });
+      throw error;
+    }
+  }
+
   async verifyBundle(bundlePath) {
     const checksumLines = (await readFile(join(bundlePath, "checksums.sha256"), "utf8")).trim().split("\n");
     const checksums = Object.fromEntries(checksumLines.map((line) => {

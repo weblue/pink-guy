@@ -3,7 +3,7 @@
 Status: Durable conversation runtime, shared browser/terminal clients, and
 audited task-graph mutations implemented; custody and intake adapters remain
 
-Last updated: 2026-07-18
+Last updated: 2026-07-17
 
 ## Delivered in this increment
 
@@ -141,9 +141,8 @@ and deleted its private credential copy on shutdown.
 
 ## Remaining in the approved slice
 
-1. Snapshot conversation custody before compaction, scope transfer, model
-   switch, and provider continuation.
-2. Add host-owned repository import/dedup and immutable manual/Jira source
-   snapshots.
-3. Add owner decision resolution plus deeper source/decision/custody and task
-   detail inspectors.
+Conversation custody for model switching, repository import/dedup, immutable
+manual/Jira snapshots, task detail, and owner decision resolution are now
+implemented by later Phase 1 slices. Custody before orchestrator compaction
+and scope transfer plus deeper source/decision/custody/workspace inspectors
+remain.

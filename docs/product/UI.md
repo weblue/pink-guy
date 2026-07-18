@@ -2,7 +2,7 @@
 
 Status: Draft for Phase 1 local-first product planning; direct-Pi foundation selected
 
-Last updated: 2026-07-18
+Last updated: 2026-07-17
 
 ## Decision summary
 
@@ -123,9 +123,10 @@ Mobile prioritizes triage over a squeezed desktop replica:
 
 1. Attention and active work list.
 2. Task summary with current state, risk, agent, and last event.
-3. Swipe or tab navigation for Changes, Tests, Review, Conversation, and Terminal.
+3. Swipe or tab navigation for Changes, Tests, Review, Conversation, and Attach.
 4. Diff defaults to one file and one column at a time.
-5. Terminal opens full-screen with a persistent escape/control toolbar.
+5. Attach details open full-screen; a future browser terminal would require a
+   separate approved contract.
 6. High-impact actions require a deliberate confirmation surface that shows task, branch, and policy consequence.
 
 ## Deferred embedded workspace-terminal contract

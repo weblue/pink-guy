@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFile } from "node:child_process";
-import { mkdtemp } from "node:fs/promises";
+import { access, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -161,6 +161,48 @@ assert(
   "terminal topic list omitted the cockpit deep link",
 );
 
+const imported = JSON.parse((await runCli([
+  "import",
+  "--repo-url", fixture,
+  "--name", "Imported fixture",
+  "--description", "Treat the attached maintenance ticket as immutable source context.",
+  "--json",
+])).stdout);
+await access(imported.project.repository_path);
+assert(
+  imported.project.repository_path !== fixture
+    && imported.project.source_url === fixture
+    && imported.topic.project_id === imported.project.id,
+  "terminal repository import did not create a host-owned clone and project topic",
+);
+const snapshot = await request(`/api/projects/${imported.project.id}/sources`, {
+  method: "POST",
+  idempotencyKey: "terminal-source-snapshot",
+  body: {
+    kind: "jira",
+    sourceRef: "JIRA-PROBE-42",
+    content: "The refined ticket requires one deterministic maintenance change.",
+  },
+});
+const importedContext = await request(`/api/conversations/${imported.conversation.id}/context`);
+assert(
+  snapshot.status === 201
+    && importedContext.value.sources.length === 1
+    && importedContext.value.sources[0].content_sha256 === snapshot.value.snapshot.content_sha256,
+  "immutable source snapshot was not available in orchestrator context",
+);
+const importReplay = JSON.parse((await runCli([
+  "import",
+  "--repo-url", fixture,
+  "--name", "Imported fixture",
+  "--json",
+])).stdout);
+assert(
+  importReplay.project.id === imported.project.id
+    && importReplay.topic.id === imported.topic.id,
+  "repository re-import duplicated the project or durable topic",
+);
+
 await authority.close();
 process.stdout.write(`${JSON.stringify({
   status: "pass",
@@ -170,6 +212,8 @@ process.stdout.write(`${JSON.stringify({
   structured_task_changes: true,
   orchestrator_lease_status: true,
   cockpit_deep_link: true,
+  host_owned_repository_import: true,
+  immutable_source_snapshot: true,
   provider_requests: 0,
   isolated_root: root,
 }, null, 2)}\n`);

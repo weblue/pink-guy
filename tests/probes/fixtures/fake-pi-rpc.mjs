@@ -14,6 +14,13 @@ const suppliedSession = argument("--session");
 mkdirSync(sessionDirectory, { recursive: true });
 const sessionFile = suppliedSession ?? join(sessionDirectory, `${sessionId}.jsonl`);
 writeFileSync(sessionFile, "", { flag: "a" });
+appendFileSync(sessionFile, `${JSON.stringify({
+  type: "startup",
+  provider: argument("--provider"),
+  model: argument("--model"),
+  thinking: argument("--thinking"),
+  systemPrompt: argument("--system-prompt"),
+})}\n`);
 let promptCount = 0;
 let buffer = "";
 

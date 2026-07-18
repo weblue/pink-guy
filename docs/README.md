@@ -28,11 +28,13 @@ verification results.
 - [Local control loop](features/local-control-loop/)
 - [Local task controls](features/local-task-controls/)
 - [Orchestrator conversations](features/orchestrator-conversations/)
+- [Editable agent prompt profiles](features/agent-prompt-profiles/)
+- [Conversation custody and model switching](features/conversation-custody/)
+- [Repository intake and dogfood controls](features/dogfood-controls/)
 
-The orchestrator-conversation slice is the current implementation frontier.
-Browser/terminal parity is complete. Conversation custody and safe model
-switching are next, followed by repository/source intake, task-detail
-reconciliation, and developer inspectors.
+P1-1 through P1-3 now have usable first increments. The implementation
+frontier is P1-4: deeper workspace inspectors and complete real-repository
+implementation → test → review → checkpoint dogfooding.
 
 ## Adoption checkpoints
 

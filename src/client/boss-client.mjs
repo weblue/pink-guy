@@ -106,6 +106,52 @@ export class BossManClient {
     };
   }
 
+  async agentProfiles() {
+    const result = await this.request("/api/agent-profiles");
+    return result.profiles;
+  }
+
+  async importProject(
+    repositoryUrl,
+    { name = null, idempotencyKey = `terminal-import-${randomUUID()}` } = {},
+  ) {
+    return this.request("/api/projects/import", {
+      method: "POST",
+      idempotencyKey,
+      body: { repositoryUrl, name },
+    });
+  }
+
+  async createSourceSnapshot(
+    projectId,
+    { kind, sourceRef = null, content },
+    { idempotencyKey = `terminal-source-${randomUUID()}` } = {},
+  ) {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/sources`, {
+      method: "POST",
+      idempotencyKey,
+      body: { kind, sourceRef, content },
+    });
+  }
+
+  async agentProfile(profileKey) {
+    const result = await this.request(`/api/agent-profiles/${encodeURIComponent(profileKey)}`);
+    return result.profile;
+  }
+
+  async updateAgentProfile(
+    profileKey,
+    prompt,
+    expectedVersion,
+    { idempotencyKey = `terminal-prompt-${randomUUID()}` } = {},
+  ) {
+    return this.request(`/api/agent-profiles/${encodeURIComponent(profileKey)}`, {
+      method: "PUT",
+      idempotencyKey,
+      body: { prompt, expectedVersion },
+    });
+  }
+
   async topicDetail(topicId) {
     return this.request(`/api/topics/${encodeURIComponent(topicId)}`);
   }
@@ -186,6 +232,28 @@ export class BossManClient {
       method: "POST",
       idempotencyKey,
       body: { message },
+    });
+  }
+
+  async conversationCustody(conversationId) {
+    return this.request(`/api/conversations/${encodeURIComponent(conversationId)}/custody`);
+  }
+
+  async exportConversationCustody(conversationId) {
+    return this.request(`/api/conversations/${encodeURIComponent(conversationId)}/custody`, {
+      method: "POST",
+    });
+  }
+
+  async switchConversationModel(
+    conversationId,
+    { modelProvider, modelId, thinkingLevel, expectedVersion },
+    { idempotencyKey = `terminal-model-${randomUUID()}` } = {},
+  ) {
+    return this.request(`/api/conversations/${encodeURIComponent(conversationId)}/model`, {
+      method: "POST",
+      idempotencyKey,
+      body: { modelProvider, modelId, thinkingLevel, expectedVersion },
     });
   }
 
