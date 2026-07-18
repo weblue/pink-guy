@@ -1,0 +1,38 @@
+# Repository intake and dogfood controls
+
+Status: Implemented Phase 1 slice
+
+Last updated: 2026-07-17
+
+## Summary
+
+The owner can bring an existing Git repository into Boss Man without startup
+seed flags, attach immutable manual or Jira context, edit authoritative task
+detail, resolve protected decisions, stop/resume a task run, and explicitly
+retry or reset a failed or uncertain orchestrator command.
+
+## Behavior
+
+- Repository import runs `git clone` on the host into the selected state
+  root. HTTPS, SSH, `file://`, and absolute local sources are accepted.
+- A source URL maps to one managed project. Re-import reopens that project and
+  its durable topic instead of cloning another copy.
+- Git authentication remains host-owned; credentials are not submitted in the
+  API payload or copied into task containers.
+- Manual and Jira inputs are immutable snapshots with content checksums and no
+  write-back.
+- Task title, description, and acceptance criteria use optimistic versions
+  and ordered audit events.
+- Loopback owners can inspect task detail and invoke owner-authorized actions;
+  agent calls still require their scoped bearer capability.
+- Failed and reconciliation-required commands are never replayed silently.
+  Retry creates a new linked command; reset cancels the old command and
+  restores the task to `ready`.
+
+## Remaining boundary
+
+- Remote repository-host integrations, refresh/diff semantics for ticket
+  snapshots, and Jira API ingestion.
+- Owner dependency editing, a consolidated attention queue, and richer
+  diff/test/review/context/artifact inspectors.
+- Full merge/rebase/push and worktree cleanup, which remain Phase 2.

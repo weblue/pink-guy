@@ -154,7 +154,7 @@ contract-drift risk more than it would reduce wall-clock time.
 
 ## Follow-ups
 
-- Add local task create/edit/claim controls that enqueue work atomically.
-- Add stop/reconcile commands and owner-facing uncertain-effect resolution.
+- Local task create/edit/schedule, stop/resume, and owner reconciliation
+  controls are now implemented by later Phase 1 slices.
 - The source-tree graduation is complete; continue using `src/`, `scripts/`,
   `tests/`, `config/`, and `infra/` as the stable module boundaries.

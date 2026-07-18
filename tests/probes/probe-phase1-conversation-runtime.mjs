@@ -76,6 +76,16 @@ async function request(path, { method = "GET", body, idempotencyKey } = {}) {
   return { status: response.status, value: response.status === 204 ? null : await response.json() };
 }
 
+const promptUpdate = await request("/api/agent-profiles/orchestrator", {
+  method: "PUT",
+  idempotencyKey: "runtime-orchestrator-prompt-v2",
+  body: {
+    prompt: "Runtime probe orchestrator guidance. Create only deterministic, bounded work.",
+    expectedVersion: 1,
+  },
+});
+assert(promptUpdate.status === 201, "orchestrator prompt update failed");
+
 const created = await request("/api/topics", {
   method: "POST",
   idempotencyKey: "runtime-topic",
@@ -108,6 +118,21 @@ const runtime = new ConversationOrchestratorRuntime({
   pollMs: 100,
 });
 await runtime.runOnce();
+const modelSwitch = await request(`/api/conversations/${conversationId}/model`, {
+  method: "POST",
+  idempotencyKey: "runtime-model-switch",
+  body: {
+    modelProvider: "anthropic",
+    modelId: "claude-probe",
+    thinkingLevel: "medium",
+    expectedVersion: 1,
+  },
+});
+assert(
+  modelSwitch.status === 201
+    && modelSwitch.value.change.new_route.modelProvider === "anthropic",
+  "model switch did not create a custody-backed route change",
+);
 await runtime.runOnce();
 
 const detail = await request(`/api/topics/${created.value.topic.id}`);
@@ -115,6 +140,11 @@ const events = await request(`/api/conversations/${conversationId}/events`);
 const nativeSessionPath = detail.value.conversation.native_session_path;
 const nativeLines = (await readFile(nativeSessionPath, "utf8")).trim().split("\n").filter(Boolean).map(JSON.parse);
 const receivedPrompts = nativeLines.filter((entry) => entry.type === "received_prompt").map((entry) => entry.message);
+const startups = nativeLines.filter((entry) => entry.type === "startup");
+const conversationRun = authority.store.database.prepare(
+  "SELECT * FROM conversation_runs WHERE conversation_id=? ORDER BY started_at LIMIT 1",
+).get(conversationId);
+const custody = await authority.context.verifyBundle(modelSwitch.value.custodySnapshot.path);
 assert(
   detail.value.turns.every((turn) => turn.state === "completed")
     && detail.value.turns.every((turn) => turn.result.contextResend === false),
@@ -125,6 +155,30 @@ assert(
     && receivedPrompts[0] === messages[0]
     && receivedPrompts[1] === messages[1],
   "runtime resent or rewrote conversation history instead of sending only the new owner message",
+);
+assert(
+  startups.length === 2
+    && startups.every((startup) => startup.systemPrompt.includes("Runtime probe orchestrator guidance."))
+    && startups.every((startup) => startup.systemPrompt.includes("Boss Man tools and the central API are authoritative"))
+    && startups[0].provider === "openai"
+    && startups[1].provider === "anthropic"
+    && startups[1].model === "claude-probe",
+  "runtime did not compose the active editable prompt inside the immutable policy envelope",
+);
+assert(
+  conversationRun
+    && JSON.parse(conversationRun.metadata_json).promptProfileKey === "orchestrator"
+    && JSON.parse(conversationRun.metadata_json).promptProfileVersion === 2
+    && JSON.parse(conversationRun.metadata_json).promptSha256 === promptUpdate.value.profile.prompt_sha256,
+  "conversation run omitted its pinned prompt revision provenance",
+);
+assert(
+  detail.value.conversation.version === 2
+    && detail.value.conversation.model_provider === "anthropic"
+    && custody.manifest.schema_version === "boss-man-conversation-custody-manifest-v1"
+    && custody.manifest.record_counts.turns === 2
+    && custody.checksums["native.pi-session.jsonl"],
+  "model switch did not verify and retain a complete pre-switch conversation snapshot",
 );
 assert(
   events.value.events.some((event) => event.type === "pi_run_started")
@@ -151,6 +205,10 @@ process.stdout.write(`${JSON.stringify({
   status: "pass",
   persistent_native_pi_session: nativeSessionPath,
   owner_messages_sent_once: receivedPrompts.length,
+  prompt_profile_version: 2,
+  prompt_provenance_recorded: true,
+  custody_snapshot: modelSwitch.value.custodySnapshot.snapshot_id,
+  model_switch_restart: true,
   context_resend: false,
   sanitized_stream_events: true,
   browser_terminal_required: false,

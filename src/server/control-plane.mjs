@@ -10,6 +10,7 @@ import { RtkArtifactIngestor } from "./artifacts.mjs";
 import { ContextCustodyService } from "./context-service.mjs";
 import { redactValue, RunCredentialVault } from "./credentials.mjs";
 import { HostGitService } from "./git-service.mjs";
+import { composeAgentSystemPrompt } from "./prompt-profiles.mjs";
 import { PiRpcProcess, WorkspaceShell } from "./rpc.mjs";
 import { DockerTaskRuntime } from "./runtime.mjs";
 import { Phase0Store } from "./store.mjs";
@@ -149,6 +150,31 @@ async function repositoryRevision(repositoryPath) {
   }
 }
 
+function repositorySource(value) {
+  const source = typeof value === "string" ? value.trim() : "";
+  if (!source || source.includes("\0") || source.length > 2_000) {
+    throw Object.assign(new Error("repository URL is required"), { code: "invalid_request" });
+  }
+  if (
+    source.startsWith("https://")
+    || source.startsWith("ssh://")
+    || source.startsWith("file://")
+    || /^git@[A-Za-z0-9._-]+:.+/.test(source)
+  ) return source;
+  if (source.startsWith("/")) return resolve(source);
+  throw Object.assign(
+    new Error("repository URL must use HTTPS, SSH, file, or an absolute local path"),
+    { code: "invalid_request" },
+  );
+}
+
+function repositoryDisplayName(source) {
+  const tail = source.replace(/\/+$/, "").split(/[/:]/).at(-1) ?? "";
+  const name = tail.replace(/\.git$/, "").trim();
+  if (!name) throw Object.assign(new Error("cannot derive a project name from repository URL"), { code: "invalid_request" });
+  return name;
+}
+
 const BOARD_HTML = await readFile(resolve(moduleDirectory, "../ui/cockpit.html"), "utf8");
 
 export class DirectControlPlane {
@@ -251,11 +277,16 @@ export class DirectControlPlane {
     const task = this.store.getTask(taskId);
     if (!task) throw new Error(`unknown task: ${taskId}`);
     if (!task.assigned_worker) throw new Error(`task must be assigned before starting a session: ${taskId}`);
-    if (task.status !== "in_progress") throw new Error("task must be claimed before starting a session");
+    if (
+      (phase === "review" && !["in_progress", "review"].includes(task.status))
+      || (phase !== "review" && task.status !== "in_progress")
+    ) throw new Error("task must be in the active state required by its agent phase");
     const project = this.store.getProject(task.project_id);
     const orchestrator = this.enforceOrchestratorLease || orchestratorToken
       ? this.store.authorizeProjectOrchestrator(orchestratorToken, task.project_id)
       : null;
+    const promptProfile = this.store.getAgentPromptProfile(phase);
+    const capabilityRole = phase === "review" ? "reviewer" : "worker";
 
     const runId = randomUUID();
     const instanceRoot = join(this.stateRoot, "runs", runId);
@@ -278,8 +309,8 @@ export class DirectControlPlane {
       runId, profileId: credential.profileId, authType: credential.authType, billingMode: credential.billingMode,
     });
     const capability = this.store.issueCapability({
-      role: "worker",
-      actorId: task.assigned_worker,
+      role: capabilityRole,
+      actorId: phase === "review" ? `task-agent:review:${runId}` : task.assigned_worker,
       taskId,
       runId,
       expiresAt: new Date(Date.parse(this.store.clock()) + 8 * 60 * 60 * 1000).toISOString(),
@@ -336,6 +367,8 @@ export class DirectControlPlane {
           "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-context-files", "--no-approve",
           ...(this.runtimeOffline ? ["--offline"] : []),
           "--provider", this.runtimeProvider, "--model", this.runtimeModel,
+          "--thinking", this.runtimeThinking,
+          "--system-prompt", composeAgentSystemPrompt(phase, promptProfile.prompt_text),
         ]),
         onEvent: (event) => {
           const safeEvent = sanitize(event);
@@ -367,6 +400,9 @@ export class DirectControlPlane {
         credentialProfile: credential.profileId,
         orchestratorId: orchestrator?.id ?? null,
         phase,
+        promptProfileKey: promptProfile.profile_key,
+        promptProfileVersion: promptProfile.active_version,
+        promptSha256: promptProfile.prompt_sha256,
       });
       active = { runId: run.id, sequence: 0 };
       for (const event of pending) {
@@ -380,6 +416,7 @@ export class DirectControlPlane {
       const managed = {
         taskId, state, run, rpc, shell, runtime, runtimeState, workspace, credential, git,
         artifactDirectory, snapshotDirectory, configDirectory: config, active, capability, artifacts, sanitize,
+        promptProfile,
         extensionEvidencePath: join(artifactDirectory, "boss-man-tools.json"),
       };
       this.sessions.set(state.sessionId, managed);
@@ -752,6 +789,89 @@ export class DirectControlPlane {
       if (request.method === "GET" && url.pathname === "/api/projects") {
         return json(response, 200, { projects: this.store.projects() });
       }
+      if (request.method === "POST" && url.pathname === "/api/projects/import") {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const sourceUrl = repositorySource(body.repositoryUrl);
+        const name = typeof body.name === "string" && body.name.trim()
+          ? body.name.trim()
+          : repositoryDisplayName(sourceUrl);
+        const idempotencyKey = request.headers["idempotency-key"];
+        const existing = this.store.projectBySourceUrl(sourceUrl);
+        if (existing) return json(response, 200, { replayed: true, project: existing });
+        const prior = this.store.importedProjectByRequest({ sourceUrl, name, idempotencyKey });
+        if (prior) return json(response, 200, { replayed: true, ...prior });
+        const projectId = randomUUID();
+        const repositoryPath = join(this.stateRoot, "repositories", projectId);
+        await mkdir(dirname(repositoryPath), { recursive: true, mode: 0o700 });
+        try {
+          await execFileAsync(
+            "git",
+            ["clone", "--origin", "origin", "--", sourceUrl, repositoryPath],
+            {
+              encoding: "utf8",
+              timeout: 2 * 60 * 1_000,
+              maxBuffer: 4 * 1024 * 1024,
+              env: { ...this.environment, GIT_TERMINAL_PROMPT: "0" },
+            },
+          );
+          await repositoryRevision(repositoryPath);
+          const result = this.store.createImportedProject({
+            projectId,
+            repositoryId: `repository-${projectId}`,
+            name,
+            repositoryPath,
+            sourceUrl,
+            idempotencyKey,
+          });
+          return json(response, 201, result);
+        } catch (error) {
+          await rm(repositoryPath, { recursive: true, force: true });
+          if (["invalid_request", "idempotency_conflict"].includes(error.code)) throw error;
+          throw Object.assign(
+            new Error(`repository import failed: ${error.stderr ?? error.message}`),
+            { code: "git_operation_failed" },
+          );
+        }
+      }
+      const projectSources = url.pathname.match(/^\/api\/projects\/([^/]+)\/sources$/);
+      if (request.method === "GET" && projectSources) {
+        return json(response, 200, { snapshots: this.store.sourceSnapshots(projectSources[1]) });
+      }
+      if (request.method === "POST" && projectSources) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.createSourceSnapshot({
+          projectId: projectSources[1],
+          kind: body.kind,
+          sourceRef: body.sourceRef ?? null,
+          content: body.content,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+      if (request.method === "GET" && url.pathname === "/api/agent-profiles") {
+        return json(response, 200, { profiles: this.store.agentPromptProfiles() });
+      }
+      const agentPromptProfile = url.pathname.match(/^\/api\/agent-profiles\/([^/]+)$/);
+      if (request.method === "GET" && agentPromptProfile) {
+        return json(
+          response,
+          200,
+          { profile: this.store.getAgentPromptProfile(agentPromptProfile[1]) },
+        );
+      }
+      if (request.method === "PUT" && agentPromptProfile) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.updateAgentPromptProfile({
+          profileKey: agentPromptProfile[1],
+          prompt: body.prompt,
+          expectedVersion: body.expectedVersion,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
       if (request.method === "GET" && url.pathname === "/api/topics") {
         return json(response, 200, {
           topics: this.store.topics({ includeArchived: url.searchParams.get("archived") === "true" }),
@@ -789,6 +909,26 @@ export class DirectControlPlane {
             limit,
           }),
         });
+      }
+      const commandDetail = url.pathname.match(/^\/api\/commands\/([^/]+)$/);
+      if (request.method === "GET" && commandDetail) {
+        const command = this.store.orchestratorCommand(commandDetail[1]);
+        if (!command) throw Object.assign(new Error(`unknown command: ${commandDetail[1]}`), { code: "not_found" });
+        return json(response, 200, {
+          command,
+          events: this.store.orchestratorCommandEvents(command.id),
+        });
+      }
+      const reconcileCommand = url.pathname.match(/^\/api\/commands\/([^/]+)\/reconcile$/);
+      if (request.method === "POST" && reconcileCommand) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.reconcileOrchestratorCommand({
+          commandId: reconcileCommand[1],
+          action: body.action,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
       }
       if (request.method === "GET" && url.pathname === "/api/orchestration/leases") {
         return json(response, 200, { leases: this.store.orchestrationLeases() });
@@ -1008,6 +1148,49 @@ export class DirectControlPlane {
         });
       }
 
+      const conversationCustody = url.pathname.match(/^\/api\/conversations\/([^/]+)\/custody$/);
+      if (request.method === "GET" && conversationCustody) {
+        return json(response, 200, {
+          snapshots: this.store.conversationCustodySnapshots(conversationCustody[1]),
+        });
+      }
+      if (request.method === "POST" && conversationCustody) {
+        this.assertLocalOwnerProfile();
+        return json(response, 201, {
+          snapshot: await this.context.exportConversation({
+            conversationId: conversationCustody[1],
+            trigger: "manual",
+          }),
+        });
+      }
+
+      const conversationModel = url.pathname.match(/^\/api\/conversations\/([^/]+)\/model$/);
+      if (request.method === "POST" && conversationModel) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const idempotencyKey = request.headers["idempotency-key"];
+        const prior = this.store.conversationModelChangeByIdempotency(idempotencyKey);
+        const snapshot = prior
+          ? { snapshot_id: prior.custody_snapshot_id }
+          : await this.context.exportConversation({
+            conversationId: conversationModel[1],
+            trigger: "model_switch",
+          });
+        const result = this.store.switchConversationModel({
+          conversationId: conversationModel[1],
+          modelProvider: body.modelProvider,
+          modelId: body.modelId,
+          thinkingLevel: body.thinkingLevel,
+          expectedVersion: body.expectedVersion,
+          custodySnapshotId: snapshot.snapshot_id,
+          idempotencyKey,
+        });
+        return json(response, result.replayed ? 200 : 201, {
+          ...result,
+          custodySnapshot: snapshot,
+        });
+      }
+
       const conversationContext = url.pathname.match(/^\/api\/conversations\/([^/]+)\/context$/);
       if (request.method === "GET" && conversationContext) {
         const token = bearerToken(request);
@@ -1042,28 +1225,76 @@ export class DirectControlPlane {
         });
         return json(response, result.replayed ? 200 : 201, result);
       }
+      const resumeTask = url.pathname.match(/^\/api\/tasks\/([^/]+)\/resume$/);
+      if (request.method === "POST" && resumeTask) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.resumeOwnerTaskRun({
+          taskId: resumeTask[1],
+          phase: body.phase,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
 
       const taskDetail = url.pathname.match(/^\/api\/tasks\/([^/]+)$/);
       if (request.method === "GET" && taskDetail) {
-        this.store.authorizeCapability(bearerToken(request), "read", taskDetail[1]);
+        const token = bearerToken(request);
+        if (token) this.store.authorizeCapability(token, "read", taskDetail[1]);
+        else this.assertLocalOwnerProfile();
         const task = this.store.getTaskDetails(taskDetail[1]);
-        return task ? json(response, 200, task) : json(response, 404, { error: "not_found" });
+        return task
+          ? json(response, 200, { ...task, activity: this.store.taskAudit(task.id) })
+          : json(response, 404, { error: "not_found" });
+      }
+      if (request.method === "PUT" && taskDetail) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.updateOwnerTask({
+          taskId: taskDetail[1],
+          title: body.title,
+          description: body.description ?? null,
+          acceptanceCriteria: body.acceptanceCriteria ?? [],
+          expectedVersion: body.expectedVersion,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        result.task = { ...result.task, activity: this.store.taskAudit(taskDetail[1]) };
+        return json(response, result.replayed ? 200 : 201, result);
       }
 
       const taskAction = url.pathname.match(/^\/api\/tasks\/([^/]+)\/actions\/([^/]+)$/);
       if (request.method === "POST" && taskAction) {
         const body = await readBody(request);
-        const result = this.store.actOnTask({
-          token: bearerToken(request), taskId: taskAction[1], action: taskAction[2],
-          idempotencyKey: request.headers["idempotency-key"], expectedVersion: body.expectedVersion,
-          payload: body.payload ?? {},
-        });
-        return json(response, result.replayed ? 200 : 201, result);
+        let token = bearerToken(request);
+        let ownerCapability = null;
+        if (!token) {
+          this.assertLocalOwnerProfile();
+          ownerCapability = this.store.issueCapability({
+            role: "owner",
+            actorId: "local-owner",
+            taskId: taskAction[1],
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          });
+          token = ownerCapability.token;
+        }
+        try {
+          const result = this.store.actOnTask({
+            token, taskId: taskAction[1], action: taskAction[2],
+            idempotencyKey: request.headers["idempotency-key"], expectedVersion: body.expectedVersion,
+            payload: body.payload ?? {},
+          });
+          result.task = { ...result.task, activity: this.store.taskAudit(taskAction[1]) };
+          return json(response, result.replayed ? 200 : 201, result);
+        } finally {
+          if (ownerCapability) this.store.revokeCapability(ownerCapability.id);
+        }
       }
 
       const audit = url.pathname.match(/^\/api\/tasks\/([^/]+)\/audit$/);
       if (request.method === "GET" && audit) {
-        this.store.authorizeCapability(bearerToken(request), "read", audit[1]);
+        const token = bearerToken(request);
+        if (token) this.store.authorizeCapability(token, "read", audit[1]);
+        else this.assertLocalOwnerProfile();
         return json(response, 200, { events: this.store.taskAudit(audit[1]) });
       }
 
@@ -1105,6 +1336,16 @@ export class DirectControlPlane {
         return json(response, 200, await this.prompt(prompt[1], body.message));
       }
 
+      const stopSession = url.pathname.match(/^\/api\/sessions\/([^/]+)$/);
+      if (request.method === "DELETE" && stopSession) {
+        this.assertLocalOwnerProfile();
+        if (!this.store.getSession(stopSession[1])) {
+          throw Object.assign(new Error(`unknown session: ${stopSession[1]}`), { code: "not_found" });
+        }
+        await this.stopSession(stopSession[1]);
+        return json(response, 200, { stopped: true, sessionId: stopSession[1] });
+      }
+
       const shell = url.pathname.match(/^\/api\/sessions\/([^/]+)\/shell$/);
       if (request.method === "POST" && shell) {
         const body = await readBody(request);
@@ -1144,7 +1385,7 @@ export class DirectControlPlane {
     } catch (error) {
       const status = error.code === "not_found" ? 404
         : ["capability_denied", "self_approval_denied", "orchestrator_denied", "local_operator_denied"].includes(error.code) ? 403
-          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict", "project_required"].includes(error.code) ? 409
+          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict", "project_required", "custody_required"].includes(error.code) ? 409
             : 400;
       return json(response, status, { error: error.code ?? "request_failed", message: error.message });
     }

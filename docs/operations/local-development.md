@@ -48,8 +48,8 @@ No password or API key is required in this profile. Do not change the listener t
 Provider/model/thinking are central defaults persisted on newly created
 orchestrator conversations. The deterministic defaults are
 `boss-man-phase0/complete`; pass explicit live values as above before expecting
-a real Pi orchestrator to consume turns. Changing an existing conversation's
-model remains a later safe-boundary custody operation.
+a real Pi orchestrator to consume turns. Existing conversations can now change
+route only through the custody-backed browser or `boss model` operation.
 
 Useful checks:
 
@@ -132,10 +132,26 @@ Useful commands:
 ```sh
 npm run boss -- status
 npm run boss -- topics
+npm run boss -- import --repo-url git@github.com:OWNER/REPOSITORY.git
 npm run boss -- chat --topic TOPIC_ID
 npm run boss -- chat --repo "$PWD" --message "Refine the acceptance criteria."
 printf '%s\n' "Create a test task." | npm run boss -- chat --repo "$PWD"
+npm run boss -- profiles
+npm run boss -- profile --key review
+npm run boss -- model --topic TOPIC_ID --provider PROVIDER --model MODEL_ID --thinking medium
 ```
+
+Repository import creates a host-owned clone under the selected state root
+and opens its durable project topic. The browser also accepts an optional
+description and immutable manual/Jira source snapshot. SSH authentication is
+performed by host Git; never paste private keys or provider credentials into a
+topic or source snapshot.
+
+Prompt profile edits are append-only revisions. They apply when the matching
+Pi process next starts; running processes keep their pinned revision. Model
+switches have a different boundary: Boss Man verifies a conversation custody
+bundle and restarts Pi against the same native session before processing the
+next turn.
 
 For multiple repositories on this laptop, use one central-API pane and one
 `npm run orchestrator:project` pane per active repository. Add `boss chat`
@@ -180,7 +196,11 @@ curl --fail-with-body \
 The project orchestrator calls the existing managed task-session operation.
 Success or failure is retained in `/api/commands`. If its lease is lost after
 claim, the command becomes `reconciliation_required`; it is not replayed
-automatically.
+automatically. The cockpit shows the structured failure and offers explicit
+**Retry** (a new linked command) or **Reset task**. Active task sessions can be
+stopped and their task detail can queue a new phase-scoped resume command.
+Task cards open versioned title/description/acceptance editing, dependencies,
+decision resolution, and recent audit activity.
 
 Run the deterministic core suite without starting a provider or task
 container:
@@ -201,10 +221,11 @@ cards. The orchestrator can create, update, split, link, annotate, and
 decision-gate tasks inside its project with exact turn provenance. The
 existing automated probes exercise real task claiming, Pi RPC,
 containers, worktrees, host Git checkpoints, RTK evidence, and context export.
-Conversation custody, owner reconciliation/decision controls, and deeper
-diff/test/review/source/custody inspectors are the next local-product slices,
-not authentication prerequisites. D-043 defers a browser PTY; tmux/SSH remains
-the current exact-session attach path.
+Conversation custody/model switching, repository/source intake, prompt
+editing, task detail, owner decisions, and command reconciliation now have
+first-class local controls. Deeper diff/test/review/context/artifact inspectors
+and a complete real-repository phase-flow dogfood are next. D-043 defers a
+browser PTY; tmux/SSH remains the current exact-session attach path.
 
 To exercise the complete model-less C0-04 context path:
 

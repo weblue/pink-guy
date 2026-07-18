@@ -3,6 +3,11 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import {
+  DEFAULT_PROMPT_PROFILES,
+  PROMPT_PROFILE_KEYS,
+} from "./prompt-profiles.mjs";
+
 const TASK_STATES = new Set(["backlog", "ready", "in_progress", "review", "blocked", "done"]);
 const RUN_PHASES = new Set(["implementation", "test", "review"]);
 const ORCHESTRATOR_COMMAND_KINDS = new Set(["start_task"]);
@@ -103,6 +108,26 @@ export class Phase0Store {
         repository_path TEXT NOT NULL,
         created_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS project_imports (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL UNIQUE REFERENCES projects(id),
+        source_url TEXT NOT NULL,
+        request_sha256 TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS source_snapshots (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        kind TEXT NOT NULL,
+        source_ref TEXT,
+        content TEXT NOT NULL,
+        content_sha256 TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        request_sha256 TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL REFERENCES projects(id),
@@ -180,6 +205,15 @@ export class Phase0Store {
         payload_json TEXT NOT NULL,
         created_at TEXT NOT NULL,
         PRIMARY KEY (command_id, sequence)
+      );
+      CREATE TABLE IF NOT EXISTS command_reconciliations (
+        id TEXT PRIMARY KEY,
+        command_id TEXT NOT NULL REFERENCES orchestrator_commands(id),
+        action TEXT NOT NULL,
+        result_json TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        request_sha256 TEXT NOT NULL,
+        created_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS topics (
         id TEXT PRIMARY KEY,
@@ -266,6 +300,49 @@ export class Phase0Store {
         conversation_event_sequence INTEGER NOT NULL,
         created_at TEXT NOT NULL,
         PRIMARY KEY (run_id, event_key)
+      );
+      CREATE TABLE IF NOT EXISTS conversation_custody_snapshots (
+        snapshot_id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL REFERENCES orchestrator_conversations(id),
+        trigger TEXT NOT NULL,
+        path TEXT NOT NULL,
+        manifest_sha256 TEXT NOT NULL,
+        native_sha256 TEXT,
+        verified INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS conversation_model_changes (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL REFERENCES orchestrator_conversations(id),
+        prior_version INTEGER NOT NULL,
+        new_version INTEGER NOT NULL,
+        prior_route_json TEXT NOT NULL,
+        new_route_json TEXT NOT NULL,
+        custody_snapshot_id TEXT NOT NULL REFERENCES conversation_custody_snapshots(snapshot_id),
+        actor TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        request_sha256 TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS agent_prompt_profiles (
+        profile_key TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        role TEXT NOT NULL,
+        active_version INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS agent_prompt_revisions (
+        id TEXT PRIMARY KEY,
+        profile_key TEXT NOT NULL REFERENCES agent_prompt_profiles(profile_key),
+        version INTEGER NOT NULL,
+        prompt_text TEXT NOT NULL,
+        prompt_sha256 TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        request_sha256 TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(profile_key,version)
       );
       CREATE TABLE IF NOT EXISTS orchestration_leases (
         id TEXT PRIMARY KEY,
@@ -545,7 +622,9 @@ export class Phase0Store {
     this.ensureColumn("tasks", "requested_review_revision", "TEXT");
     this.ensureColumn("tasks", "merge_requested", "INTEGER NOT NULL DEFAULT 0");
     this.ensureColumn("tasks", "acceptance_criteria_json", "TEXT NOT NULL DEFAULT '[]'");
+    this.ensureColumn("tasks", "description", "TEXT");
     this.ensureColumn("projects", "repository_id", "TEXT");
+    this.ensureColumn("projects", "source_url", "TEXT");
     this.ensureColumn("task_events", "actor_role", "TEXT");
     this.ensureColumn("task_events", "run_id", "TEXT");
     this.ensureColumn("task_events", "task_version", "INTEGER");
@@ -555,6 +634,11 @@ export class Phase0Store {
     this.ensureColumn("runs", "credential_profile", "TEXT");
     this.ensureColumn("runs", "orchestrator_id", "TEXT");
     this.ensureColumn("runs", "phase", "TEXT");
+    this.ensureColumn("runs", "prompt_profile_key", "TEXT");
+    this.ensureColumn("runs", "prompt_profile_version", "INTEGER");
+    this.ensureColumn("runs", "prompt_sha256", "TEXT");
+    this.ensureColumn("orchestrator_conversations", "version", "INTEGER NOT NULL DEFAULT 1");
+    this.seedPromptProfiles();
     this.database.exec(`
       CREATE INDEX IF NOT EXISTS memory_records_scope_status
         ON memory_records(project_id,repository_id,task_id,scope_type,scope_id,status,trust_class);
@@ -577,6 +661,12 @@ export class Phase0Store {
         ON conversation_turns(state,created_at,conversation_id,sequence);
       CREATE INDEX IF NOT EXISTS conversation_runs_turn_state
         ON conversation_runs(turn_id,state,started_at);
+      CREATE INDEX IF NOT EXISTS conversation_custody_conversation_created
+        ON conversation_custody_snapshots(conversation_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS agent_prompt_revisions_profile_version
+        ON agent_prompt_revisions(profile_key,version DESC);
+      CREATE UNIQUE INDEX IF NOT EXISTS one_project_per_import_source
+        ON projects(source_url) WHERE source_url IS NOT NULL;
       CREATE INDEX IF NOT EXISTS task_dependencies_reverse
         ON task_dependencies(depends_on_task_id,task_id);
       CREATE UNIQUE INDEX IF NOT EXISTS one_active_orchestration_lease_per_scope
@@ -587,6 +677,174 @@ export class Phase0Store {
   ensureColumn(table, column, definition) {
     const columns = this.database.prepare(`PRAGMA table_info(${table})`).all();
     if (!columns.some((item) => item.name === column)) this.database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+
+  seedPromptProfiles() {
+    const now = this.clock();
+    for (const profileKey of PROMPT_PROFILE_KEYS) {
+      const defaults = DEFAULT_PROMPT_PROFILES[profileKey];
+      this.database.prepare(`INSERT OR IGNORE INTO agent_prompt_profiles(
+        profile_key,display_name,role,active_version,created_at,updated_at
+      ) VALUES(?,?,?,1,?,?)`).run(
+        profileKey,
+        defaults.displayName,
+        defaults.role,
+        now,
+        now,
+      );
+      const existing = this.database.prepare(`SELECT id FROM agent_prompt_revisions
+        WHERE profile_key=? AND version=1`).get(profileKey);
+      if (!existing) {
+        const promptSha256 = sha256(defaults.prompt);
+        this.database.prepare(`INSERT INTO agent_prompt_revisions(
+          id,profile_key,version,prompt_text,prompt_sha256,actor,idempotency_key,
+          request_sha256,created_at
+        ) VALUES(?,?,1,?,?,? ,?,?,?)`).run(
+          randomUUID(),
+          profileKey,
+          defaults.prompt,
+          promptSha256,
+          "platform-default",
+          `platform-default:${profileKey}:1`,
+          sha256(JSON.stringify({
+            action: "seed_agent_prompt",
+            profileKey,
+            version: 1,
+            prompt: defaults.prompt,
+          })),
+          now,
+        );
+      }
+    }
+  }
+
+  agentPromptProfiles() {
+    return this.database.prepare(`SELECT
+      p.profile_key,p.display_name,p.role,p.active_version,p.created_at,p.updated_at,
+      r.id AS revision_id,r.prompt_text,r.prompt_sha256,r.actor AS revision_actor,
+      r.created_at AS revision_created_at
+      FROM agent_prompt_profiles p
+      JOIN agent_prompt_revisions r
+        ON r.profile_key=p.profile_key AND r.version=p.active_version
+      ORDER BY CASE p.profile_key
+        WHEN 'orchestrator' THEN 0
+        WHEN 'implementation' THEN 1
+        WHEN 'test' THEN 2
+        WHEN 'review' THEN 3
+        ELSE 4 END`).all();
+  }
+
+  getAgentPromptProfile(profileKey) {
+    if (!PROMPT_PROFILE_KEYS.includes(profileKey)) {
+      throw codedError("not_found", `unknown agent prompt profile: ${profileKey}`);
+    }
+    const active = this.agentPromptProfiles().find((profile) => profile.profile_key === profileKey);
+    if (!active) throw codedError("not_found", `unknown agent prompt profile: ${profileKey}`);
+    const revisions = this.database.prepare(`SELECT
+      id,profile_key,version,prompt_sha256,actor,created_at
+      FROM agent_prompt_revisions WHERE profile_key=? ORDER BY version DESC`).all(profileKey);
+    return { ...active, revisions };
+  }
+
+  getAgentPromptRevision(profileKey, version) {
+    const revision = this.database.prepare(`SELECT
+      id,profile_key,version,prompt_text,prompt_sha256,actor,created_at
+      FROM agent_prompt_revisions WHERE profile_key=? AND version=?`).get(profileKey, version);
+    if (!revision) throw codedError("not_found", `unknown ${profileKey} prompt revision: ${version}`);
+    return revision;
+  }
+
+  updateAgentPromptProfile({
+    profileKey,
+    prompt,
+    expectedVersion,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    if (!PROMPT_PROFILE_KEYS.includes(profileKey)) {
+      throw codedError("not_found", `unknown agent prompt profile: ${profileKey}`);
+    }
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    const normalizedPrompt = typeof prompt === "string" ? prompt.trim() : "";
+    if (!normalizedPrompt || normalizedPrompt.length > 32_000 || normalizedPrompt.includes("\0")) {
+      throw codedError("invalid_request", "agent prompt must be between 1 and 32000 characters");
+    }
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+      throw codedError("invalid_request", "expected prompt version must be a positive integer");
+    }
+    const request = {
+      action: "update_agent_prompt",
+      profileKey,
+      prompt: normalizedPrompt,
+      expectedVersion,
+    };
+    const requestSha256 = sha256(JSON.stringify(request));
+    const prior = this.database.prepare(
+      "SELECT * FROM agent_prompt_revisions WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256 || prior.profile_key !== profileKey) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different prompt update");
+      }
+      return {
+        replayed: true,
+        profile: this.getAgentPromptProfile(profileKey),
+        revision: prior,
+      };
+    }
+    const profile = this.database.prepare(
+      "SELECT * FROM agent_prompt_profiles WHERE profile_key=?",
+    ).get(profileKey);
+    if (profile.active_version !== expectedVersion) {
+      throw codedError(
+        "version_conflict",
+        `prompt profile ${profileKey} is version ${profile.active_version}, expected ${expectedVersion}`,
+      );
+    }
+    const version = profile.active_version + 1;
+    const now = this.clock();
+    const revision = {
+      id: randomUUID(),
+      promptSha256: sha256(normalizedPrompt),
+    };
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`INSERT INTO agent_prompt_revisions(
+        id,profile_key,version,prompt_text,prompt_sha256,actor,idempotency_key,
+        request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?)`).run(
+        revision.id,
+        profileKey,
+        version,
+        normalizedPrompt,
+        revision.promptSha256,
+        actor,
+        idempotencyKey,
+        requestSha256,
+        now,
+      );
+      const updated = this.database.prepare(`UPDATE agent_prompt_profiles SET
+        active_version=?,updated_at=? WHERE profile_key=? AND active_version=?`).run(
+        version,
+        now,
+        profileKey,
+        expectedVersion,
+      );
+      if (Number(updated.changes) !== 1) {
+        throw codedError("version_conflict", `prompt profile ${profileKey} changed concurrently`);
+      }
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      replayed: false,
+      profile: this.getAgentPromptProfile(profileKey),
+      revision: this.database.prepare(
+        "SELECT * FROM agent_prompt_revisions WHERE id=?",
+      ).get(revision.id),
+    };
   }
 
   close() {
@@ -681,6 +939,130 @@ export class Phase0Store {
       throw error;
     }
     return { replayed: false, task: this.getTaskDetails(id) };
+  }
+
+  updateOwnerTask({
+    taskId,
+    title,
+    description = null,
+    acceptanceCriteria = [],
+    expectedVersion,
+    idempotencyKey,
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    const task = this.getTask(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    if (task.status === "done") {
+      throw codedError("transition_denied", "completed tasks must be reopened before editing");
+    }
+    const normalizedTitle = typeof title === "string" ? title.trim() : "";
+    const normalizedDescription = typeof description === "string" && description.trim()
+      ? description.trim()
+      : null;
+    if (!normalizedTitle || normalizedTitle.length > 500 || normalizedTitle.includes("\0")) {
+      throw codedError("invalid_request", "task title must be between 1 and 500 characters");
+    }
+    if (
+      normalizedDescription
+      && (normalizedDescription.length > 20_000 || normalizedDescription.includes("\0"))
+    ) {
+      throw codedError("invalid_request", "task description must be at most 20000 characters");
+    }
+    if (
+      !Array.isArray(acceptanceCriteria) || acceptanceCriteria.length > 100
+      || acceptanceCriteria.some(
+        (item) => typeof item !== "string" || !item.trim() || item.length > 2000,
+      )
+    ) {
+      throw codedError("invalid_request", "acceptance criteria must be a list of non-empty strings");
+    }
+    if (!Number.isInteger(expectedVersion)) {
+      throw codedError("invalid_request", "expected task version is required");
+    }
+    const normalizedCriteria = acceptanceCriteria.map((item) => item.trim());
+    const request = {
+      action: "owner_update_task",
+      taskId,
+      title: normalizedTitle,
+      description: normalizedDescription,
+      acceptanceCriteria: normalizedCriteria,
+      expectedVersion,
+    };
+    const requestSha256 = sha256(JSON.stringify(request));
+    const priorAudit = this.database.prepare(
+      "SELECT * FROM audit_events WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (priorAudit) {
+      if (priorAudit.request_sha256 !== requestSha256 || priorAudit.type !== "task_updated") {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different task edit");
+      }
+      return { replayed: true, task: this.getTaskDetails(taskId) };
+    }
+    if (task.version !== expectedVersion) {
+      throw codedError("version_conflict", `task is version ${task.version}, expected ${expectedVersion}`);
+    }
+    const prior = this.getTaskDetails(taskId);
+    const now = this.clock();
+    const nextVersion = task.version + 1;
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const changed = this.database.prepare(`UPDATE tasks SET
+        title=?,description=?,acceptance_criteria_json=?,version=?,updated_at=?
+        WHERE id=? AND version=?`).run(
+        normalizedTitle,
+        normalizedDescription,
+        JSON.stringify(normalizedCriteria),
+        nextVersion,
+        now,
+        taskId,
+        expectedVersion,
+      );
+      if (Number(changed.changes) !== 1) throw codedError("version_conflict", "task changed during edit");
+      const current = this.getTaskDetails(taskId);
+      const payload = {
+        title: normalizedTitle,
+        description: normalizedDescription,
+        acceptanceCriteria: normalizedCriteria,
+      };
+      this.database.prepare(`INSERT INTO task_events(
+        task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+        actor_role,run_id,task_version
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        taskId,
+        "task_updated",
+        "local-owner",
+        task.status,
+        task.status,
+        JSON.stringify(payload),
+        idempotencyKey,
+        now,
+        "owner",
+        null,
+        nextVersion,
+      );
+      this.database.prepare(`INSERT INTO audit_events(
+        task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+        idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        taskId,
+        "task_updated",
+        "local-owner",
+        "owner",
+        null,
+        null,
+        JSON.stringify(prior),
+        JSON.stringify(current),
+        JSON.stringify(payload),
+        idempotencyKey,
+        requestSha256,
+        now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return { replayed: false, task: this.getTaskDetails(taskId) };
   }
 
   scheduleOwnerTaskRun({ taskId, phase, idempotencyKey }) {
@@ -779,12 +1161,178 @@ export class Phase0Store {
     };
   }
 
+  resumeOwnerTaskRun({ taskId, phase, idempotencyKey }) {
+    const task = this.getTask(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    if (!task.assigned_worker || !["in_progress", "blocked", "review"].includes(task.status)) {
+      throw codedError("transition_denied", "only an assigned active task can resume a stopped run");
+    }
+    const running = this.database.prepare(`SELECT r.id FROM runs r
+      JOIN sessions s ON s.id=r.session_id
+      WHERE s.task_id=? AND r.state='running' LIMIT 1`).get(taskId);
+    if (running) throw codedError("transition_denied", `task already has a running session: ${running.id}`);
+    return this.enqueueOrchestratorCommand({
+      projectId: task.project_id,
+      taskId,
+      kind: "start_task",
+      phase,
+      payload: { source: "local_owner_resume" },
+      idempotencyKey,
+    });
+  }
+
   getTask(taskId) {
     return this.database.prepare("SELECT * FROM tasks WHERE id=?").get(taskId) ?? null;
   }
 
   getProject(projectId) {
     return this.database.prepare("SELECT * FROM projects WHERE id=?").get(projectId) ?? null;
+  }
+
+  projectBySourceUrl(sourceUrl) {
+    return this.database.prepare("SELECT * FROM projects WHERE source_url=?").get(sourceUrl) ?? null;
+  }
+
+  importedProjectByRequest({ sourceUrl, name, idempotencyKey }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    const requestSha256 = sha256(JSON.stringify({
+      action: "import_project",
+      sourceUrl,
+      name,
+    }));
+    const receipt = this.database.prepare(
+      "SELECT * FROM project_imports WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (!receipt) return null;
+    if (receipt.request_sha256 !== requestSha256 || receipt.source_url !== sourceUrl) {
+      throw codedError("idempotency_conflict", "idempotency key was reused for a different project import");
+    }
+    return { receipt, project: this.getProject(receipt.project_id) };
+  }
+
+  createImportedProject({
+    projectId,
+    repositoryId,
+    name,
+    repositoryPath,
+    sourceUrl,
+    idempotencyKey,
+  }) {
+    const normalizedName = typeof name === "string" ? name.trim() : "";
+    if (!normalizedName || normalizedName.length > 500 || normalizedName.includes("\0")) {
+      throw codedError("invalid_request", "project name must be between 1 and 500 characters");
+    }
+    const prior = this.importedProjectByRequest({
+      sourceUrl,
+      name: normalizedName,
+      idempotencyKey,
+    });
+    if (prior) return { replayed: true, ...prior };
+    const now = this.clock();
+    const requestSha256 = sha256(JSON.stringify({
+      action: "import_project",
+      sourceUrl,
+      name: normalizedName,
+    }));
+    const receiptId = randomUUID();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`INSERT INTO projects(
+        id,name,repository_path,created_at,repository_id,source_url
+      ) VALUES(?,?,?,?,?,?)`).run(
+        projectId,
+        normalizedName,
+        repositoryPath,
+        now,
+        repositoryId,
+        sourceUrl,
+      );
+      this.database.prepare(`INSERT INTO project_imports(
+        id,project_id,source_url,request_sha256,idempotency_key,created_at
+      ) VALUES(?,?,?,?,?,?)`).run(
+        receiptId,
+        projectId,
+        sourceUrl,
+        requestSha256,
+        idempotencyKey,
+        now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      replayed: false,
+      receipt: this.database.prepare("SELECT * FROM project_imports WHERE id=?").get(receiptId),
+      project: this.getProject(projectId),
+    };
+  }
+
+  createSourceSnapshot({
+    projectId,
+    kind,
+    sourceRef = null,
+    content,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    if (!this.getProject(projectId)) throw codedError("not_found", `unknown project: ${projectId}`);
+    if (!["manual", "jira"].includes(kind)) {
+      throw codedError("invalid_request", "source snapshot kind must be manual or jira");
+    }
+    const normalizedContent = typeof content === "string" ? content.trim() : "";
+    const normalizedRef = typeof sourceRef === "string" && sourceRef.trim() ? sourceRef.trim() : null;
+    if (!normalizedContent || normalizedContent.length > 50_000 || normalizedContent.includes("\0")) {
+      throw codedError("invalid_request", "source snapshot must be between 1 and 50000 characters");
+    }
+    if (normalizedRef && (normalizedRef.length > 2_000 || normalizedRef.includes("\0"))) {
+      throw codedError("invalid_request", "source reference must be at most 2000 characters");
+    }
+    const request = {
+      action: "create_source_snapshot",
+      projectId,
+      kind,
+      sourceRef: normalizedRef,
+      content: normalizedContent,
+    };
+    const requestSha256 = sha256(JSON.stringify(request));
+    const prior = this.database.prepare(
+      "SELECT * FROM source_snapshots WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for different source content");
+      }
+      return { replayed: true, snapshot: prior };
+    }
+    const id = randomUUID();
+    this.database.prepare(`INSERT INTO source_snapshots(
+      id,project_id,kind,source_ref,content,content_sha256,actor,idempotency_key,
+      request_sha256,created_at
+    ) VALUES(?,?,?,?,?,?,?,?,?,?)`).run(
+      id,
+      projectId,
+      kind,
+      normalizedRef,
+      normalizedContent,
+      sha256(normalizedContent),
+      actor,
+      idempotencyKey,
+      requestSha256,
+      this.clock(),
+    );
+    return {
+      replayed: false,
+      snapshot: this.database.prepare("SELECT * FROM source_snapshots WHERE id=?").get(id),
+    };
+  }
+
+  sourceSnapshots(projectId) {
+    if (!this.getProject(projectId)) throw codedError("not_found", `unknown project: ${projectId}`);
+    return this.database.prepare(`SELECT * FROM source_snapshots
+      WHERE project_id=? ORDER BY created_at DESC,id DESC`).all(projectId);
   }
 
   projects() {
@@ -965,6 +1513,187 @@ export class Phase0Store {
     ).all(conversationId).map((row) => publicConversationTurn(row));
   }
 
+  conversationRuns(conversationId) {
+    return this.database.prepare(
+      "SELECT * FROM conversation_runs WHERE conversation_id=? ORDER BY started_at,id",
+    ).all(conversationId).map((row) => publicConversationRun(row));
+  }
+
+  conversationCustodySnapshots(conversationId) {
+    if (!this.getConversation(conversationId)) {
+      throw codedError("not_found", `unknown conversation: ${conversationId}`);
+    }
+    return this.database.prepare(`SELECT * FROM conversation_custody_snapshots
+      WHERE conversation_id=? ORDER BY created_at DESC,snapshot_id DESC`).all(conversationId);
+  }
+
+  recordConversationCustodySnapshot({
+    snapshotId,
+    conversationId,
+    trigger,
+    path,
+    manifestSha256,
+    nativeSha256 = null,
+  }) {
+    if (!this.getConversation(conversationId)) {
+      throw codedError("not_found", `unknown conversation: ${conversationId}`);
+    }
+    this.database.prepare(`INSERT OR IGNORE INTO conversation_custody_snapshots(
+      snapshot_id,conversation_id,trigger,path,manifest_sha256,native_sha256,verified,created_at
+    ) VALUES(?,?,?,?,?,?,1,?)`).run(
+      snapshotId,
+      conversationId,
+      trigger,
+      path,
+      manifestSha256,
+      nativeSha256,
+      this.clock(),
+    );
+    const snapshot = this.database.prepare(
+      "SELECT * FROM conversation_custody_snapshots WHERE snapshot_id=?",
+    ).get(snapshotId);
+    if (
+      snapshot.conversation_id !== conversationId
+      || snapshot.manifest_sha256 !== manifestSha256
+      || snapshot.path !== path
+    ) {
+      throw codedError("idempotency_conflict", "conversation custody snapshot identity was reused");
+    }
+    return snapshot;
+  }
+
+  conversationModelChangeByIdempotency(idempotencyKey) {
+    if (!idempotencyKey) return null;
+    const row = this.database.prepare(
+      "SELECT * FROM conversation_model_changes WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (!row) return null;
+    return {
+      ...row,
+      prior_route: parseJson(row.prior_route_json),
+      new_route: parseJson(row.new_route_json),
+      conversation: this.getConversation(row.conversation_id),
+    };
+  }
+
+  switchConversationModel({
+    conversationId,
+    modelProvider,
+    modelId,
+    thinkingLevel,
+    expectedVersion,
+    custodySnapshotId,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    const provider = typeof modelProvider === "string" ? modelProvider.trim() : "";
+    const model = typeof modelId === "string" ? modelId.trim() : "";
+    const thinking = typeof thinkingLevel === "string" ? thinkingLevel.trim() : "";
+    if (
+      !provider || provider.length > 200 || provider.includes("\0")
+      || !model || model.length > 500 || model.includes("\0")
+      || !["off", "minimal", "low", "medium", "high", "xhigh"].includes(thinking)
+    ) {
+      throw codedError("invalid_request", "provider, model, and supported thinking level are required");
+    }
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+      throw codedError("invalid_request", "expected conversation version must be a positive integer");
+    }
+    const request = {
+      action: "switch_conversation_model",
+      conversationId,
+      modelProvider: provider,
+      modelId: model,
+      thinkingLevel: thinking,
+      expectedVersion,
+    };
+    const requestSha256 = sha256(JSON.stringify(request));
+    const prior = this.database.prepare(
+      "SELECT * FROM conversation_model_changes WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256 || prior.conversation_id !== conversationId) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different model switch");
+      }
+      return { replayed: true, change: this.conversationModelChangeByIdempotency(idempotencyKey) };
+    }
+    const conversation = this.getConversation(conversationId);
+    if (!conversation) throw codedError("not_found", `unknown conversation: ${conversationId}`);
+    if (conversation.version !== expectedVersion) {
+      throw codedError(
+        "version_conflict",
+        `conversation is version ${conversation.version}, expected ${expectedVersion}`,
+      );
+    }
+    const runningTurn = this.database.prepare(
+      "SELECT id FROM conversation_turns WHERE conversation_id=? AND state='running'",
+    ).get(conversationId);
+    if (runningTurn) {
+      throw codedError("transition_denied", "cannot switch model while a conversation turn is running");
+    }
+    const snapshot = this.database.prepare(
+      "SELECT * FROM conversation_custody_snapshots WHERE snapshot_id=?",
+    ).get(custodySnapshotId);
+    if (!snapshot || snapshot.conversation_id !== conversationId || !snapshot.verified) {
+      throw codedError("custody_required", "a verified snapshot of this conversation is required");
+    }
+    const priorRoute = {
+      modelProvider: conversation.model_provider,
+      modelId: conversation.model_id,
+      thinkingLevel: conversation.thinking_level,
+    };
+    const newRoute = { modelProvider: provider, modelId: model, thinkingLevel: thinking };
+    const changeId = randomUUID();
+    const newVersion = conversation.version + 1;
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const changed = this.database.prepare(`UPDATE orchestrator_conversations SET
+        model_provider=?,model_id=?,thinking_level=?,version=?,updated_at=?
+        WHERE id=? AND version=?`).run(
+        provider,
+        model,
+        thinking,
+        newVersion,
+        now,
+        conversationId,
+        expectedVersion,
+      );
+      if (Number(changed.changes) !== 1) {
+        throw codedError("version_conflict", "conversation changed during model switch");
+      }
+      this.database.prepare(`INSERT INTO conversation_model_changes(
+        id,conversation_id,prior_version,new_version,prior_route_json,new_route_json,
+        custody_snapshot_id,actor,idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        changeId,
+        conversationId,
+        expectedVersion,
+        newVersion,
+        JSON.stringify(priorRoute),
+        JSON.stringify(newRoute),
+        custodySnapshotId,
+        actor,
+        idempotencyKey,
+        requestSha256,
+        now,
+      );
+      this.appendConversationEvent(conversationId, null, "model_route_changed", actor, {
+        priorVersion: expectedVersion,
+        newVersion,
+        priorRoute,
+        newRoute,
+        custodySnapshotId,
+      }, now);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return { replayed: false, change: this.conversationModelChangeByIdempotency(idempotencyKey) };
+  }
+
   conversationEvents(conversationId, { after = 0 } = {}) {
     if (!this.getConversation(conversationId)) {
       throw codedError("not_found", `unknown conversation: ${conversationId}`);
@@ -984,7 +1713,14 @@ export class Phase0Store {
         .all(conversation.project_id)
         .map((task) => this.getTaskDetails(task.id))
       : [];
-    return { topic, conversation, project, tasks };
+    return {
+      topic,
+      conversation,
+      project,
+      tasks,
+      sources: conversation.project_id ? this.sourceSnapshots(conversation.project_id) : [],
+      prompt_profile: this.getAgentPromptProfile("orchestrator"),
+    };
   }
 
   submitConversationTurn({ conversationId, message, idempotencyKey }) {
@@ -2127,6 +2863,165 @@ export class Phase0Store {
       .map((row) => ({ ...row, payload: parseJson(row.payload_json) ?? {} }));
   }
 
+  reconcileOrchestratorCommand({
+    commandId,
+    action,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    if (!["retry", "reset"].includes(action)) {
+      throw codedError("invalid_request", "command reconciliation action must be retry or reset");
+    }
+    const command = this.orchestratorCommand(commandId);
+    if (!command) throw codedError("not_found", `unknown command: ${commandId}`);
+    const requestSha256 = sha256(JSON.stringify({
+      action: "reconcile_orchestrator_command",
+      commandId,
+      resolution: action,
+    }));
+    const prior = this.database.prepare(
+      "SELECT * FROM command_reconciliations WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256 || prior.command_id !== commandId) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for another reconciliation");
+      }
+      return {
+        replayed: true,
+        reconciliation: { ...prior, result: parseJson(prior.result_json) },
+        command: this.orchestratorCommand(commandId),
+      };
+    }
+    if (!["failed", "reconciliation_required"].includes(command.state)) {
+      throw codedError("transition_denied", "only failed or uncertain commands require reconciliation");
+    }
+    const task = command.task_id ? this.getTask(command.task_id) : null;
+    const now = this.clock();
+    const reconciliationId = randomUUID();
+    let result;
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      if (action === "retry") {
+        const orchestrator = this.activeProjectOrchestrator(command.project_id);
+        if (!orchestrator) {
+          throw codedError("orchestrator_unavailable", "project has no active orchestrator for retry");
+        }
+        const retryId = randomUUID();
+        const retryPayload = { ...command.payload, retryOf: command.id, source: "owner_reconciliation" };
+        this.database.prepare(`INSERT INTO orchestrator_commands(
+          id,project_id,task_id,orchestrator_id,kind,phase,state,payload_json,result_json,
+          request_sha256,idempotency_key,created_at,updated_at
+        ) VALUES(?,?,?,?,?,?,'queued',?,NULL,?,?,?,?)`).run(
+          retryId,
+          command.project_id,
+          command.task_id,
+          orchestrator.id,
+          command.kind,
+          command.phase,
+          JSON.stringify(retryPayload),
+          sha256(JSON.stringify({
+            projectId: command.project_id,
+            taskId: command.task_id,
+            kind: command.kind,
+            phase: command.phase,
+            payload: retryPayload,
+          })),
+          `command-retry:${idempotencyKey}`,
+          now,
+          now,
+        );
+        this.appendOrchestratorCommandEvent(retryId, "queued", orchestrator.id, retryPayload, now);
+        this.appendOrchestratorCommandEvent(commandId, "owner_retry_queued", orchestrator.id, {
+          retryCommandId: retryId,
+        }, now);
+        result = { action, retryCommandId: retryId };
+      } else {
+        this.database.prepare(`UPDATE orchestrator_commands SET
+          state='cancelled',result_json=?,updated_at=? WHERE id=?`).run(
+          JSON.stringify({ ...(command.result ?? {}), ownerResolution: "reset" }),
+          now,
+          commandId,
+        );
+        this.appendOrchestratorCommandEvent(commandId, "cancelled", null, {
+          actor,
+          taskReset: Boolean(task),
+        }, now);
+        if (task) {
+          const priorTask = this.getTaskDetails(task.id);
+          const nextVersion = task.version + 1;
+          this.database.prepare(`UPDATE tasks SET
+            status='ready',assigned_worker=NULL,version=?,updated_at=? WHERE id=? AND version=?`).run(
+            nextVersion,
+            now,
+            task.id,
+            task.version,
+          );
+          const currentTask = this.getTaskDetails(task.id);
+          this.database.prepare(`INSERT INTO task_events(
+            task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+            actor_role,run_id,task_version
+          ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+            task.id,
+            "task_reconciled_reset",
+            actor,
+            task.status,
+            "ready",
+            JSON.stringify({ commandId }),
+            `task-reset:${idempotencyKey}`,
+            now,
+            "owner",
+            null,
+            nextVersion,
+          );
+          this.database.prepare(`INSERT INTO audit_events(
+            task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+            idempotency_key,request_sha256,created_at
+          ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+            task.id,
+            "task_reconciled_reset",
+            actor,
+            "owner",
+            null,
+            null,
+            JSON.stringify(priorTask),
+            JSON.stringify(currentTask),
+            JSON.stringify({ commandId }),
+            `task-reset:${idempotencyKey}`,
+            sha256(JSON.stringify({ action: "task_reconciled_reset", commandId })),
+            now,
+          );
+        }
+        result = { action, taskId: task?.id ?? null, taskState: task ? "ready" : null };
+      }
+      this.database.prepare(`INSERT INTO command_reconciliations(
+        id,command_id,action,result_json,idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?)`).run(
+        reconciliationId,
+        commandId,
+        action,
+        JSON.stringify(result),
+        idempotencyKey,
+        requestSha256,
+        now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      replayed: false,
+      reconciliation: {
+        ...this.database.prepare("SELECT * FROM command_reconciliations WHERE id=?").get(reconciliationId),
+        result,
+      },
+      command: this.orchestratorCommand(commandId),
+      retryCommand: result.retryCommandId ? this.orchestratorCommand(result.retryCommandId) : null,
+      task: task ? this.getTaskDetails(task.id) : null,
+    };
+  }
+
   appendOrchestratorCommandEvent(commandId, type, orchestratorId, payload, now = this.clock()) {
     const next = this.database.prepare(`SELECT COALESCE(MAX(sequence),0)+1 value
       FROM orchestrator_command_events WHERE command_id=?`).get(commandId);
@@ -2462,6 +3357,7 @@ export class Phase0Store {
   createRun({
     id = randomUUID(), sessionId, processId = null, shellProcessId = null, containerId = null, imageId = null,
     workspaceId = null, credentialProfile = null, orchestratorId = null, phase = "implementation",
+    promptProfileKey = null, promptProfileVersion = null, promptSha256 = null,
   }) {
     if (!RUN_PHASES.has(phase)) throw codedError("invalid_request", `unsupported run phase: ${phase}`);
     if (orchestratorId) {
@@ -2475,11 +3371,12 @@ export class Phase0Store {
     this.database
       .prepare(`INSERT INTO runs(
         id,session_id,state,process_id,shell_process_id,started_at,container_id,image_id,workspace_id,
-        credential_profile,orchestrator_id,phase
-      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`)
+        credential_profile,orchestrator_id,phase,prompt_profile_key,prompt_profile_version,prompt_sha256
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(
         id, sessionId, "running", processId, shellProcessId, this.clock(), containerId, imageId,
         workspaceId, credentialProfile, orchestratorId, phase,
+        promptProfileKey, promptProfileVersion, promptSha256,
       );
     return this.getRun(id);
   }

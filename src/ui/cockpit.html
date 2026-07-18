@@ -114,7 +114,7 @@
   .composer { grid-template-columns: minmax(0, 1fr) auto; margin-top: .65rem; }
   .composer textarea { min-height: 4rem; }
   .composer button { min-width: 7rem; }
-  #board { display: grid; gap: .5rem; grid-template-columns: repeat(6, minmax(9rem, 1fr)); overflow-x: auto; }
+  #board { display: grid; gap: .5rem; grid-template-columns: repeat(6, minmax(11rem, 1fr)); overflow-x: auto; }
   .column { min-height: 10rem; }
   .task { border-left: 3px solid #5c7cfa; }
   .task.focused { outline: 2px solid var(--yellow); outline-offset: 2px; }
@@ -171,6 +171,16 @@
       </form>
     </section>
     <details class="panel">
+      <summary>Import Git repository</summary>
+      <form id="import-project" data-testid="repository-import-form">
+        <input id="import-url" required maxlength="2000" placeholder="git@github.com:owner/repo.git">
+        <input id="import-name" maxlength="500" placeholder="Optional project name">
+        <textarea id="import-description" maxlength="20000" placeholder="Optional project/task context"></textarea>
+        <button type="submit">Clone + open topic</button>
+      </form>
+      <p class="muted">Clone runs on the host and may use the host SSH agent. Credentials are not copied into task containers.</p>
+    </details>
+    <details class="panel">
       <summary>Create task directly</summary>
       <form id="create-task">
         <select id="task-project" required aria-label="Project"></select>
@@ -197,6 +207,30 @@
         <div><span id="workspace-scope" class="tag"></span> <span id="workspace-state" class="state"></span></div>
       </div>
       <p id="workspace-runtime" class="muted" data-testid="orchestrator-runtime"></p>
+      <details>
+        <summary id="model-route-summary">Conversation model</summary>
+        <form id="model-route-form" class="controls" data-testid="model-route-editor">
+          <input id="model-provider" required maxlength="200" placeholder="Provider" aria-label="Provider">
+          <input id="model-id" required maxlength="500" placeholder="Model ID" aria-label="Model ID">
+          <select id="model-thinking" aria-label="Thinking level">
+            <option>off</option><option>minimal</option><option>low</option>
+            <option>medium</option><option>high</option><option>xhigh</option>
+          </select>
+          <button type="submit">Snapshot + switch</button>
+        </form>
+        <p class="muted">Boss Man verifies a model-less custody snapshot, then restarts the durable Pi session before the next turn.</p>
+        <div id="model-route-status" class="status muted" aria-live="polite"></div>
+      </details>
+      <details id="source-snapshot-panel">
+        <summary>Attach source snapshot</summary>
+        <form id="source-snapshot-form">
+          <select id="source-kind"><option>manual</option><option>jira</option></select>
+          <input id="source-ref" maxlength="2000" placeholder="Ticket URL or source reference">
+          <textarea id="source-content" required maxlength="50000" placeholder="Immutable ticket or request snapshot"></textarea>
+          <button type="submit">Attach to project</button>
+        </form>
+        <p class="muted">Snapshots are read-only context. Boss Man does not write back to Jira.</p>
+      </details>
       <div id="conversation" class="conversation" data-testid="conversation-stream"></div>
       <form id="conversation-form" class="composer" data-testid="conversation-form">
         <textarea id="conversation-message" required maxlength="32000" placeholder="Describe work, refine a task, or ask about project state"></textarea>
@@ -216,12 +250,20 @@
       <div id="changes"><p class="muted">Select a topic to inspect task changes.</p></div>
     </section>
     <section class="panel">
+      <h2>Task detail</h2>
+      <div id="task-detail"><p class="muted">Select a task card to inspect or edit it.</p></div>
+    </section>
+    <section class="panel">
       <h2>Project orchestrators</h2>
       <div id="orchestrators"></div>
     </section>
     <section class="panel">
       <h2>Sessions</h2>
       <div id="sessions"></div>
+    </section>
+    <section class="panel">
+      <h2>Conversation custody</h2>
+      <div id="custody"><p class="muted">Select a topic to inspect snapshots.</p></div>
     </section>
     <section class="panel">
       <h2>Recent commands</h2>
@@ -233,6 +275,17 @@
       <code id="workspace-terminal" data-testid="terminal-command">Select a topic to show its terminal command.</code>
       <p class="muted">Run the project orchestrator in cmux/tmux for process visibility. The central API—not terminal scrollback—owns conversation and task state.</p>
     </section>
+    <details class="panel" data-testid="agent-prompt-editor">
+      <summary>Agent prompts</summary>
+      <form id="agent-prompt-form">
+        <select id="agent-prompt-profile" aria-label="Agent prompt profile"></select>
+        <textarea id="agent-prompt-text" maxlength="32000" aria-label="Owner-editable role guidance"></textarea>
+        <div id="agent-prompt-metadata" class="muted"></div>
+        <button type="submit">Save new revision</button>
+      </form>
+      <p class="muted">New or restarted Pi processes use the active revision. Running processes keep their pinned prompt.</p>
+      <div id="agent-prompt-status" class="status muted" aria-live="polite"></div>
+    </details>
   </aside>
 </main>
 <script>
@@ -245,6 +298,10 @@
     conversationEvents: [],
     context: null,
     leases: [],
+    promptProfiles: [],
+    selectedPromptProfileKey: "orchestrator",
+    custodySnapshots: [],
+    selectedTask: null,
     poll: null,
   };
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -270,6 +327,39 @@
     target.textContent = message;
     target.className = "status " + (error ? "error" : "muted");
   };
+  const promptStatus = (message, error = false) => {
+    const target = document.querySelector("#agent-prompt-status");
+    target.textContent = message;
+    target.className = "status " + (error ? "error" : "good");
+  };
+  const modelStatus = (message, error = false) => {
+    const target = document.querySelector("#model-route-status");
+    target.textContent = message;
+    target.className = "status " + (error ? "error" : "good");
+  };
+
+  function renderPromptProfiles() {
+    const select = document.querySelector("#agent-prompt-profile");
+    select.innerHTML = app.promptProfiles.map((profile) =>
+      "<option value=\"" + esc(profile.profile_key) + "\">" + esc(profile.display_name)
+      + " · v" + esc(profile.active_version) + "</option>"
+    ).join("");
+    if (!app.promptProfiles.some((profile) => profile.profile_key === app.selectedPromptProfileKey)) {
+      app.selectedPromptProfileKey = app.promptProfiles[0]?.profile_key || "orchestrator";
+    }
+    select.value = app.selectedPromptProfileKey;
+    const profile = app.promptProfiles.find((item) => item.profile_key === app.selectedPromptProfileKey);
+    const textarea = document.querySelector("#agent-prompt-text");
+    const revisionIdentity = profile ? profile.profile_key + ":" + profile.active_version : "";
+    if (textarea.dataset.revision !== revisionIdentity) {
+      textarea.value = profile?.prompt_text || "";
+      textarea.dataset.revision = revisionIdentity;
+    }
+    document.querySelector("#agent-prompt-metadata").textContent = profile
+      ? "Active v" + profile.active_version + " · SHA-256 " + profile.prompt_sha256.slice(0, 12)
+        + "… · " + profile.revision_actor
+      : "No prompt profiles loaded.";
+  }
 
   function renderProjects() {
     document.querySelector("#projects").innerHTML = app.projects.map((project) =>
@@ -307,6 +397,7 @@
         const card = document.createElement("article");
         card.className = "task";
         card.dataset.taskId = task.id;
+        card.tabIndex = 0;
         card.innerHTML = "<strong>" + esc(task.title) + "</strong><div class=\"muted\">"
           + esc(task.project_id) + " · v" + esc(task.version) + "</div>"
           + ((state === "ready" || state === "backlog")
@@ -318,6 +409,51 @@
       }
       target.append(column);
     }
+  }
+
+  function renderTaskDetail() {
+    const target = document.querySelector("#task-detail");
+    const task = app.selectedTask;
+    if (!task) {
+      target.innerHTML = "<p class=\"muted\">Select a task card to inspect or edit it.</p>";
+      return;
+    }
+    const decisions = task.decision_gates.map((decision) =>
+      "<div class=\"row\"><strong>" + esc(decision.category) + "</strong><div>" + esc(decision.question) + "</div>"
+      + (decision.status === "decision_required"
+        ? "<div class=\"controls\"><input data-decision-value=\"" + esc(decision.id)
+          + "\" placeholder=\"Owner decision\"><button data-resolve-decision=\"" + esc(decision.id)
+          + "\">Resolve</button></div>"
+        : "<div class=\"muted\">Resolved · " + esc(JSON.stringify(decision.resolution)) + "</div>")
+      + "</div>"
+    ).join("") || "<p class=\"muted\">No decision gates.</p>";
+    const dependencies = task.dependencies.map((dependency) =>
+      "<li>" + esc(dependency.title) + " · " + esc(dependency.status) + "</li>"
+    ).join("") || "<li>None</li>";
+    const activity = task.activity.slice(-6).reverse().map((event) =>
+      "<div class=\"muted\">" + esc(event.type) + " · " + esc(event.actor_id)
+        + " · " + esc(event.created_at) + "</div>"
+    ).join("") || "<p class=\"muted\">No activity yet.</p>";
+    target.innerHTML = "<form id=\"task-detail-form\">"
+      + "<input id=\"task-detail-title\" required maxlength=\"500\" value=\"" + esc(task.title) + "\">"
+      + "<textarea id=\"task-detail-description\" maxlength=\"20000\" placeholder=\"Task description\">"
+        + esc(task.description || "") + "</textarea>"
+      + "<textarea id=\"task-detail-criteria\" placeholder=\"Acceptance criteria, one per line\">"
+        + esc(task.acceptance_criteria.join("\n")) + "</textarea>"
+      + "<button type=\"submit\">Save task v" + esc(task.version) + "</button></form>"
+      + (["in_progress", "blocked", "review"].includes(task.status)
+        ? "<div class=\"controls\"><select id=\"resume-task-phase\"><option>implementation</option>"
+          + "<option>test</option><option>review</option></select>"
+          + "<button data-resume-task=\"" + esc(task.id) + "\">Resume stopped run</button></div>"
+        : "")
+      + "<h3>Dependencies</h3><ul>" + dependencies + "</ul>"
+      + "<h3>Decisions</h3>" + decisions
+      + "<h3>Recent activity</h3>" + activity;
+  }
+
+  async function loadTask(taskId) {
+    app.selectedTask = await request("/api/tasks/" + encodeURIComponent(taskId));
+    renderTaskDetail();
   }
 
   function streamedText(turnId) {
@@ -339,6 +475,7 @@
       ? "project · " + detail.conversation.scope_id
       : "system intake";
     document.querySelector("#workspace-state").textContent = detail.conversation.state.replaceAll("_", " ");
+    document.querySelector("#source-snapshot-panel").hidden = !detail.conversation.project_id;
     const lease = app.leases.find((item) =>
       item.scope_type === detail.conversation.scope_type
       && item.scope_id === detail.conversation.scope_id
@@ -347,6 +484,17 @@
     document.querySelector("#workspace-runtime").textContent = lease
       ? "Orchestrator online · " + lease.transport + " · " + lease.endpoint
       : "Orchestrator offline · new messages remain queued until the matching process starts";
+    const modelSummary = document.querySelector("#model-route-summary");
+    modelSummary.textContent = "Conversation model · " + detail.conversation.model_provider + "/"
+      + detail.conversation.model_id + " · " + detail.conversation.thinking_level
+      + " · v" + detail.conversation.version;
+    const modelForm = document.querySelector("#model-route-form");
+    if (modelForm.dataset.version !== String(detail.conversation.version)) {
+      document.querySelector("#model-provider").value = detail.conversation.model_provider;
+      document.querySelector("#model-id").value = detail.conversation.model_id;
+      document.querySelector("#model-thinking").value = detail.conversation.thinking_level;
+      modelForm.dataset.version = String(detail.conversation.version);
+    }
     document.querySelector("#workspace-terminal").textContent =
       "npm run boss -- chat --topic " + detail.topic.id;
     const conversation = document.querySelector("#conversation");
@@ -382,25 +530,26 @@
       + "<button class=\"ghost\" data-focus-task=\"" + esc(event.payload?.childTaskId || event.payload?.taskId)
       + "\">Show on board</button></div>"
     ).join("") || "<p class=\"muted\">No structured task changes from this conversation yet.</p>";
+    document.querySelector("#custody").innerHTML = app.custodySnapshots.map((snapshot) =>
+      row(snapshot.trigger + " · " + snapshot.snapshot_id, snapshot.created_at + " · verified")
+    ).join("") || "<p class=\"muted\">No conversation snapshots yet.</p>";
   }
 
   async function loadTopic(topicId, { quiet = false } = {}) {
-    const [detail, events, context, board] = await Promise.all([
+    const conversationId = app.topics.find((topic) => topic.id === topicId)?.conversation?.id
+      || app.topicDetail?.conversation?.id;
+    const [detail, events, context, board, custody] = await Promise.all([
       request("/api/topics/" + encodeURIComponent(topicId)),
-      request("/api/conversations/" + encodeURIComponent(
-        app.topics.find((topic) => topic.id === topicId)?.conversation?.id
-          || app.topicDetail?.conversation?.id,
-      ) + "/events"),
-      request("/api/conversations/" + encodeURIComponent(
-        app.topics.find((topic) => topic.id === topicId)?.conversation?.id
-          || app.topicDetail?.conversation?.id,
-      ) + "/context"),
+      request("/api/conversations/" + encodeURIComponent(conversationId) + "/events"),
+      request("/api/conversations/" + encodeURIComponent(conversationId) + "/context"),
       request("/api/board"),
+      request("/api/conversations/" + encodeURIComponent(conversationId) + "/custody"),
     ]);
     app.selectedTopicId = topicId;
     app.topicDetail = detail;
     app.conversationEvents = events.events;
     app.context = context;
+    app.custodySnapshots = custody.snapshots;
     app.board = board;
     const topicIndex = app.topics.findIndex((topic) => topic.id === topicId);
     if (topicIndex >= 0) {
@@ -412,12 +561,21 @@
     }
     renderTopics();
     renderBoard();
+    if (
+      app.selectedTask
+      && !document.querySelector("#task-detail").contains(document.activeElement)
+    ) {
+      const stillVisible = Object.values(board.columns).flat().some((task) => task.id === app.selectedTask.id);
+      if (stillVisible) await loadTask(app.selectedTask.id);
+      else app.selectedTask = null;
+    }
+    renderTaskDetail();
     renderWorkspace();
     if (!quiet) history.replaceState(null, "", "#" + topicId);
   }
 
   async function refresh() {
-    const [projects, topics, orchestrators, leases, sessions, board, commands] = await Promise.all([
+    const [projects, topics, orchestrators, leases, sessions, board, commands, promptProfiles] = await Promise.all([
       request("/api/projects"),
       request("/api/topics"),
       request("/api/orchestrators"),
@@ -425,14 +583,17 @@
       request("/api/sessions"),
       request("/api/board"),
       request("/api/commands?limit=20"),
+      request("/api/agent-profiles"),
     ]);
     app.projects = projects.projects;
     app.topics = topics.topics;
     app.leases = leases.leases;
     app.board = board;
+    app.promptProfiles = promptProfiles.profiles;
     renderProjects();
     renderTopics();
     renderBoard();
+    renderPromptProfiles();
     document.querySelector("#orchestrators").innerHTML =
       orchestrators.orchestrators.map((item) => row(
         item.project_name,
@@ -444,10 +605,21 @@
       )).join("")
       || "<p class=\"muted\">No active leases.</p>";
     document.querySelector("#sessions").innerHTML = sessions.sessions.map((session) =>
-      row(session.id, session.project_id + " · " + (session.latest_run_state || session.state))
+      "<div class=\"row\"><strong>" + esc(session.id) + "</strong><div class=\"muted\">"
+      + esc(session.project_id + " · " + (session.latest_run_state || session.state)) + "</div>"
+      + (session.latest_run_state === "running"
+        ? "<button class=\"ghost\" data-stop-session=\"" + esc(session.id) + "\">Stop run</button>"
+        : "") + "</div>"
     ).join("") || "<p class=\"muted\">No task sessions yet.</p>";
     document.querySelector("#commands").innerHTML = commands.commands.map((command) =>
-      row(command.kind + " · " + command.phase, command.project_name + " · " + command.state)
+      "<div class=\"row\"><strong>" + esc(command.kind + " · " + command.phase) + "</strong>"
+      + "<div class=\"muted\">" + esc(command.project_name + " · " + command.state) + "</div>"
+      + (command.result ? "<code>" + esc(JSON.stringify(command.result)) + "</code>" : "")
+      + (["failed", "reconciliation_required"].includes(command.state)
+        ? "<div class=\"controls\"><button data-reconcile-command=\"" + esc(command.id)
+          + "\" data-reconcile-action=\"retry\">Retry</button><button class=\"secondary\" data-reconcile-command=\""
+          + esc(command.id) + "\" data-reconcile-action=\"reset\">Reset task</button></div>"
+        : "") + "</div>"
     ).join("") || "<p class=\"muted\">No commands yet.</p>";
     const hashTopic = location.hash.slice(1);
     const desired = app.selectedTopicId || (app.topics.some((topic) => topic.id === hashTopic) ? hashTopic : null);
@@ -510,6 +682,41 @@
     }
   });
 
+  document.querySelector("#import-project").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = event.submitter;
+    button.disabled = true;
+    try {
+      const imported = await request("/api/projects/import", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": key("project-import") },
+        body: JSON.stringify({
+          repositoryUrl: document.querySelector("#import-url").value,
+          name: document.querySelector("#import-name").value || null,
+        }),
+      });
+      const topics = await request("/api/topics");
+      const existingTopic = topics.topics.find((item) => item.project_id === imported.project.id);
+      const topic = existingTopic ? { topic: existingTopic } : await request("/api/topics", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": key("import-topic") },
+          body: JSON.stringify({
+            title: imported.project.name + " orchestrator",
+            ownerDescription: document.querySelector("#import-description").value || null,
+            projectId: imported.project.id,
+          }),
+        });
+      event.target.reset();
+      mutationStatus(imported.replayed ? "Existing project opened." : "Repository imported.");
+      await refresh();
+      await loadTopic(topic.topic.id);
+    } catch (error) {
+      mutationStatus(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   document.querySelector("#conversation-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const button = event.submitter;
@@ -533,6 +740,62 @@
       await loadTopic(app.selectedTopicId, { quiet: true });
     } catch (error) {
       conversationStatus(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector("#source-snapshot-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = event.submitter;
+    button.disabled = true;
+    try {
+      await request(
+        "/api/projects/" + encodeURIComponent(app.topicDetail.conversation.project_id) + "/sources",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": key("source-snapshot") },
+          body: JSON.stringify({
+            kind: document.querySelector("#source-kind").value,
+            sourceRef: document.querySelector("#source-ref").value || null,
+            content: document.querySelector("#source-content").value,
+          }),
+        },
+      );
+      event.target.reset();
+      mutationStatus("Immutable source snapshot attached to the orchestrator context.");
+      await loadTopic(app.selectedTopicId, { quiet: true });
+    } catch (error) {
+      mutationStatus(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector("#model-route-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = event.submitter;
+    button.disabled = true;
+    try {
+      const conversation = app.topicDetail.conversation;
+      const result = await request(
+        "/api/conversations/" + encodeURIComponent(conversation.id) + "/model",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": key("model-switch") },
+          body: JSON.stringify({
+            modelProvider: document.querySelector("#model-provider").value,
+            modelId: document.querySelector("#model-id").value,
+            thinkingLevel: document.querySelector("#model-thinking").value,
+            expectedVersion: conversation.version,
+          }),
+        },
+      );
+      modelStatus("Snapshot " + result.change.custody_snapshot_id
+        + " verified. The new route starts with the next turn.");
+      await loadTopic(app.selectedTopicId, { quiet: true });
+    } catch (error) {
+      modelStatus(error.message, true);
     } finally {
       button.disabled = false;
     }
@@ -581,6 +844,84 @@
     }
   });
 
+  document.querySelector("#board").addEventListener("click", (event) => {
+    const task = event.target.closest("[data-task-id]");
+    if (task && !event.target.closest("[data-schedule]")) {
+      void loadTask(task.dataset.taskId).catch((error) => mutationStatus(error.message, true));
+    }
+  });
+
+  document.querySelector("#task-detail").addEventListener("submit", async (event) => {
+    if (event.target.id !== "task-detail-form") return;
+    event.preventDefault();
+    const button = event.submitter;
+    button.disabled = true;
+    try {
+      const result = await request("/api/tasks/" + encodeURIComponent(app.selectedTask.id), {
+        method: "PUT",
+        headers: { "content-type": "application/json", "idempotency-key": key("task-edit") },
+        body: JSON.stringify({
+          title: document.querySelector("#task-detail-title").value,
+          description: document.querySelector("#task-detail-description").value || null,
+          acceptanceCriteria: document.querySelector("#task-detail-criteria").value
+            .split("\n").map((value) => value.trim()).filter(Boolean),
+          expectedVersion: app.selectedTask.version,
+        }),
+      });
+      app.selectedTask = result.task;
+      mutationStatus("Task updated.");
+      await refresh();
+    } catch (error) {
+      mutationStatus(error.message, true);
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector("#task-detail").addEventListener("click", async (event) => {
+    const resumeButton = event.target.closest("[data-resume-task]");
+    if (resumeButton) {
+      resumeButton.disabled = true;
+      try {
+        await request("/api/tasks/" + encodeURIComponent(resumeButton.dataset.resumeTask) + "/resume", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": key("resume-task") },
+          body: JSON.stringify({ phase: document.querySelector("#resume-task-phase").value }),
+        });
+        mutationStatus("A new explicit task-run command was queued.");
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+        resumeButton.disabled = false;
+      }
+      return;
+    }
+    const button = event.target.closest("[data-resolve-decision]");
+    if (!button) return;
+    button.disabled = true;
+    try {
+      const input = document.querySelector("[data-decision-value=\"" + CSS.escape(button.dataset.resolveDecision) + "\"]");
+      const resolution = input.value.trim();
+      if (!resolution) throw new Error("Enter the owner decision first.");
+      const result = await request(
+        "/api/tasks/" + encodeURIComponent(app.selectedTask.id) + "/actions/resolve_decision",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": key("resolve-decision") },
+          body: JSON.stringify({
+            expectedVersion: app.selectedTask.version,
+            payload: { id: button.dataset.resolveDecision, resolution },
+          }),
+        },
+      );
+      app.selectedTask = result.task;
+      mutationStatus("Decision resolved.");
+      await refresh();
+    } catch (error) {
+      mutationStatus(error.message, true);
+      button.disabled = false;
+    }
+  });
+
   document.querySelector("#changes").addEventListener("click", (event) => {
     const button = event.target.closest("[data-focus-task]");
     if (!button) return;
@@ -595,10 +936,80 @@
     task.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
   });
 
+  document.querySelector("#sessions").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-stop-session]");
+    if (!button) return;
+    button.disabled = true;
+    try {
+      await request("/api/sessions/" + encodeURIComponent(button.dataset.stopSession), {
+        method: "DELETE",
+      });
+      mutationStatus("Task run stopped. Reconcile or resume its command before continuing.");
+      await refresh();
+    } catch (error) {
+      mutationStatus(error.message, true);
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector("#commands").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-reconcile-command]");
+    if (!button) return;
+    button.disabled = true;
+    try {
+      await request("/api/commands/" + encodeURIComponent(button.dataset.reconcileCommand) + "/reconcile", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": key("command-reconcile") },
+        body: JSON.stringify({ action: button.dataset.reconcileAction }),
+      });
+      mutationStatus(button.dataset.reconcileAction === "retry"
+        ? "A new explicit retry command was queued."
+        : "Command cancelled and task reset to ready.");
+      await refresh();
+    } catch (error) {
+      mutationStatus(error.message, true);
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector("#agent-prompt-profile").addEventListener("change", (event) => {
+    app.selectedPromptProfileKey = event.target.value;
+    document.querySelector("#agent-prompt-text").dataset.revision = "";
+    renderPromptProfiles();
+    promptStatus("");
+  });
+
+  document.querySelector("#agent-prompt-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = event.submitter;
+    const profile = app.promptProfiles.find((item) => item.profile_key === app.selectedPromptProfileKey);
+    if (!profile) return promptStatus("Select a prompt profile.", true);
+    button.disabled = true;
+    try {
+      const result = await request("/api/agent-profiles/" + encodeURIComponent(profile.profile_key), {
+        method: "PUT",
+        headers: { "content-type": "application/json", "idempotency-key": key("prompt-revision") },
+        body: JSON.stringify({
+          prompt: document.querySelector("#agent-prompt-text").value,
+          expectedVersion: profile.active_version,
+        }),
+      });
+      app.promptProfiles = app.promptProfiles.map((item) =>
+        item.profile_key === result.profile.profile_key ? result.profile : item
+      );
+      renderPromptProfiles();
+      promptStatus("Saved v" + result.profile.active_version + ". It applies at the next process start.");
+    } catch (error) {
+      promptStatus(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   refresh().then(() => {
     app.poll = setInterval(() => {
-      if (app.selectedTopicId) void loadTopic(app.selectedTopicId, { quiet: true }).catch(() => undefined);
-    }, 1500);
+      void refresh().catch(() => undefined);
+    }, 3000);
   }).catch((error) => mutationStatus("Cockpit load failed: " + error.message, true));
 </script>
 </html>

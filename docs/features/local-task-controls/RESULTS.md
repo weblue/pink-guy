@@ -2,7 +2,7 @@
 
 Status: Implemented
 
-Last updated: 2026-07-18
+Last updated: 2026-07-17
 
 ## Delivered
 
@@ -43,7 +43,7 @@ provider request.
 
 ## Next product slice
 
-Add the task detail workspace and owner controls for editing task description,
-acceptance criteria, dependencies, and explicit failed-command
-reconciliation. The workspace should expose the owning tmux/process endpoint
-for external attach and recovery; D-043 defers a persistent browser PTY.
+The later dogfood-controls slice adds task detail, description/acceptance
+editing, owner decision resolution, stop/resume, and explicit failed-command
+reconciliation. Owner dependency editing and deeper workspace inspectors
+remain. D-043 defers a persistent browser PTY.
