@@ -20,6 +20,7 @@ const probes = [
   "probe-phase1-terminal-client.mjs",
   "probe-phase1-task-graph-mutations.mjs",
   "probe-phase1-agent-prompt-profiles.mjs",
+  "probe-phase1-workflow-observer.mjs",
 ];
 
 try {

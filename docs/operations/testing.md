@@ -2,7 +2,7 @@
 
 ## Core regression suite
 
-Run the eight deterministic Phase 1 probes together:
+Run the nine deterministic Phase 1 probes together:
 
 ```sh
 npm test
@@ -10,10 +10,19 @@ npm test
 
 The runner creates a temporary Git repository, exercises the command loop,
 local task controls, conversation/task projections, persistent fake-Pi RPC
-runtime, cockpit rendering, browser/terminal conversation parity, and
-task-graph mutations, then deletes the fixture. It makes no provider request
-and starts no task container. The eighth probe covers versioned agent prompts,
-custody-backed model switching, and run prompt provenance.
+runtime, cockpit rendering, browser/terminal conversation parity, task-graph
+mutations, prompt provenance, and the fixed-revision phase workflow, then
+deletes the fixture. It makes no provider request and starts no task container.
+
+Watch the phase protocol as a standalone model-less baseline:
+
+```sh
+npm run test:workflow
+```
+
+It prints implementation, host checkpoint, test, independent review, and
+completion transitions while asserting that later worktrees use the same
+recorded revision.
 
 Run the reproducibility baseline separately:
 

@@ -184,6 +184,25 @@ export default function bossManExtension(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
+    name: "boss_test_record_validation",
+    label: "Record Boss Man fixed-revision validation",
+    description: "Record independent pass/fail test evidence for the task's current fixed revision. Only a test-phase capability may use this tool.",
+    promptSnippet: "Record exact test evidence against the current fixed revision",
+    parameters: Type.Object({
+      revision: Type.String({ minLength: 1 }),
+      status: StringEnum(["passed", "failed"] as const),
+      evidence: Type.Array(Type.String()),
+    }),
+    async execute(toolCallId, params, signal) {
+      return result(await act(toolCallId, "record_validation", {
+        revision: params.revision,
+        status: params.status,
+        evidence: params.evidence,
+      }, signal));
+    },
+  });
+
+  pi.registerTool({
     name: "boss_git_status",
     label: "Inspect Boss Man workspace status",
     description: "Read host-authoritative Git status for this run without granting writable Git metadata to the container.",

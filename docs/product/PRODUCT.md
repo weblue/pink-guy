@@ -303,7 +303,10 @@ The selected mode is visible before the child starts and remains part of its pro
 
 11.1 Local-first releases support an explicit loopback profile with no application authentication. The listener binds only to loopback and clearly identifies that exposure mode.
 
-11.2 Phase 1 may add an explicit trusted-LAN profile with no application authentication. It binds to a selected private interface, restricts accepted source networks to configured private CIDRs, displays a persistent warning, and is never enabled implicitly.
+11.2 Phase 1 remains loopback-only. A trusted-LAN profile is optional and no
+longer a Phase 1 deliverable; if later justified, it binds to a selected
+private interface, restricts accepted source networks to configured private
+CIDRs, displays a persistent warning, and is never enabled implicitly.
 
 11.3 Loopback and trusted-LAN classification comes from the configured listener and host/network policy, not from arbitrary forwarded headers. Public wildcard binding is rejected unless the authenticated remote profile is configured.
 
@@ -362,7 +365,11 @@ release boundary.
 
 14.3 Agents update the board, preserve context before compaction, and create inspectable raw and RTK-filtered command artifacts.
 
-14.4 An implementing agent can request independent review; after approval, required validation, and resolution of applicable human-decision gates, the orchestrator can create the platform-owned commit, merge, and mark the task Done without human approval.
+14.4 An implementing agent can create a host-owned fixed checkpoint and request
+independent review. After required validation, approval, and resolution of
+applicable human-decision gates, the orchestrator can mark the task Done and
+record a merge request without human acceptance. Merge/rebase/push execution
+is Phase 2.
 
 14.5 The owner can audit the result from the task description, diff, tests, reviewer report, and smoke-test instructions without reading the conversation.
 

@@ -19,6 +19,7 @@ const CAPABILITY_ACTIONS = {
     "read", "claim", "release", "progress", "block", "create_child", "request_review", "propose_complete",
     "git_status", "git_diff", "git_checkpoint_request", "git_commit_request",
   ]),
+  validator: new Set(["read", "progress", "block", "record_validation", "git_status", "git_diff"]),
   reviewer: new Set(["read", "submit_review", "git_status", "git_diff"]),
   orchestrator: new Set([
     "read", "set_revision", "record_validation", "add_decision_gate", "complete", "reopen",
@@ -1104,8 +1105,28 @@ export class Phase0Store {
     if (!orchestrator) {
       throw codedError("orchestrator_unavailable", "project has no active orchestrator lease");
     }
-    if (!["ready", "backlog"].includes(task.status) || task.assigned_worker) {
-      throw codedError("transition_denied", "only an unassigned ready or backlog task can be scheduled");
+    const activeCommand = this.database.prepare(`SELECT id,phase,state FROM orchestrator_commands
+      WHERE task_id=? AND state IN ('queued','claimed') ORDER BY sequence LIMIT 1`).get(taskId);
+    if (activeCommand) {
+      throw codedError("transition_denied", `task already has an active ${activeCommand.phase} command: ${activeCommand.id}`);
+    }
+    const running = this.database.prepare(`SELECT r.id FROM runs r JOIN sessions s ON s.id=r.session_id
+      WHERE s.task_id=? AND r.state='running' ORDER BY r.started_at LIMIT 1`).get(taskId);
+    if (running) throw codedError("transition_denied", `task already has a running session: ${running.id}`);
+    if (phase === "implementation") {
+      if (!["ready", "backlog"].includes(task.status) || task.assigned_worker) {
+        throw codedError("transition_denied", "implementation requires an unassigned ready or backlog task");
+      }
+    } else if (phase === "test") {
+      if (!task.revision || !task.assigned_worker || !["in_progress", "review"].includes(task.status)) {
+        throw codedError("transition_denied", "test requires an active assigned task with a fixed revision");
+      }
+    } else if (
+      task.status !== "review"
+      || !task.revision
+      || task.requested_review_revision !== task.revision
+    ) {
+      throw codedError("transition_denied", "review requires a requested current fixed revision");
     }
     const commandId = randomUUID();
     const actorId = `task-agent:${phase}:${commandId}`;
@@ -1122,10 +1143,11 @@ export class Phase0Store {
         JSON.stringify(payload), commandRequestSha256, idempotencyKey, now, now,
       );
       const nextVersion = task.version + 1;
+      const nextStatus = phase === "implementation" ? "in_progress" : task.status;
+      const nextAssignedWorker = phase === "implementation" ? actorId : task.assigned_worker;
       const changed = this.database.prepare(`UPDATE tasks SET
-        status='in_progress',assigned_worker=?,version=?,updated_at=?
-        WHERE id=? AND version=? AND status IN ('ready','backlog') AND assigned_worker IS NULL`).run(
-        actorId, nextVersion, now, taskId, task.version,
+        status=?,assigned_worker=?,version=?,updated_at=? WHERE id=? AND version=?`).run(
+        nextStatus, nextAssignedWorker, nextVersion, now, taskId, task.version,
       );
       if (Number(changed.changes) !== 1) throw codedError("version_conflict", "task changed during scheduling");
       const current = this.getTaskDetails(taskId);
@@ -1136,8 +1158,8 @@ export class Phase0Store {
         task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
         actor_role,run_id,task_version
       ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
-        taskId, "task_scheduled", "local-owner", task.status, "in_progress",
-        JSON.stringify({ phase, commandId, assignedWorker: actorId }),
+        taskId, "task_scheduled", "local-owner", task.status, nextStatus,
+        JSON.stringify({ phase, commandId, phaseActor: actorId, assignedWorker: nextAssignedWorker }),
         idempotencyKey, now, "owner", null, nextVersion,
       );
       this.database.prepare(`INSERT INTO audit_events(
@@ -1146,7 +1168,7 @@ export class Phase0Store {
       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
         taskId, "task_scheduled", "local-owner", "owner", null, null,
         JSON.stringify(prior), JSON.stringify(current),
-        JSON.stringify({ phase, commandId, assignedWorker: actorId }),
+        JSON.stringify({ phase, commandId, phaseActor: actorId, assignedWorker: nextAssignedWorker }),
         idempotencyKey, auditRequestSha256, now,
       );
       this.database.exec("COMMIT");
@@ -3147,6 +3169,12 @@ export class Phase0Store {
     if (capability.role === "worker" && action !== "claim" && capability.actor_id !== task.assigned_worker) {
       throw codedError("capability_denied", "worker is not assigned to this task");
     }
+    if (capability.role === "validator") {
+      const run = capability.run_id ? this.getRun(capability.run_id) : null;
+      if (!run || run.phase !== "test") {
+        throw codedError("capability_denied", "validation requires a persisted test-phase run");
+      }
+    }
 
     const now = this.clock();
     const prior = this.getTaskDetails(taskId);
@@ -3332,6 +3360,143 @@ export class Phase0Store {
 
   taskAudit(taskId) {
     return this.database.prepare("SELECT * FROM audit_events WHERE task_id=? ORDER BY sequence").all(taskId).map((row) => this.parseAuditEvent(row));
+  }
+
+  recordHostGitRevision(operation) {
+    if (!operation?.id || !operation.task_id || !operation.new_revision) {
+      throw codedError("invalid_request", "a committed Git operation is required");
+    }
+    const idempotencyKey = `host-git-revision:${operation.id}`;
+    const requestSha256 = sha256(JSON.stringify({
+      operationId: operation.id,
+      taskId: operation.task_id,
+      runId: operation.run_id,
+      workspaceId: operation.workspace_id,
+      priorRevision: operation.prior_revision,
+      newRevision: operation.new_revision,
+    }));
+    const priorEvent = this.database.prepare("SELECT * FROM audit_events WHERE idempotency_key=?").get(idempotencyKey);
+    if (priorEvent) {
+      if (priorEvent.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "Git revision receipt identity changed");
+      }
+      return { replayed: true, event: this.parseAuditEvent(priorEvent), task: this.getTaskDetails(operation.task_id) };
+    }
+    const task = this.getTask(operation.task_id);
+    if (!task) throw codedError("not_found", `unknown task: ${operation.task_id}`);
+    const prior = this.getTaskDetails(task.id);
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const nextVersion = task.version + 1;
+      const changed = this.database.prepare(`UPDATE tasks SET
+        revision=?,validation_passed=0,requested_review_revision=NULL,merge_requested=0,
+        version=?,updated_at=? WHERE id=? AND version=?`).run(
+        operation.new_revision, nextVersion, now, task.id, task.version,
+      );
+      if (Number(changed.changes) !== 1) throw codedError("version_conflict", "task changed while recording Git revision");
+      const current = this.getTaskDetails(task.id);
+      const payload = {
+        operationId: operation.id,
+        runId: operation.run_id,
+        workspaceId: operation.workspace_id,
+        kind: operation.kind,
+        priorRevision: operation.prior_revision,
+        newRevision: operation.new_revision,
+      };
+      this.database.prepare(`INSERT INTO task_events(
+        task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+        actor_role,run_id,task_version
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        task.id, "host_git_revision_recorded", "host-git-service", task.status, task.status,
+        JSON.stringify(payload), idempotencyKey, now, "host", operation.run_id, nextVersion,
+      );
+      const inserted = this.database.prepare(`INSERT INTO audit_events(
+        task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+        idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        task.id, "host_git_revision_recorded", "host-git-service", "host",
+        operation.capability_id, operation.run_id, JSON.stringify(prior), JSON.stringify(current),
+        JSON.stringify(payload), idempotencyKey, requestSha256, now,
+      );
+      this.database.exec("COMMIT");
+      return {
+        replayed: false,
+        event: this.parseAuditEvent(this.database.prepare("SELECT * FROM audit_events WHERE sequence=?").get(inserted.lastInsertRowid)),
+        task: this.getTaskDetails(task.id),
+      };
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  allowedTaskPhases(taskId) {
+    const task = this.getTask(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    const busy = this.database.prepare(`SELECT 1 AS value FROM orchestrator_commands
+      WHERE task_id=? AND state IN ('queued','claimed') LIMIT 1`).get(taskId)
+      || this.database.prepare(`SELECT 1 AS value FROM runs r JOIN sessions s ON s.id=r.session_id
+        WHERE s.task_id=? AND r.state='running' LIMIT 1`).get(taskId);
+    if (busy) return [];
+    const phases = [];
+    if (["ready", "backlog"].includes(task.status) && !task.assigned_worker) phases.push("implementation");
+    if (task.revision && task.assigned_worker && ["in_progress", "review"].includes(task.status)) phases.push("test");
+    if (
+      task.status === "review"
+      && task.revision
+      && task.requested_review_revision === task.revision
+    ) phases.push("review");
+    return phases;
+  }
+
+  taskWorkspaceProjection(taskId) {
+    const task = this.getTaskDetails(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    const runs = this.database.prepare(`SELECT
+      r.*,s.task_id,s.model_provider,s.model_id,s.native_path,s.state AS session_state
+      FROM runs r JOIN sessions s ON s.id=r.session_id
+      WHERE s.task_id=? ORDER BY r.started_at,r.id`).all(taskId).map((run) => ({
+        ...run,
+        events: this.runEvents(run.id),
+        workspace: this.workspaceForRun(run.id),
+        git_operations: this.database.prepare(
+          "SELECT * FROM git_operations WHERE run_id=? ORDER BY created_at,id",
+        ).all(run.id).map((row) => ({ ...row, metadata: parseJson(row.metadata_json) ?? {} })),
+        artifacts: this.artifacts(run.session_id).map((row) => ({
+          ...row,
+          metadata: parseJson(row.metadata_json) ?? {},
+        })),
+        context_receipts: this.database.prepare(
+          "SELECT * FROM context_receipts WHERE run_id=? ORDER BY created_at,receipt_id",
+        ).all(run.id).map((row) => ({
+          ...row,
+          filters: parseJson(row.filters_json) ?? {},
+          method: parseJson(row.method_json) ?? {},
+          ranked_sources: parseJson(row.ranked_sources_json) ?? [],
+          exclusions: parseJson(row.exclusions_json) ?? [],
+          injected_excerpts: parseJson(row.injected_excerpts_json) ?? [],
+          receipt: parseJson(row.receipt_json) ?? {},
+        })),
+        side_effects: this.sideEffectsForRun(run.id),
+        side_effect_receipts: this.sideEffectReceipts(run.id),
+      }));
+    return {
+      task: { ...task, activity: this.taskAudit(taskId) },
+      allowed_phases: this.allowedTaskPhases(taskId),
+      completion_evaluation: this.evaluateCompletion(taskId),
+      commands: this.database.prepare(
+        "SELECT * FROM orchestrator_commands WHERE task_id=? ORDER BY sequence",
+      ).all(taskId).map((row) => ({
+        ...publicOrchestratorCommand(row),
+        events: this.orchestratorCommandEvents(row.id),
+      })),
+      runs,
+      sources: this.database.prepare(
+        "SELECT id,kind,source_ref,content,content_sha256,actor,created_at FROM source_snapshots WHERE project_id=? ORDER BY created_at,id",
+      ).all(task.project_id),
+      generated_at: this.clock(),
+    };
   }
 
   board() {

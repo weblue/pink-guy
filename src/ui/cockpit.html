@@ -302,6 +302,7 @@
     selectedPromptProfileKey: "orchestrator",
     custodySnapshots: [],
     selectedTask: null,
+    selectedTaskWorkspace: null,
     poll: null,
   };
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -401,9 +402,8 @@
         card.innerHTML = "<strong>" + esc(task.title) + "</strong><div class=\"muted\">"
           + esc(task.project_id) + " · v" + esc(task.version) + "</div>"
           + ((state === "ready" || state === "backlog")
-            ? "<div class=\"controls\"><select aria-label=\"Agent phase\"><option>implementation</option>"
-              + "<option>test</option><option>review</option></select><button data-schedule=\""
-              + esc(task.id) + "\">Schedule</button></div>"
+            ? "<div class=\"controls\"><button data-schedule=\"" + esc(task.id)
+              + "\" data-phase=\"implementation\">Schedule implementation</button></div>"
             : "");
         column.append(card);
       }
@@ -418,6 +418,7 @@
       target.innerHTML = "<p class=\"muted\">Select a task card to inspect or edit it.</p>";
       return;
     }
+    const workspace = app.selectedTaskWorkspace;
     const decisions = task.decision_gates.map((decision) =>
       "<div class=\"row\"><strong>" + esc(decision.category) + "</strong><div>" + esc(decision.question) + "</div>"
       + (decision.status === "decision_required"
@@ -434,6 +435,55 @@
       "<div class=\"muted\">" + esc(event.type) + " · " + esc(event.actor_id)
         + " · " + esc(event.created_at) + "</div>"
     ).join("") || "<p class=\"muted\">No activity yet.</p>";
+    const phaseControls = (workspace?.allowed_phases || []).length
+      ? "<div class=\"controls\"><select id=\"schedule-task-phase\">"
+        + workspace.allowed_phases.map((phase) => "<option>" + esc(phase) + "</option>").join("")
+        + "</select><button data-schedule-selected=\"" + esc(task.id) + "\">Schedule phase</button></div>"
+      : "<p class=\"muted\">No phase is currently schedulable.</p>";
+    const completionControl = workspace?.completion_evaluation?.allowed && task.status !== "done"
+      ? "<button data-complete-task=\"" + esc(task.id) + "\">Complete validated + approved task</button>"
+      : task.status === "done"
+        ? "<div class=\"good\">Completion gates passed · merge requested</div>"
+        : "<div class=\"muted\">Completion gates: "
+          + esc((workspace?.completion_evaluation?.reasons || []).join(", ") || "not evaluated") + "</div>";
+    const runs = (workspace?.runs || []).slice().reverse().map((run) => {
+      const git = run.git_operations.map((operation) =>
+        "<div class=\"muted\">" + esc(operation.kind + " · " + operation.new_revision.slice(0, 12))
+          + " · " + esc(operation.metadata.message || "") + "</div>"
+      ).join("") || "<div class=\"muted\">No Git checkpoint.</div>";
+      const artifacts = run.artifacts.map((artifact) =>
+        "<div class=\"muted\">" + esc(artifact.kind + " · " + artifact.path + " · " + artifact.sha256.slice(0, 12)) + "</div>"
+      ).join("") || "<div class=\"muted\">No artifacts.</div>";
+      const workspaceDetail = run.workspace
+        ? "<div class=\"muted\">branch " + esc(run.workspace.branch) + "<br>base "
+          + esc(run.workspace.base_revision) + "<br>current "
+          + esc(run.workspace.current_revision || "unavailable") + "</div>"
+          + (run.workspace.inspector_error
+            ? "<div class=\"error\">" + esc(run.workspace.inspector_error.message) + "</div>"
+            : "<details><summary>Host diff</summary><pre><code>"
+              + esc(run.workspace.diff || "No uncommitted changes.") + "</code></pre></details>")
+        : "<div class=\"muted\">No workspace receipt.</div>";
+      return "<details class=\"row\"><summary><strong>" + esc(run.phase) + "</strong> · "
+        + esc(run.state) + " · " + esc(run.model_provider + "/" + run.model_id) + "</summary>"
+        + "<div class=\"muted\">run " + esc(run.id) + " · prompt "
+        + esc((run.prompt_profile_key || "unknown") + "@v" + (run.prompt_profile_version || "?")) + "</div>"
+        + workspaceDetail + "<h4>Git custody</h4>" + git + "<h4>Artifacts</h4>" + artifacts
+        + "<div class=\"muted\">" + esc(run.events.length) + " recorded run events · "
+        + esc(run.side_effect_receipts.length) + " side-effect receipts · "
+        + esc(run.context_receipts.length) + " context custody receipts</div></details>";
+    }).join("") || "<p class=\"muted\">No phase runs yet.</p>";
+    const validations = task.validations.map((validation) =>
+      row(validation.status + " · " + validation.revision.slice(0, 12), JSON.stringify(validation.evidence))
+    ).join("") || "<p class=\"muted\">No validation evidence.</p>";
+    const reviews = task.reviews.map((review) =>
+      row(review.disposition + " · " + review.revision.slice(0, 12), JSON.stringify(review.findings))
+    ).join("") || "<p class=\"muted\">No independent review.</p>";
+    const sources = (workspace?.sources || []).map((source) =>
+      "<details class=\"row\"><summary><strong>" + esc(source.kind)
+        + (source.source_ref ? " · " + esc(source.source_ref) : "") + "</strong></summary>"
+        + "<div class=\"muted\">" + esc(source.content_sha256.slice(0, 12)) + " · "
+        + esc(source.actor) + "</div><pre><code>" + esc(source.content) + "</code></pre></details>"
+    ).join("") || "<p class=\"muted\">No attached project source snapshots.</p>";
     target.innerHTML = "<form id=\"task-detail-form\">"
       + "<input id=\"task-detail-title\" required maxlength=\"500\" value=\"" + esc(task.title) + "\">"
       + "<textarea id=\"task-detail-description\" maxlength=\"20000\" placeholder=\"Task description\">"
@@ -441,18 +491,24 @@
       + "<textarea id=\"task-detail-criteria\" placeholder=\"Acceptance criteria, one per line\">"
         + esc(task.acceptance_criteria.join("\n")) + "</textarea>"
       + "<button type=\"submit\">Save task v" + esc(task.version) + "</button></form>"
-      + (["in_progress", "blocked", "review"].includes(task.status)
-        ? "<div class=\"controls\"><select id=\"resume-task-phase\"><option>implementation</option>"
-          + "<option>test</option><option>review</option></select>"
-          + "<button data-resume-task=\"" + esc(task.id) + "\">Resume stopped run</button></div>"
-        : "")
+      + "<div class=\"muted\">status " + esc(task.status) + " · revision "
+        + esc(task.revision || "not fixed") + "</div>" + phaseControls + completionControl
       + "<h3>Dependencies</h3><ul>" + dependencies + "</ul>"
       + "<h3>Decisions</h3>" + decisions
+      + "<h3>Validation</h3>" + validations
+      + "<h3>Independent review</h3>" + reviews
+      + "<h3>Phase timeline and workspaces</h3>" + runs
+      + "<h3>Source snapshots</h3>" + sources
       + "<h3>Recent activity</h3>" + activity;
   }
 
   async function loadTask(taskId) {
-    app.selectedTask = await request("/api/tasks/" + encodeURIComponent(taskId));
+    const [task, workspace] = await Promise.all([
+      request("/api/tasks/" + encodeURIComponent(taskId)),
+      request("/api/tasks/" + encodeURIComponent(taskId) + "/workspace"),
+    ]);
+    app.selectedTask = task;
+    app.selectedTaskWorkspace = workspace;
     renderTaskDetail();
   }
 
@@ -829,7 +885,7 @@
     if (!button) return;
     button.disabled = true;
     try {
-      const phase = button.parentElement.querySelector("select").value;
+      const phase = button.dataset.phase;
       await request("/api/tasks/" + encodeURIComponent(button.dataset.schedule) + "/schedule", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": key("schedule-task") },
@@ -892,6 +948,44 @@
       } catch (error) {
         mutationStatus(error.message, true);
         resumeButton.disabled = false;
+      }
+      return;
+    }
+    const scheduleButton = event.target.closest("[data-schedule-selected]");
+    if (scheduleButton) {
+      scheduleButton.disabled = true;
+      try {
+        await request("/api/tasks/" + encodeURIComponent(scheduleButton.dataset.scheduleSelected) + "/schedule", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": key("schedule-task-phase") },
+          body: JSON.stringify({ phase: document.querySelector("#schedule-task-phase").value }),
+        });
+        mutationStatus("Phase queued for the project orchestrator.");
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+        scheduleButton.disabled = false;
+      }
+      return;
+    }
+    const completeButton = event.target.closest("[data-complete-task]");
+    if (completeButton) {
+      completeButton.disabled = true;
+      try {
+        const result = await request(
+          "/api/tasks/" + encodeURIComponent(completeButton.dataset.completeTask) + "/actions/complete",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "idempotency-key": key("complete-task") },
+            body: JSON.stringify({ expectedVersion: app.selectedTask.version, payload: {} }),
+          },
+        );
+        app.selectedTask = result.task;
+        mutationStatus("Task completed; merge request recorded.");
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+        completeButton.disabled = false;
       }
       return;
     }

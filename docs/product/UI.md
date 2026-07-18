@@ -1,8 +1,8 @@
 # Boss Man v2 developer cockpit
 
-Status: Draft for Phase 1 local-first product planning; direct-Pi foundation selected
+Status: Active Phase 1 cockpit direction; direct-Pi foundation implemented
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## Decision summary
 
@@ -10,7 +10,12 @@ Do not revive the original chat-first dashboard and do not treat Ghostty or cmux
 
 Phase 0 compared an Agent of Empires core fork running Pi through `pi-acp` with a direct Pi RPC cockpit and selected the direct-Pi foundation. AoE remains the closest existing product reference: an MIT-licensed Rust application with a responsive PWA, structured agent view, live terminal, diff review, persistent workers, worktrees, Docker/Podman/Apple Containers, reverse-proxy protections, HTTP API, and a capability-scoped plugin system.
 
-AoE is not usable as a normal plugin or unchanged companion service for this spec. Its supported plugin surface cannot own session lifecycle, task/control APIs, transcript custody, containers/worktrees, or an arbitrary full board route; a companion backend would duplicate authority. `FOUNDATION.md` retains the bounded core-fork comparison and decision gates that led to rejection. The selected direct-Pi foundation will build the strict cockpit below with mature components such as xterm.js and an optional code-server workspace link.
+AoE is not usable as a normal plugin or unchanged companion service for this
+spec. Its supported plugin surface cannot own session lifecycle, task/control
+APIs, transcript custody, containers/worktrees, or an arbitrary full board
+route; a companion backend would duplicate authority. The completed
+foundation comparison is retained under `docs/history/phase0/`. It is no
+longer an active implementation decision.
 
 ## Why the obvious alternatives are insufficient
 
@@ -92,7 +97,9 @@ Chat never occupies all three answers.
 - Memory: applicable decisions, constraints, runbooks, previous failures, injected-memory receipt, and links back to source evidence.
 - Timeline: typed task/session/run events with filters.
 - Conversation: Pi messages and composer, intentionally one tab among peers.
-- Terminal: agent terminal and separate human workspace shell, with reconnect and read-only modes.
+- Attach/recovery: exact tmux/cmux/SSH information and captured command
+  artifacts. A separate browser workspace shell is optional only after a
+  demonstrated workflow gap.
 
 ### Session and context
 
@@ -112,8 +119,11 @@ Chat never occupies all three answers.
 
 ### Developer access
 
-- Interactive xterm-compatible terminal with resize, reconnect, copy/paste, search, Unicode, links, and accessible keyboard focus.
-- “Open workspace” integration for a configured browser IDE such as code-server; this is a complement to the task cockpit, not the task database.
+- Pi RPC conversation and cockpit controls are the primary developer surface;
+  tmux/cmux/SSH is the exact-session operational fallback.
+- “Open workspace” integration for a configured browser IDE such as
+  code-server is optional and must not become a second task or session
+  authority.
 - Preview/port links surfaced only through authenticated proxy routes or an explicitly approved network path.
 - Reproducible smoke-test instructions attached to the task and copyable as commands.
 
@@ -155,34 +165,19 @@ later demonstrated workflow gap justifies a browser workspace shell.
    attach/recovery information, diffs, tests, or review.
 6. Search spans tasks, files, artifacts, events, and conversations and identifies the result type.
 
-## Foundation spike acceptance gates
+## Design work guided by dogfooding
 
-The Agent of Empires plus `pi-acp` core-fork candidate is selected over the direct Pi RPC candidate only if a time-boxed prototype proves all of the following and scores better on maintainability:
+The implemented cockpit establishes the three-region layout, project/topic
+intake, durable Pi conversation, board, fixed-revision workspace inspector,
+validation, review, custody, artifacts, and phase controls. Further design is
+usage-driven:
 
-1. Pi remains the only exposed harness and its native JSONL remains accessible and resumable.
-2. Pi extension hooks, including `session_before_compact`, still run normally through `pi-acp`.
-3. Structured messages, tools, diffs, models, and session resume survive the ACP bridge without making ACP the authoritative context format.
-4. Boss Man can add a board, task workspace, context inspector, tests, and review surfaces through a bounded, tested downstream patch set with named upstream seams.
-5. One component owns sessions, containers, worktrees, commits, and authentication.
-6. The web terminal and structured streams work through SWAG with secure cookies, allowed host/origin checks, and reconnects.
-7. The application can hide or remove non-Pi harness choices without invasive regressions.
-8. The license and dependency audit permits distribution of the resulting Boss Man v2.
-9. Agent-facing Git metadata is not broadly writable and credentials are run-scoped rather than copied from a shared persistent agent home.
-10. A rehearsal rebases the fork onto a newer upstream revision, measures conflicts, and demonstrates a repeatable upstream-intake process.
+- attention aggregation across multiple active repositories;
+- large-diff and artifact navigation;
+- recovery/reconciliation explanations;
+- resource-pressure and provider-state visibility; and
+- mobile triage after the desktop workflow is stable.
 
-AoE is rejected if any of gates 1–5 or 9 fail. Even if all pass, the owner decides after comparing implementation size, operational complexity, regression coverage, and forecast upstream cost with the direct candidate. Coder/code-server remains an optional external IDE either way.
-
-## Design work still required
-
-No Figma mock exists. Before implementation beyond the foundation spike, produce low-fidelity layouts for:
-
-- desktop fleet/attention dashboard;
-- new-topic and existing-repository orchestrator intake;
-- orchestrator conversation with structured task/source/decision changes;
-- task workspace with diff and inspector;
-- review and validation loop;
-- context snapshot/tree browser;
-- terminal reconnect/error states; and
-- mobile attention, diff, and full-screen terminal flows.
-
-The layouts should be tested against real long task names, large diffs, concurrent sessions, failed tests, missing raw output, offline/reconnect, and a reviewer requesting changes. A polished chat screen is not an acceptable substitute.
+No browser terminal or full browser IDE is required to close Phase 1. A
+polished chat screen is not a substitute for task, evidence, and risk
+observability.

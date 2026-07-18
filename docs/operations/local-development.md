@@ -43,7 +43,10 @@ npm start -- \
 
 Open [http://127.0.0.1:4310](http://127.0.0.1:4310). The central API binds to `127.0.0.1` intentionally. Runtime state is stored under the selected `--state` directory and retained across restarts.
 
-No password or API key is required in this profile. Do not change the listener to `0.0.0.0` as a shortcut. Phase 1 will add an explicit private-interface/CIDR-aware trusted-LAN profile.
+No password or API key is required in this profile. Do not change the listener
+to `0.0.0.0` as a shortcut. Trusted-LAN exposure is not a Phase 1 requirement;
+use loopback until an authenticated remote profile or a separately approved
+private-interface/CIDR contract exists.
 
 Provider/model/thinking are central defaults persisted on newly created
 orchestrator conversations. The deterministic defaults are
@@ -223,9 +226,16 @@ existing automated probes exercise real task claiming, Pi RPC,
 containers, worktrees, host Git checkpoints, RTK evidence, and context export.
 Conversation custody/model switching, repository/source intake, prompt
 editing, task detail, owner decisions, and command reconciliation now have
-first-class local controls. Deeper diff/test/review/context/artifact inspectors
-and a complete real-repository phase-flow dogfood are next. D-043 defers a
-browser PTY; tmux/SSH remains the current exact-session attach path.
+first-class local controls. The fixed-revision implementation/checkpoint/test/
+review protocol and its diff/test/review/context/artifact inspector are
+implemented; live-provider dogfooding across real repositories is next. D-043
+defers a browser PTY; tmux/SSH remains the current exact-session attach path.
+
+Watch the zero-provider baseline before scheduling live work:
+
+```sh
+npm run test:workflow
+```
 
 To exercise the complete model-less C0-04 context path:
 

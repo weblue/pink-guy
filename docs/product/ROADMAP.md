@@ -2,7 +2,7 @@
 
 Status: Active
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 This is the canonical phase sequence. Phase 0 research artifacts remain useful evidence, but they no longer make remote authentication or second-host reproduction prerequisites for local product development.
 
@@ -11,7 +11,7 @@ This is the canonical phase sequence. Phase 0 research artifacts remain useful e
 | Profile | Intended access | Listener | Application authentication |
 |---|---|---|---|
 | Local smoke | Browser and tools on the Boss Man Mac | Loopback only | None |
-| Trusted LAN development | Explicitly selected private LAN interface and allowlisted private CIDRs | Private address only; never a public wildcard | None initially |
+| Trusted LAN development (optional) | Explicitly selected private LAN interface and allowlisted private CIDRs | Private address only; never a public wildcard | Deferred unless local dogfooding demonstrates a need before Phase 3 |
 | Remote | SWAG HTTPS subdomain or another explicitly approved remote edge | Private upstream reachable only from the trusted proxy/LAN | Required |
 
 The application must select a profile explicitly at startup. It must not decide that a request is “local” merely from an untrusted `X-Forwarded-For` header. Enabling remote exposure is a human-approved deployment change.
@@ -36,10 +36,10 @@ Phase 0 does not require application authentication because its runnable profile
 
 ## Phase 1 — useful local-first developer cockpit
 
-Status: In progress — P1-1 through P1-3 usable increments implemented; P1-4
-inspectors and real-repository phase-flow dogfood next
+Status: In progress — P1-4 fixed-revision workflow and inspectors implemented;
+live-provider dogfood across real repositories next
 
-Purpose: make Boss Man useful for daily development on the host and, when explicitly enabled, a trusted LAN.
+Purpose: make Boss Man useful for supervised daily development on its host.
 
 The completed local control-loop slice is
 [`../features/local-control-loop/PRODUCT.md`](../features/local-control-loop/PRODUCT.md)
@@ -64,7 +64,9 @@ conversation by topic, project, or repository and exposes the cockpit deep
 link plus orchestrator tmux/process endpoint. Versioned agent prompts,
 custody-backed model switching, repository/source intake, task detail and
 owner reconciliation controls are also implemented. Deeper workspace
-inspectors and full real-repository phase-flow dogfooding remain.
+inspection, phase execution to settlement, fixed-revision test/review
+handoffs, and the model-less workflow observer are implemented. Full
+live-provider phase-flow dogfooding remains.
 
 Scope:
 
@@ -79,13 +81,14 @@ Scope:
 - host-owned checkpoint/commit operations and manual merge preparation;
 - centrally assigned per-run provider/model selection and current run/resource
   observability;
-- desktop browser tests and local smoke runbook;
-- explicit trusted-LAN listener profile with interface/CIDR validation and a clear “no application auth” warning.
+- desktop browser tests and local smoke runbook.
 
 Exit: the owner can start or reopen a scoped orchestrator conversation, turn a
 new idea or existing repository/ticket into observable tasks, manage multiple
-repositories, and complete an implementation → test → review workflow from
-the local cockpit without editing SQLite or calling internal probe helpers.
+repositories, and complete an implementation → fixed checkpoint → test →
+review workflow from the local cockpit without editing SQLite or calling
+internal probe helpers. The workflow is proven on two real repositories and
+orchestrator context is captured before compaction.
 
 Adoption result: this is the earliest point where Boss Man should be preferred
 for supervised local coding. Manual merge/recovery may remain acceptable, but
@@ -104,7 +107,8 @@ Scope:
 - provider failure drills, switch recovery, and optional paid fallback decision;
 - measured global/per-project concurrency and host-pressure limits for the 64 GB M1 Max;
 - clean second-ARM64-host reproduction and migration rehearsal;
-- security review of terminal, artifact, capability, and trusted-LAN boundaries.
+- security review of artifact, capability, optional workspace-shell, and
+  network boundaries.
 
 Exit: local operation survives application/host restarts, preserves audit/context custody, and has measured resource and recovery policies.
 
@@ -130,7 +134,8 @@ Scope:
 
 Raw passwords and API keys are never checked into Git, stored in SQLite task/context records, or placed in browser `localStorage` by default. A browser UI should use an HttpOnly session after password login. API clients should use an OS keychain, environment/secret file, or an in-memory/session-scoped key. Persisting a bearer key in browser `localStorage` may be offered only as an explicit convenience mode after an XSS/CSP review because any script running in that origin can read it.
 
-Exit: all requests through the remote profile require a valid owner session or API key, while local and trusted-LAN profiles remain operationally independent.
+Exit: all requests through the remote profile require a valid owner session
+or API key, while loopback remains independently operational.
 
 Adoption result: Boss Man is ready for its intended remote-first use through
 the home-server SWAG edge.

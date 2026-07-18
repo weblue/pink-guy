@@ -10,6 +10,8 @@ and retained history.
 - [Current state](product/CURRENT-STATE.md) — implemented capabilities, stored
   artifacts, known gaps, and the next delivery slices.
 - [Roadmap](product/ROADMAP.md) — canonical phase and exposure sequence.
+- [Phase 1 dogfood plan](product/DOGFOOD-PLAN.md) — entry gates, two real-work
+  scenarios, evidence, and explicit non-requirements.
 - [Decision log](architecture/DECISIONS.md) — owner-approved, proposed, and
   deferred decisions.
 
@@ -31,17 +33,18 @@ verification results.
 - [Editable agent prompt profiles](features/agent-prompt-profiles/)
 - [Conversation custody and model switching](features/conversation-custody/)
 - [Repository intake and dogfood controls](features/dogfood-controls/)
+- [Workspace inspectors and phase flow](features/workspace-phase-flow/)
 
-P1-1 through P1-3 now have usable first increments. The implementation
-frontier is P1-4: deeper workspace inspectors and complete real-repository
-implementation → test → review → checkpoint dogfooding.
+P1-1 through P1-3 are usable. P1-4 now has its fixed-revision phase protocol,
+workspace inspector, and model-less observer baseline; the implementation
+frontier is live-provider dogfooding across real repositories.
 
 ## Adoption checkpoints
 
 - **Dogfood now:** use Boss Man alongside a direct coding client for
   noncritical, supervised work.
 - **Supervised daily driver:** complete Phase 1 and validate the full
-  implementation → test → review → checkpoint flow across multiple real
+  implementation → fixed checkpoint → test → review flow across multiple real
   repositories.
 - **Full-time local replacement:** complete Phase 2 recovery, Git completion,
   credential/concurrency, backup, and portability gates.

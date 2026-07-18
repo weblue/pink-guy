@@ -24,10 +24,10 @@ Read the authoritative task and acceptance criteria before editing. Keep changes
   }),
   test: Object.freeze({
     displayName: "Test agent",
-    role: "worker",
+    role: "validator",
     prompt: `Validate the assigned task independently against its acceptance criteria.
 
-Inspect the current revision and existing test conventions, reproduce relevant failure modes, add or refine deterministic tests when needed, and record exact commands and results. Do not broaden product scope or conceal an inconclusive result.`,
+Inspect the current fixed revision and existing test conventions, reproduce relevant failure modes, and record exact commands and results through the validation tool. Do not edit the fixed revision, broaden product scope, or conceal an inconclusive result; block with a concrete test gap when new test code is required.`,
   }),
   review: Object.freeze({
     displayName: "Review agent",

@@ -52,7 +52,11 @@ async function request(path, { method = "GET", body, token, idempotencyKey } = {
 
 const html = await fetch(base).then((response) => response.text());
 assert(
-  html.includes('id="create-task"') && html.includes("data-schedule") && !html.includes("chat input"),
+  html.includes('id="create-task"')
+    && html.includes("data-schedule")
+    && html.includes("Phase timeline and workspaces")
+    && html.includes("/workspace")
+    && !html.includes("chat input"),
   "task-first local controls are absent or chat-first UI returned",
 );
 const invalidCreate = await request("/api/projects/controls-project/tasks", {
@@ -179,6 +183,14 @@ const registration = await request("/api/orchestrators", {
   },
 });
 assert(registration.status === 201, "project orchestrator registration failed");
+const workspaceInspector = await request(`/api/tasks/${taskId}/workspace`);
+assert(
+  workspaceInspector.status === 200
+    && workspaceInspector.value.allowed_phases.join(",") === "implementation"
+    && workspaceInspector.value.task.id === taskId
+    && Array.isArray(workspaceInspector.value.runs),
+  "owner workspace inspector did not expose authoritative phase controls",
+);
 const invalidPhase = await request(`/api/tasks/${taskId}/schedule`, {
   method: "POST",
   idempotencyKey: "controls-invalid-phase",
@@ -189,15 +201,15 @@ assert(invalidPhase.status === 400 && authority.store.getTask(taskId).status ===
 const scheduled = await request(`/api/tasks/${taskId}/schedule`, {
   method: "POST",
   idempotencyKey: "controls-schedule",
-  body: { phase: "test" },
+  body: { phase: "implementation" },
 });
 assert(
   scheduled.status === 201
     && scheduled.value.task.status === "in_progress"
     && scheduled.value.task.version === 5
-    && scheduled.value.task.assigned_worker.startsWith("task-agent:test:")
+    && scheduled.value.task.assigned_worker.startsWith("task-agent:implementation:")
     && scheduled.value.command.state === "queued"
-    && scheduled.value.command.phase === "test",
+    && scheduled.value.command.phase === "implementation",
   "atomic task scheduling result is invalid",
 );
 const claimed = await request("/api/orchestrators/commands/claim", {
@@ -212,7 +224,7 @@ assert(
 const scheduleReplay = await request(`/api/tasks/${taskId}/schedule`, {
   method: "POST",
   idempotencyKey: "controls-schedule",
-  body: { phase: "test" },
+  body: { phase: "implementation" },
 });
 assert(
   scheduleReplay.status === 200
@@ -256,7 +268,7 @@ const result = {
   owner_decision_resolution: true,
   create_idempotency: true,
   no_orchestrator_atomic_rollback: true,
-  phase_scoped_schedule: "test",
+  phase_scoped_schedule: "implementation",
   schedule_idempotency: true,
   task_and_command_atomic: true,
   owner_audit_events: auditTypes,
