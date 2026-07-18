@@ -1,7 +1,7 @@
 # Phase 1 dogfood plan
 
-Status: Active dogfood — the new-project scenario completed; one bounded
-maintenance-repository scenario remains
+Status: Both Phase 1 repository scenarios complete; deterministic Ready
+scheduling is the remaining proposed closure slice
 
 Last updated: 2026-07-18
 
@@ -154,9 +154,44 @@ The run exposed four evidence-backed follow-ups:
 3. A post-checkpoint transport failure has no direct “accept proven
    checkpoint and continue validation” action. Reset plus explicit test
    scheduling works but is unnecessarily indirect.
-4. Repository import has no normal cancel/delete control. A rejected
-   PowerToys dogfood candidate could be left inert, but removing its imported
-   project would require bypassing the public control plane.
+4. Repository import initially had no normal cancel/delete control. The safe
+   managed-project deletion slice now provides an audited, idempotent cleanup
+   path for unused imports while refusing projects with retained work.
+
+## Maintenance-repository scenario result
+
+Boss Man imported the existing
+`https://github.com/weblue/inspector-gadget.git` repository into a host-owned
+checkout and created its durable project topic. The owner supplied a bounded
+maintenance request to add a model-less Bash syntax regression check.
+
+- The orchestrator made one explicit assumption: “tracked Bash scripts” means
+  the repository's current Git-tracked `.sh` files.
+- It created one executable `maintenance`, `bash`, `regression-test` task with
+  five concrete acceptance criteria and scheduled implementation.
+- Implementation produced fixed revision
+  `30f1cc551de44b08cf5d8573ea54ee7f40c8fb66`, adding
+  `check-bash-syntax.sh` and concise README usage in a 52-line diff.
+- The model-less coordinator automatically scheduled test at that exact
+  revision. Validation passed with inspected script/README evidence and a
+  successful syntax run.
+- The coordinator then automatically scheduled an independently identified
+  reviewer. Review approved the same revision; completion moved the task to
+  Done and recorded merge request
+  `bbcca053-1f89-4a59-ba66-8f9153815a3c`.
+- Host smoke outside the task container reported:
+  `bash -n passed for 6 tracked Bash scripts.`
+
+No owner phase button, direct SQLite mutation, probe helper, manual test/review
+schedule, remote push, or merge was used. The run proved checkout, scoped
+conversation refinement, implementation, fixed-revision validation,
+independent review, completion, and observable model-less phase continuation.
+
+It also sharpened one architecture boundary: the conversational LLM still
+released the initial implementation task, while the central coordinator
+deterministically selected test and review. Proposed D-046 makes Ready
+eligibility, ordering, capacity, and initial sub-agent dispatch model-less as
+the Phase 1 closure slice.
 
 ## Exit evidence
 
