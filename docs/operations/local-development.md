@@ -140,6 +140,8 @@ Useful commands:
 npm run boss -- status
 npm run boss -- topics
 npm run boss -- import --repo-url git@github.com:OWNER/REPOSITORY.git
+npm run boss -- delete-project --project PROJECT_ID \
+  --confirm "Exact project name" --reason "Canceled unused import"
 npm run boss -- chat --topic TOPIC_ID
 npm run boss -- chat --repo "$PWD" --message "Refine the acceptance criteria."
 printf '%s\n' "Create a test task." | npm run boss -- chat --repo "$PWD"
@@ -153,6 +155,11 @@ and opens its durable project topic. The browser also accepts an optional
 description and immutable generic source snapshot. SSH authentication is
 performed by host Git; never paste private keys or provider credentials into a
 topic or source snapshot.
+
+Safe deletion is limited to an activity-free managed import. It removes only
+the platform-owned checkout and retains an audited tombstone. Any task,
+source/context record, conversation activity, command, evidence, or active
+lease blocks deletion.
 
 Prompt profile edits are append-only revisions. They apply when the matching
 Pi process next starts; running processes keep their pinned revision. Model
@@ -222,7 +229,7 @@ checks.
 ## Current execution boundary
 
 The served Phase 1 cockpit shows projects, topics, the task board, sessions,
-project-orchestrator leases, recent commands, local create/schedule controls,
+project-orchestrator leases, recent commands, local create/release controls,
 and a reconnectable Pi RPC conversation workspace with structured task-change
 cards. The orchestrator can create, update, split, link, annotate, and
 decision-gate tasks inside its project with exact turn provenance. The
@@ -232,9 +239,9 @@ Conversation custody/model switching, intake-to-project transfer, blocking
 pre-compaction export, repository/source intake, plain-text prompt defaults,
 per-agent model routes, task detail, owner decisions, and command
 reconciliation now have first-class local controls. The fixed-revision
-implementation/checkpoint/test/review protocol and its
-diff/test/review/context/artifact inspector are implemented; live-provider
-dogfooding across real repositories is next. D-043
+implementation/checkpoint/test/review protocol, deterministic initial Ready
+dispatch, and its diff/test/review/context/artifact inspector are implemented;
+one live automatic-release acceptance smoke remains. D-043
 defers a browser PTY; tmux/SSH remains the current exact-session attach path.
 
 Watch the zero-provider baseline before scheduling live work:

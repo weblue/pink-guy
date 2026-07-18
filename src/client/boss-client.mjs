@@ -122,6 +122,18 @@ export class BossManClient {
     });
   }
 
+  async deleteProject(
+    projectId,
+    { confirmName, reason },
+    { idempotencyKey = `terminal-project-delete-${randomUUID()}` } = {},
+  ) {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}`, {
+      method: "DELETE",
+      idempotencyKey,
+      body: { confirmName, reason },
+    });
+  }
+
   async createSourceSnapshot(
     projectId,
     { kind, sourceRef = null, content },
@@ -149,6 +161,38 @@ export class BossManClient {
       method: "PUT",
       idempotencyKey,
       body: { prompt, expectedVersion },
+    });
+  }
+
+  async taskDetail(taskId) {
+    return this.request(`/api/tasks/${encodeURIComponent(taskId)}`);
+  }
+
+  async setTaskDispatch(
+    taskId,
+    {
+      operation,
+      expectedVersion,
+      priority = null,
+      modelProvider = null,
+      modelId = null,
+      thinkingLevel = null,
+      billingClass = null,
+    },
+    { idempotencyKey = `terminal-dispatch-${randomUUID()}` } = {},
+  ) {
+    return this.request(`/api/tasks/${encodeURIComponent(taskId)}/dispatch`, {
+      method: "POST",
+      idempotencyKey,
+      body: {
+        operation,
+        expectedVersion,
+        priority,
+        modelProvider,
+        modelId,
+        thinkingLevel,
+        billingClass,
+      },
     });
   }
 

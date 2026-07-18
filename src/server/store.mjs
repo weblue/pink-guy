@@ -12,6 +12,9 @@ import { validateModelRoute } from "./model-routes.mjs";
 const TASK_STATES = new Set(["backlog", "ready", "in_progress", "review", "blocked", "done"]);
 const TASK_KINDS = new Set(["executable", "umbrella", "intake"]);
 const RUN_PHASES = new Set(["implementation", "test", "review"]);
+const DISPATCH_POLICIES = new Set(["manual", "automatic", "paused"]);
+const DISPATCH_PRIORITY_MIN = -100;
+const DISPATCH_PRIORITY_MAX = 100;
 const ORCHESTRATOR_COMMAND_KINDS = new Set(["start_task"]);
 const ORCHESTRATOR_COMMAND_TERMINAL_STATES = new Set([
   "succeeded", "failed", "reconciliation_required", "cancelled",
@@ -69,6 +72,27 @@ function normalizeTaskTags(value = []) {
   return tags;
 }
 
+function normalizeDispatchPolicy(value) {
+  if (!DISPATCH_POLICIES.has(value)) {
+    throw codedError("invalid_request", `unsupported dispatch policy: ${value}`);
+  }
+  return value;
+}
+
+function normalizeDispatchPriority(value) {
+  if (
+    !Number.isInteger(value)
+    || value < DISPATCH_PRIORITY_MIN
+    || value > DISPATCH_PRIORITY_MAX
+  ) {
+    throw codedError(
+      "invalid_request",
+      `task priority must be an integer from ${DISPATCH_PRIORITY_MIN} to ${DISPATCH_PRIORITY_MAX}`,
+    );
+  }
+  return value;
+}
+
 function publicOrchestrator(row) {
   if (!row) return null;
   const { token_sha256: ignoredTokenHash, metadata_json: ignoredMetadataJson, ...visible } = row;
@@ -118,6 +142,19 @@ function publicOrchestrationLease(row) {
   return { ...visible, metadata: parseJson(row.metadata_json) ?? {} };
 }
 
+function publicProjectDeletionReceipt(row) {
+  if (!row) return null;
+  const {
+    request_sha256: ignoredRequestHash,
+    project_snapshot_json: ignoredProjectSnapshotJson,
+    ...visible
+  } = row;
+  return {
+    ...visible,
+    project_snapshot: parseJson(row.project_snapshot_json) ?? {},
+  };
+}
+
 export class Phase0Store {
   constructor(path, { clock = () => new Date().toISOString() } = {}) {
     mkdirSync(dirname(path), { recursive: true });
@@ -142,6 +179,23 @@ export class Phase0Store {
         request_sha256 TEXT NOT NULL,
         idempotency_key TEXT NOT NULL UNIQUE,
         created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS project_deletion_receipts (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        idempotency_key TEXT NOT NULL UNIQUE,
+        request_sha256 TEXT NOT NULL,
+        project_snapshot_json TEXT NOT NULL,
+        original_path TEXT NOT NULL,
+        quarantine_path TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        state TEXT NOT NULL,
+        checkout_state TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        tombstoned_at TEXT,
+        completed_at TEXT,
+        updated_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS source_snapshots (
         id TEXT PRIMARY KEY,
@@ -672,6 +726,11 @@ export class Phase0Store {
     this.ensureColumn("tasks", "archived_at", "TEXT");
     this.ensureColumn("tasks", "archived_by", "TEXT");
     this.ensureColumn("tasks", "archive_reason", "TEXT");
+    this.ensureColumn("tasks", "dispatch_policy", "TEXT NOT NULL DEFAULT 'manual'");
+    this.ensureColumn("tasks", "priority", "INTEGER NOT NULL DEFAULT 0");
+    this.ensureColumn("tasks", "released_at", "TEXT");
+    this.ensureColumn("tasks", "released_by", "TEXT");
+    this.ensureColumn("tasks", "dispatch_model_route_json", "TEXT");
     const lifecycleMigration = "2026-07-18-task-lifecycle-classification";
     if (!this.database.prepare("SELECT 1 value FROM schema_migrations WHERE id=?").get(lifecycleMigration)) {
       this.database.exec("BEGIN IMMEDIATE");
@@ -695,6 +754,9 @@ export class Phase0Store {
     }
     this.ensureColumn("projects", "repository_id", "TEXT");
     this.ensureColumn("projects", "source_url", "TEXT");
+    this.ensureColumn("projects", "deleted_at", "TEXT");
+    this.ensureColumn("projects", "deleted_by", "TEXT");
+    this.ensureColumn("projects", "deletion_reason", "TEXT");
     this.ensureColumn("task_events", "actor_role", "TEXT");
     this.ensureColumn("task_events", "run_id", "TEXT");
     this.ensureColumn("task_events", "task_version", "INTEGER");
@@ -741,12 +803,16 @@ export class Phase0Store {
         ON conversation_custody_snapshots(conversation_id,created_at DESC);
       CREATE INDEX IF NOT EXISTS agent_prompt_revisions_profile_version
         ON agent_prompt_revisions(profile_key,version DESC);
-      CREATE UNIQUE INDEX IF NOT EXISTS one_project_per_import_source
-        ON projects(source_url) WHERE source_url IS NOT NULL;
       CREATE INDEX IF NOT EXISTS task_dependencies_reverse
         ON task_dependencies(depends_on_task_id,task_id);
       CREATE UNIQUE INDEX IF NOT EXISTS one_active_orchestration_lease_per_scope
         ON orchestration_leases(scope_type,scope_id) WHERE status='active';
+    `);
+    this.database.exec(`
+      DROP INDEX IF EXISTS one_project_per_import_source;
+      CREATE UNIQUE INDEX one_project_per_import_source
+        ON projects(source_url)
+        WHERE source_url IS NOT NULL AND deleted_at IS NULL;
     `);
   }
 
@@ -1328,6 +1394,461 @@ export class Phase0Store {
     return { replayed: false, task: this.getTaskDetails(taskId) };
   }
 
+  setTaskDispatch({
+    taskId,
+    operation,
+    expectedVersion,
+    priority = null,
+    modelRoute = null,
+    idempotencyKey,
+    actor = "local-owner",
+    actorRole = "owner",
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    if (!["release", "pause_dispatch", "manualize_dispatch", "set_priority"].includes(operation)) {
+      throw codedError("invalid_request", `unsupported dispatch mutation: ${operation}`);
+    }
+    const task = this.getTask(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    if (!Number.isInteger(expectedVersion)) {
+      throw codedError("invalid_request", "expected task version is required");
+    }
+    const normalizedPriority = priority === null
+      ? Number(task.priority)
+      : normalizeDispatchPriority(priority);
+    const normalizedRoute = modelRoute === null
+      ? parseJson(task.dispatch_model_route_json)
+      : {
+        ...validateModelRoute(modelRoute, "implementation dispatch model route"),
+        policySource: modelRoute?.policySource ?? "task_dispatch",
+      };
+    const nextPolicy = {
+      release: "automatic",
+      pause_dispatch: "paused",
+      manualize_dispatch: "manual",
+      set_priority: task.dispatch_policy,
+    }[operation];
+    normalizeDispatchPolicy(nextPolicy);
+    const request = {
+      action: operation,
+      taskId,
+      expectedVersion,
+      dispatchPolicy: nextPolicy,
+      priority: normalizedPriority,
+      modelRoute: normalizedRoute,
+      actor,
+    };
+    const requestSha256 = sha256(JSON.stringify(request));
+    const eventType = {
+      release: "task_released",
+      pause_dispatch: "task_dispatch_paused",
+      manualize_dispatch: "task_dispatch_manualized",
+      set_priority: "task_priority_updated",
+    }[operation];
+    const priorEvent = this.database.prepare(
+      "SELECT * FROM audit_events WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (priorEvent) {
+      if (priorEvent.request_sha256 !== requestSha256 || priorEvent.type !== eventType) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different dispatch mutation");
+      }
+      return { replayed: true, task: this.getTaskDetails(taskId) };
+    }
+    if (task.version !== expectedVersion) {
+      throw codedError(
+        "version_conflict",
+        `task version conflict: expected ${expectedVersion}, current ${task.version}`,
+      );
+    }
+    if (task.archived_at || task.task_kind !== "executable") {
+      throw codedError("transition_denied", "only active executable tasks have dispatch policy");
+    }
+    const active = this.database.prepare(`SELECT 1 value FROM orchestrator_commands
+      WHERE task_id=? AND state IN ('queued','claimed') LIMIT 1`).get(taskId)
+      || this.database.prepare(`SELECT 1 value FROM runs r JOIN sessions s ON s.id=r.session_id
+        WHERE s.task_id=? AND r.state='running' LIMIT 1`).get(taskId);
+    if (active || !["ready", "backlog"].includes(task.status) || task.assigned_worker) {
+      throw codedError(
+        "transition_denied",
+        "dispatch policy can change only for an unassigned queued task",
+      );
+    }
+    if (operation === "release" && !["manual", "paused"].includes(task.dispatch_policy)) {
+      throw codedError("transition_denied", "only manual or paused tasks can be released");
+    }
+    if (operation === "release" && task.status !== "ready") {
+      throw codedError("transition_denied", "automatic release requires a Ready task");
+    }
+    if (operation === "pause_dispatch" && task.dispatch_policy !== "automatic") {
+      throw codedError("transition_denied", "only automatic tasks can be paused");
+    }
+    if (
+      operation === "manualize_dispatch"
+      && !["automatic", "paused"].includes(task.dispatch_policy)
+    ) {
+      throw codedError("transition_denied", "task is already manual");
+    }
+    if (operation === "release") {
+      const criteria = parseJson(task.acceptance_criteria_json) ?? [];
+      if (criteria.length === 0) {
+        throw codedError(
+          "transition_denied",
+          "automatic release requires at least one acceptance criterion",
+        );
+      }
+      const dependency = this.database.prepare(`SELECT t.id FROM task_dependencies d
+        JOIN tasks t ON t.id=d.depends_on_task_id
+        WHERE d.task_id=? AND t.status<>'done' ORDER BY t.id LIMIT 1`).get(taskId);
+      if (dependency) {
+        throw codedError("transition_denied", `task dependency is not complete: ${dependency.id}`);
+      }
+      const decision = this.database.prepare(`SELECT id FROM decision_gates
+        WHERE task_id=? AND status='decision_required' ORDER BY created_at,id LIMIT 1`).get(taskId);
+      if (decision) {
+        throw codedError("transition_denied", `task has an unresolved decision: ${decision.id}`);
+      }
+    }
+    const now = this.clock();
+    const resumed = operation === "release" && task.dispatch_policy === "paused";
+    const releasedAt = operation === "release" && !resumed ? now : task.released_at;
+    const releasedBy = operation === "release" && !resumed ? actor : task.released_by;
+    const prior = this.getTaskDetails(taskId);
+    const nextVersion = task.version + 1;
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const changed = this.database.prepare(`UPDATE tasks SET
+        dispatch_policy=?,priority=?,released_at=?,released_by=?,
+        dispatch_model_route_json=?,version=?,updated_at=?
+        WHERE id=? AND version=?`).run(
+        nextPolicy,
+        normalizedPriority,
+        releasedAt,
+        releasedBy,
+        normalizedRoute ? JSON.stringify(normalizedRoute) : null,
+        nextVersion,
+        now,
+        taskId,
+        task.version,
+      );
+      if (Number(changed.changes) !== 1) {
+        throw codedError("version_conflict", "task changed during dispatch mutation");
+      }
+      const current = this.getTaskDetails(taskId);
+      const payload = {
+        operation,
+        dispatchPolicy: nextPolicy,
+        priority: normalizedPriority,
+        releasedAt,
+        releasedBy,
+        modelRoute: normalizedRoute,
+      };
+      this.database.prepare(`INSERT INTO task_events(
+        task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+        actor_role,run_id,task_version
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        taskId,
+        eventType,
+        actor,
+        task.status,
+        task.status,
+        JSON.stringify(payload),
+        idempotencyKey,
+        now,
+        actorRole,
+        null,
+        nextVersion,
+      );
+      this.database.prepare(`INSERT INTO audit_events(
+        task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+        idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        taskId,
+        eventType,
+        actor,
+        actorRole,
+        null,
+        null,
+        JSON.stringify(prior),
+        JSON.stringify(current),
+        JSON.stringify(payload),
+        idempotencyKey,
+        requestSha256,
+        now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return { replayed: false, task: this.getTaskDetails(taskId) };
+  }
+
+  readyDispatchCandidates(projectId, {
+    projectCapacity = 1,
+    globalCapacity = 1,
+  } = {}) {
+    if (!this.getProject(projectId)) {
+      throw codedError("not_found", `unknown project: ${projectId}`);
+    }
+    const orchestrator = this.activeProjectOrchestrator(projectId);
+    const projectActive = Number(this.database.prepare(`SELECT COUNT(*) count
+      FROM orchestrator_commands
+      WHERE project_id=? AND state IN ('queued','claimed')`).get(projectId).count);
+    const globalActive = Number(this.database.prepare(`SELECT COUNT(*) count
+      FROM orchestrator_commands WHERE state IN ('queued','claimed')`).get().count);
+    const rows = this.database.prepare(`SELECT * FROM tasks
+      WHERE project_id=? AND archived_at IS NULL AND task_kind='executable'
+        AND dispatch_policy IN ('automatic','paused')
+      ORDER BY priority DESC,released_at,id`).all(projectId);
+    let rank = 0;
+    return rows.map((task) => {
+      const blockers = [];
+      if (task.dispatch_policy === "paused") blockers.push("paused");
+      if (task.status !== "ready") blockers.push("not_ready");
+      if (task.assigned_worker) blockers.push("assigned");
+      const criteria = parseJson(task.acceptance_criteria_json) ?? [];
+      if (criteria.length === 0) blockers.push("missing_acceptance_criteria");
+      if (this.database.prepare(`SELECT 1 value FROM task_dependencies d
+        JOIN tasks t ON t.id=d.depends_on_task_id
+        WHERE d.task_id=? AND t.status<>'done' LIMIT 1`).get(task.id)) {
+        blockers.push("unresolved_dependency");
+      }
+      if (this.database.prepare(`SELECT 1 value FROM decision_gates
+        WHERE task_id=? AND status='decision_required' LIMIT 1`).get(task.id)) {
+        blockers.push("human_decision_required");
+      }
+      if (
+        this.database.prepare(`SELECT 1 value FROM orchestrator_commands
+          WHERE task_id=? AND state IN ('queued','claimed') LIMIT 1`).get(task.id)
+        || this.database.prepare(`SELECT 1 value FROM runs r JOIN sessions s ON s.id=r.session_id
+          WHERE s.task_id=? AND r.state='running' LIMIT 1`).get(task.id)
+      ) blockers.push("phase_active");
+      const structurallyEligible = blockers.length === 0;
+      const queueRank = structurallyEligible ? ++rank : null;
+      if (!orchestrator) blockers.push("orchestrator_unavailable");
+      if (projectActive >= projectCapacity) blockers.push("project_capacity");
+      if (globalActive >= globalCapacity) blockers.push("global_capacity");
+      return {
+        taskId: task.id,
+        dispatchPolicy: task.dispatch_policy,
+        priority: Number(task.priority),
+        releasedAt: task.released_at,
+        releasedBy: task.released_by,
+        modelRoute: parseJson(task.dispatch_model_route_json),
+        rank: queueRank,
+        eligible: structurallyEligible
+          && Boolean(orchestrator)
+          && projectActive < projectCapacity
+          && globalActive < globalCapacity,
+        blockers,
+      };
+    });
+  }
+
+  taskDispatchProjection(taskId) {
+    const task = this.getTask(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    const projected = this.readyDispatchCandidates(task.project_id)
+      .find((candidate) => candidate.taskId === taskId);
+    return projected ?? {
+      taskId,
+      dispatchPolicy: task.dispatch_policy,
+      priority: Number(task.priority),
+      releasedAt: task.released_at,
+      releasedBy: task.released_by,
+      modelRoute: parseJson(task.dispatch_model_route_json),
+      rank: null,
+      eligible: false,
+      blockers: task.dispatch_policy === "manual"
+        ? ["manual"]
+        : task.archived_at
+          ? ["archived"]
+          : task.task_kind !== "executable"
+            ? ["non_executable"]
+            : ["not_queued"],
+    };
+  }
+
+  dispatchNextReadyTask({
+    projectId,
+    modelRoute,
+    projectCapacity = 1,
+    globalCapacity = 1,
+    actor = "ready-scheduler",
+  }) {
+    if (!this.getProject(projectId)) {
+      throw codedError("not_found", `unknown project: ${projectId}`);
+    }
+    this.expireOrchestratorLeases();
+    const defaultRoute = {
+      ...validateModelRoute(modelRoute, "automatic implementation model route"),
+      policySource: modelRoute?.policySource ?? "automatic_dispatch_default",
+    };
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const orchestrator = this.database.prepare(`SELECT * FROM project_orchestrators
+        WHERE project_id=? AND status='active' AND lease_expires_at>?`).get(projectId, now);
+      if (!orchestrator) {
+        this.database.exec("COMMIT");
+        return { scheduled: false, reason: "orchestrator_unavailable" };
+      }
+      const projectActive = Number(this.database.prepare(`SELECT COUNT(*) count
+        FROM orchestrator_commands
+        WHERE project_id=? AND state IN ('queued','claimed')`).get(projectId).count);
+      if (projectActive >= projectCapacity) {
+        this.database.exec("COMMIT");
+        return { scheduled: false, reason: "project_capacity" };
+      }
+      const globalActive = Number(this.database.prepare(`SELECT COUNT(*) count
+        FROM orchestrator_commands WHERE state IN ('queued','claimed')`).get().count);
+      if (globalActive >= globalCapacity) {
+        this.database.exec("COMMIT");
+        return { scheduled: false, reason: "global_capacity" };
+      }
+      const task = this.database.prepare(`SELECT t.* FROM tasks t
+        WHERE t.project_id=? AND t.status='ready' AND t.task_kind='executable'
+          AND t.archived_at IS NULL AND t.assigned_worker IS NULL
+          AND t.dispatch_policy='automatic' AND t.released_at IS NOT NULL
+          AND t.acceptance_criteria_json<>'[]'
+          AND NOT EXISTS(
+            SELECT 1 FROM task_dependencies d JOIN tasks dependency
+              ON dependency.id=d.depends_on_task_id
+            WHERE d.task_id=t.id AND dependency.status<>'done'
+          )
+          AND NOT EXISTS(
+            SELECT 1 FROM decision_gates g
+            WHERE g.task_id=t.id AND g.status='decision_required'
+          )
+          AND NOT EXISTS(
+            SELECT 1 FROM orchestrator_commands c
+            WHERE c.task_id=t.id AND c.state IN ('queued','claimed')
+          )
+          AND NOT EXISTS(
+            SELECT 1 FROM runs r JOIN sessions s ON s.id=r.session_id
+            WHERE s.task_id=t.id AND r.state='running'
+          )
+        ORDER BY t.priority DESC,t.released_at,t.id LIMIT 1`).get(projectId);
+      if (!task) {
+        this.database.exec("COMMIT");
+        return { scheduled: false, reason: "no_eligible_task" };
+      }
+      const selectedRoute = parseJson(task.dispatch_model_route_json) ?? defaultRoute;
+      validateModelRoute(selectedRoute, "selected automatic implementation model route");
+      const idempotencyKey = `ready-dispatch:${task.id}:${task.version}:${task.released_at}:implementation:${task.revision ?? "none"}`;
+      const payload = {
+        source: "ready_scheduler",
+        modelRoute: selectedRoute,
+        dispatch: {
+          priority: Number(task.priority),
+          releasedAt: task.released_at,
+          releasedBy: task.released_by,
+          rank: 1,
+          projectCapacity,
+          globalCapacity,
+        },
+      };
+      const commandRequest = {
+        projectId,
+        taskId: task.id,
+        kind: "start_task",
+        phase: "implementation",
+        payload,
+      };
+      const commandRequestSha256 = sha256(JSON.stringify(commandRequest));
+      const commandId = randomUUID();
+      const actorId = `task-agent:implementation:${commandId}`;
+      const prior = this.getTaskDetails(task.id);
+      this.database.prepare(`INSERT INTO orchestrator_commands(
+        id,project_id,task_id,orchestrator_id,kind,phase,state,payload_json,request_sha256,
+        idempotency_key,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,'queued',?,?,?,?,?)`).run(
+        commandId,
+        projectId,
+        task.id,
+        orchestrator.id,
+        "start_task",
+        "implementation",
+        JSON.stringify(payload),
+        commandRequestSha256,
+        idempotencyKey,
+        now,
+        now,
+      );
+      const nextVersion = task.version + 1;
+      const changed = this.database.prepare(`UPDATE tasks SET
+        status='in_progress',assigned_worker=?,version=?,updated_at=?
+        WHERE id=? AND version=?`).run(actorId, nextVersion, now, task.id, task.version);
+      if (Number(changed.changes) !== 1) {
+        throw codedError("version_conflict", "task changed during automatic dispatch");
+      }
+      const current = this.getTaskDetails(task.id);
+      this.appendOrchestratorCommandEvent(commandId, "queued", orchestrator.id, {
+        projectId,
+        taskId: task.id,
+        kind: "start_task",
+        phase: "implementation",
+        source: "ready_scheduler",
+        modelRoute: selectedRoute,
+      }, now);
+      const eventPayload = {
+        phase: "implementation",
+        commandId,
+        phaseActor: actorId,
+        assignedWorker: actorId,
+        modelRoute: selectedRoute,
+        dispatch: payload.dispatch,
+      };
+      this.database.prepare(`INSERT INTO task_events(
+        task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+        actor_role,run_id,task_version
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        task.id,
+        "task_scheduled",
+        actor,
+        task.status,
+        "in_progress",
+        JSON.stringify(eventPayload),
+        idempotencyKey,
+        now,
+        "orchestrator",
+        null,
+        nextVersion,
+      );
+      this.database.prepare(`INSERT INTO audit_events(
+        task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+        idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        task.id,
+        "task_scheduled",
+        actor,
+        "orchestrator",
+        null,
+        null,
+        JSON.stringify(prior),
+        JSON.stringify(current),
+        JSON.stringify(eventPayload),
+        idempotencyKey,
+        sha256(JSON.stringify({
+          action: "automatic_dispatch",
+          taskId: task.id,
+          modelRoute: selectedRoute,
+          releasedAt: task.released_at,
+        })),
+        now,
+      );
+      this.database.exec("COMMIT");
+      return {
+        scheduled: true,
+        task: this.getTaskDetails(task.id),
+        command: this.orchestratorCommand(commandId),
+      };
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   scheduleOwnerTaskRun({
     taskId,
     phase,
@@ -1375,6 +1896,14 @@ export class Phase0Store {
       throw codedError(
         "transition_denied",
         `task dependency is not complete: ${unresolvedDependency.id}`,
+      );
+    }
+    const unresolvedDecision = this.database.prepare(`SELECT id FROM decision_gates
+      WHERE task_id=? AND status='decision_required' ORDER BY created_at,id LIMIT 1`).get(taskId);
+    if (unresolvedDecision) {
+      throw codedError(
+        "transition_denied",
+        `task has an unresolved decision: ${unresolvedDecision.id}`,
       );
     }
     const orchestrator = this.activeProjectOrchestrator(task.project_id);
@@ -1506,12 +2035,16 @@ export class Phase0Store {
     return this.database.prepare("SELECT * FROM tasks WHERE id=?").get(taskId) ?? null;
   }
 
-  getProject(projectId) {
-    return this.database.prepare("SELECT * FROM projects WHERE id=?").get(projectId) ?? null;
+  getProject(projectId, { includeDeleted = false } = {}) {
+    return this.database.prepare(
+      `SELECT * FROM projects WHERE id=?${includeDeleted ? "" : " AND deleted_at IS NULL"}`,
+    ).get(projectId) ?? null;
   }
 
   projectBySourceUrl(sourceUrl) {
-    return this.database.prepare("SELECT * FROM projects WHERE source_url=?").get(sourceUrl) ?? null;
+    return this.database.prepare(
+      "SELECT * FROM projects WHERE source_url=? AND deleted_at IS NULL",
+    ).get(sourceUrl) ?? null;
   }
 
   importedProjectByRequest({ sourceUrl, name, idempotencyKey }) {
@@ -1664,7 +2197,265 @@ export class Phase0Store {
           AND t.status IN ('in_progress','review','blocked')) AS active_task_count,
       (SELECT COUNT(*) FROM tasks t
         WHERE t.project_id=p.id AND t.archived_at IS NOT NULL) AS archived_task_count
-      FROM projects p ORDER BY p.name,p.id`).all();
+      FROM projects p WHERE p.deleted_at IS NULL ORDER BY p.name,p.id`).all().map((project) => {
+      const deletion = this.projectDeletionEligibility(project.id);
+      return {
+        ...project,
+        deletion_eligible: deletion.eligible,
+        deletion_blockers: deletion.blockers,
+      };
+    });
+  }
+
+  projectDeletionEligibility(projectId) {
+    const project = this.getProject(projectId, { includeDeleted: true });
+    if (!project) throw codedError("not_found", `unknown project: ${projectId}`);
+    const counts = {
+      tasks: Number(this.database.prepare(
+        "SELECT COUNT(*) value FROM tasks WHERE project_id=?",
+      ).get(projectId).value),
+      sources: Number(this.database.prepare(
+        "SELECT COUNT(*) value FROM source_snapshots WHERE project_id=?",
+      ).get(projectId).value),
+      commands: Number(this.database.prepare(
+        "SELECT COUNT(*) value FROM orchestrator_commands WHERE project_id=?",
+      ).get(projectId).value),
+      memories: Number(this.database.prepare(
+        "SELECT COUNT(*) value FROM memory_records WHERE project_id=?",
+      ).get(projectId).value),
+      evidence: Number(this.database.prepare(
+        "SELECT COUNT(*) value FROM normalized_evidence WHERE project_id=?",
+      ).get(projectId).value),
+      active_project_orchestrators: Number(this.database.prepare(`SELECT COUNT(*) value
+        FROM project_orchestrators WHERE project_id=? AND status='active'`).get(projectId).value),
+      active_orchestration_leases: Number(this.database.prepare(`SELECT COUNT(*) value
+        FROM orchestration_leases
+        WHERE scope_type='project' AND scope_id=? AND status='active'`).get(projectId).value),
+      turns: Number(this.database.prepare(`SELECT COUNT(*) value
+        FROM conversation_turns turn
+        JOIN orchestrator_conversations conversation ON conversation.id=turn.conversation_id
+        WHERE conversation.project_id=?`).get(projectId).value),
+      conversation_runs: Number(this.database.prepare(`SELECT COUNT(*) value
+        FROM conversation_runs run
+        JOIN orchestrator_conversations conversation ON conversation.id=run.conversation_id
+        WHERE conversation.project_id=?`).get(projectId).value),
+      custody_snapshots: Number(this.database.prepare(`SELECT COUNT(*) value
+        FROM conversation_custody_snapshots snapshot
+        JOIN orchestrator_conversations conversation ON conversation.id=snapshot.conversation_id
+        WHERE conversation.project_id=?`).get(projectId).value),
+      model_changes: Number(this.database.prepare(`SELECT COUNT(*) value
+        FROM conversation_model_changes change
+        JOIN orchestrator_conversations conversation ON conversation.id=change.conversation_id
+        WHERE conversation.project_id=?`).get(projectId).value),
+      project_bindings: Number(this.database.prepare(
+        "SELECT COUNT(*) value FROM topic_project_bindings WHERE project_id=?",
+      ).get(projectId).value),
+      non_idle_conversations: Number(this.database.prepare(`SELECT COUNT(*) value
+        FROM orchestrator_conversations
+        WHERE project_id=? AND state NOT IN ('idle','archived')`).get(projectId).value),
+    };
+    const blockers = [];
+    if (project.deleted_at) blockers.push("already_deleted");
+    if (!project.source_url) blockers.push("not_managed_import");
+    for (const [kind, count] of Object.entries(counts)) {
+      if (count > 0) blockers.push(`${kind}:${count}`);
+    }
+    return {
+      project,
+      eligible: blockers.length === 0,
+      blockers,
+      counts,
+    };
+  }
+
+  projectDeletionReceiptByIdempotency(idempotencyKey) {
+    if (!idempotencyKey) return null;
+    return publicProjectDeletionReceipt(this.database.prepare(
+      "SELECT * FROM project_deletion_receipts WHERE idempotency_key=?",
+    ).get(idempotencyKey));
+  }
+
+  beginProjectDeletion({
+    receiptId,
+    projectId,
+    confirmName,
+    reason,
+    originalPath,
+    quarantinePath,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    const normalizedReason = typeof reason === "string" ? reason.trim() : "";
+    if (!normalizedReason || normalizedReason.length > 2_000 || normalizedReason.includes("\0")) {
+      throw codedError("invalid_request", "deletion reason must be between 1 and 2000 characters");
+    }
+    if (typeof confirmName !== "string" || confirmName.includes("\0")) {
+      throw codedError("invalid_request", "exact project-name confirmation is required");
+    }
+    const requestSha256 = sha256(JSON.stringify({
+      action: "delete_project",
+      projectId,
+      confirmName,
+      reason: normalizedReason,
+    }));
+    const prior = this.database.prepare(
+      "SELECT * FROM project_deletion_receipts WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256 || prior.project_id !== projectId) {
+        throw codedError(
+          "idempotency_conflict",
+          "idempotency key was reused for a different project deletion",
+        );
+      }
+      return { replayed: true, receipt: publicProjectDeletionReceipt(prior) };
+    }
+    const project = this.getProject(projectId);
+    if (!project) throw codedError("not_found", `unknown active project: ${projectId}`);
+    if (confirmName !== project.name) {
+      throw codedError("confirmation_mismatch", "project name confirmation did not match exactly");
+    }
+    const eligibility = this.projectDeletionEligibility(projectId);
+    if (!eligibility.eligible) {
+      throw codedError(
+        "deletion_blocked",
+        `project deletion blocked: ${eligibility.blockers.join(",")}`,
+        { blockers: eligibility.blockers },
+      );
+    }
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const lockedEligibility = this.projectDeletionEligibility(projectId);
+      if (!lockedEligibility.eligible) {
+        throw codedError(
+          "deletion_blocked",
+          `project deletion blocked: ${lockedEligibility.blockers.join(",")}`,
+          { blockers: lockedEligibility.blockers },
+        );
+      }
+      this.database.prepare(`INSERT INTO project_deletion_receipts(
+        id,project_id,idempotency_key,request_sha256,project_snapshot_json,
+        original_path,quarantine_path,reason,actor,state,checkout_state,
+        created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,'prepared','original',?,?)`).run(
+        receiptId,
+        projectId,
+        idempotencyKey,
+        requestSha256,
+        JSON.stringify(project),
+        originalPath,
+        quarantinePath,
+        normalizedReason,
+        actor,
+        now,
+        now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      replayed: false,
+      receipt: this.projectDeletionReceiptByIdempotency(idempotencyKey),
+    };
+  }
+
+  tombstoneProjectDeletion(receiptId) {
+    const receipt = this.database.prepare(
+      "SELECT * FROM project_deletion_receipts WHERE id=?",
+    ).get(receiptId);
+    if (!receipt) throw codedError("not_found", `unknown project deletion: ${receiptId}`);
+    if (["tombstoned", "complete"].includes(receipt.state)) {
+      return publicProjectDeletionReceipt(receipt);
+    }
+    if (receipt.state !== "prepared") {
+      throw codedError("transition_denied", `cannot tombstone deletion in state ${receipt.state}`);
+    }
+    const eligibility = this.projectDeletionEligibility(receipt.project_id);
+    if (!eligibility.eligible) {
+      throw codedError(
+        "deletion_blocked",
+        `project deletion blocked: ${eligibility.blockers.join(",")}`,
+        { blockers: eligibility.blockers },
+      );
+    }
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const lockedEligibility = this.projectDeletionEligibility(receipt.project_id);
+      if (!lockedEligibility.eligible) {
+        throw codedError(
+          "deletion_blocked",
+          `project deletion blocked: ${lockedEligibility.blockers.join(",")}`,
+          { blockers: lockedEligibility.blockers },
+        );
+      }
+      const topics = this.database.prepare(
+        "SELECT id FROM topics WHERE project_id=?",
+      ).all(receipt.project_id);
+      for (const topic of topics) {
+        this.database.prepare(
+          "UPDATE topics SET state='archived',version=version+1,updated_at=? WHERE id=?",
+        ).run(now, topic.id);
+        this.database.prepare(`UPDATE orchestrator_conversations SET
+          state='archived',current_turn_id=NULL,updated_at=? WHERE topic_id=?`).run(now, topic.id);
+        this.database.prepare(`INSERT INTO topic_events(
+          topic_id,type,actor,payload_json,idempotency_key,request_sha256,created_at
+        ) VALUES(?,'topic_archived',?,?,?,?,?)`).run(
+          topic.id,
+          receipt.actor,
+          JSON.stringify({ reason: "project_deleted", projectId: receipt.project_id }),
+          `project-delete:${receipt.id}:topic:${topic.id}`,
+          sha256(JSON.stringify({
+            action: "archive_topic_for_project_deletion",
+            projectId: receipt.project_id,
+            topicId: topic.id,
+          })),
+          now,
+        );
+      }
+      const changed = this.database.prepare(`UPDATE projects SET
+        deleted_at=?,deleted_by=?,deletion_reason=? WHERE id=? AND deleted_at IS NULL`).run(
+        now,
+        receipt.actor,
+        receipt.reason,
+        receipt.project_id,
+      );
+      if (Number(changed.changes) !== 1) {
+        throw codedError("version_conflict", "project changed during deletion");
+      }
+      this.database.prepare(`UPDATE project_deletion_receipts SET
+        state='tombstoned',checkout_state='quarantined',tombstoned_at=?,updated_at=?
+        WHERE id=? AND state='prepared'`).run(now, now, receipt.id);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return publicProjectDeletionReceipt(this.database.prepare(
+      "SELECT * FROM project_deletion_receipts WHERE id=?",
+    ).get(receipt.id));
+  }
+
+  completeProjectDeletion(receiptId) {
+    const receipt = this.database.prepare(
+      "SELECT * FROM project_deletion_receipts WHERE id=?",
+    ).get(receiptId);
+    if (!receipt) throw codedError("not_found", `unknown project deletion: ${receiptId}`);
+    if (receipt.state === "complete") return publicProjectDeletionReceipt(receipt);
+    if (receipt.state !== "tombstoned") {
+      throw codedError("transition_denied", `cannot complete deletion in state ${receipt.state}`);
+    }
+    const now = this.clock();
+    this.database.prepare(`UPDATE project_deletion_receipts SET
+      state='complete',checkout_state='removed',completed_at=?,updated_at=?
+      WHERE id=? AND state='tombstoned'`).run(now, now, receiptId);
+    return publicProjectDeletionReceipt(this.database.prepare(
+      "SELECT * FROM project_deletion_receipts WHERE id=?",
+    ).get(receiptId));
   }
 
   createTopic({
@@ -3690,6 +4481,7 @@ export class Phase0Store {
       archived: Boolean(task.archived_at),
       tags: normalizeTaskTags(parseJson(task.tags_json) ?? []),
       acceptance_criteria: parseJson(task.acceptance_criteria_json) ?? [],
+      dispatch_model_route: parseJson(task.dispatch_model_route_json),
       origin: this.database.prepare(
         "SELECT * FROM task_origins WHERE task_id=? AND task_version=?",
       ).get(taskId, task.version) ?? null,
@@ -4239,7 +5031,11 @@ export class Phase0Store {
         side_effect_receipts: this.sideEffectReceipts(run.id),
       }));
     return {
-      task: { ...task, activity: this.taskAudit(taskId) },
+      task: {
+        ...task,
+        dispatch: this.taskDispatchProjection(taskId),
+        activity: this.taskAudit(taskId),
+      },
       allowed_phases: this.allowedTaskPhases(taskId),
       completion_evaluation: this.evaluateCompletion(taskId),
       commands: this.database.prepare(
@@ -4260,11 +5056,30 @@ export class Phase0Store {
     const rows = this.database.prepare("SELECT * FROM tasks ORDER BY updated_at DESC, id").all();
     const columns = Object.fromEntries([...TASK_STATES].map((state) => [state, []]));
     const archived = [];
+    const dispatchByTask = new Map();
+    for (const projectId of new Set(rows.map((row) => row.project_id))) {
+      for (const projection of this.readyDispatchCandidates(projectId)) {
+        dispatchByTask.set(projection.taskId, projection);
+      }
+    }
     for (const row of rows) {
       const task = {
         ...row,
         archived: Boolean(row.archived_at),
         tags: parseJson(row.tags_json) ?? [],
+        acceptance_criteria: parseJson(row.acceptance_criteria_json) ?? [],
+        dispatch_model_route: parseJson(row.dispatch_model_route_json),
+        dispatch: dispatchByTask.get(row.id) ?? {
+          taskId: row.id,
+          dispatchPolicy: row.dispatch_policy,
+          priority: Number(row.priority),
+          releasedAt: row.released_at,
+          releasedBy: row.released_by,
+          modelRoute: parseJson(row.dispatch_model_route_json),
+          rank: null,
+          eligible: false,
+          blockers: row.dispatch_policy === "manual" ? ["manual"] : [],
+        },
       };
       if (row.archived_at) archived.push(task);
       else columns[row.status].push(task);

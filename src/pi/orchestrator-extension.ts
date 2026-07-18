@@ -239,11 +239,71 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
-    name: "boss_orchestrator_schedule_task",
-    label: "Schedule a Boss Man task sub-agent",
-    description: "Queue one implementation, test, or review sub-agent with an explicit or configured model route.",
-    promptSnippet: "Select the phase and model route for a scoped task sub-agent",
+    name: "boss_orchestrator_release_task",
+    label: "Release a Boss Man task for automatic dispatch",
+    description: "Durably release one refined Ready task to the deterministic scheduler with optional priority and model route.",
+    promptSnippet: "Release concrete work after ambiguity and protected decisions are resolved",
     promptGuidelines: [
+      "Release only executable Ready tasks with concrete acceptance criteria.",
+      "Priority ranges from -100 to 100; omit it for normal priority 0.",
+      "Omit provider, model, and thinkingLevel to pin the configured implementation default.",
+      "Release does not choose queue order or spawn directly; the model-less scheduler does.",
+    ],
+    parameters: Type.Object({
+      taskId: Type.String({ minLength: 1 }),
+      expectedVersion: Type.Integer({ minimum: 1 }),
+      priority: Type.Optional(Type.Integer({ minimum: -100, maximum: 100 })),
+      modelProvider: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      modelId: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+      thinkingLevel: Type.Optional(Type.Union([
+        Type.Literal("off"),
+        Type.Literal("minimal"),
+        Type.Literal("low"),
+        Type.Literal("medium"),
+        Type.Literal("high"),
+        Type.Literal("xhigh"),
+      ])),
+      billingClass: Type.Optional(Type.Union([
+        Type.Literal("subscription"),
+        Type.Literal("direct_api"),
+        Type.Literal("prepaid"),
+        Type.Literal("local"),
+        Type.Literal("unknown"),
+      ])),
+    }),
+    async execute(toolCallId, params, signal) {
+      return mutateTask(toolCallId, "release", params, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_orchestrator_update_dispatch",
+    label: "Update Boss Man task dispatch policy",
+    description: "Pause, return to manual, or reprioritize one queued task without starting it.",
+    promptSnippet: "Adjust queued automatic work only when owner intent or task ordering materially changed",
+    parameters: Type.Object({
+      taskId: Type.String({ minLength: 1 }),
+      expectedVersion: Type.Integer({ minimum: 1 }),
+      operation: Type.Union([
+        Type.Literal("pause_dispatch"),
+        Type.Literal("manualize_dispatch"),
+        Type.Literal("set_priority"),
+      ]),
+      priority: Type.Optional(Type.Integer({ minimum: -100, maximum: 100 })),
+    }),
+    async execute(toolCallId, params, signal) {
+      const { operation, ...payload } = params;
+      return mutateTask(toolCallId, operation, payload, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_orchestrator_schedule_task",
+    label: "Manually schedule a Boss Man task phase",
+    description: "Explicit recovery/override: directly queue one implementation, test, or review sub-agent.",
+    promptSnippet: "Use direct scheduling only for explicit recovery or owner-requested override",
+    promptGuidelines: [
+      "For normal new work, release the refined task to deterministic automatic dispatch instead.",
       "Omit provider, model, and thinkingLevel to use the configured phase default.",
       "Only select a route already declared in Boss Man model-route configuration.",
       "Choose a different configured route only when task needs, cost, or local-model policy justify it.",

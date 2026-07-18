@@ -35,8 +35,9 @@ Phase 0 does not require application authentication because its runnable profile
 
 ## Phase 1 — useful local-first developer cockpit
 
-Status: In progress — implementation gates complete; supervised dogfood across
-real repositories next
+Status: In progress — implementation gates, both repository dogfood scenarios,
+and deterministic Ready scheduling are complete; one live automatic-release
+acceptance smoke remains
 
 Purpose: make Boss Man useful for supervised daily development on its host.
 
@@ -72,11 +73,19 @@ Automatic model-less implementation → test → review continuation is
 implemented with deterministic restart reconciliation and explicit stop
 conditions. Explicit executable/umbrella/intake task kinds, normalized tags,
 and reversible archive/restore keep retained planning artifacts off the active
-board. Supervised phase-flow dogfooding on two real repositories remains.
+board. Activity-free managed imports can be safely removed through an audited
+tombstone/quarantine workflow. The `doc-map` new-project and
+`inspector-gadget` maintenance phase-flow runs are complete. Accepted D-046
+now makes initial Ready selection and dispatch deterministic/model-less.
+Phase 1 closes after one normal Pi-orchestrator release proves the integrated
+live implementation → test → review path and the receipt is recorded.
 
 Scope:
 
 - project-orchestrator command queue, scheduling, heartbeat-loss handling, and task-agent lifecycle;
+- deterministic model-less Ready selection using task state, dependencies,
+  priority, leases, phase policy, and resource capacity; the LLM refines and
+  proposes work but does not nondeterministically pop the runnable queue;
 - topic/project orchestrator conversations as the primary task-ingress path,
   including new-project discovery, repository intake, and read-only external
   work-item snapshots;

@@ -1,6 +1,6 @@
 # Workspace inspectors and phase flow
 
-Status: Approved for Phase 1 implementation
+Status: Implemented and dogfooded
 
 Last updated: 2026-07-18
 

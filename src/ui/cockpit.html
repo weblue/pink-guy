@@ -408,7 +408,11 @@
       + "<div class=\"muted\">" + esc(project.task_count) + " total tasks · "
         + esc(project.archived_task_count || 0) + " archived · " + esc(project.repository_path) + "</div>"
       + "<div class=\"project-actions\"><button class=\"ghost\" data-ask-project=\"" + esc(project.id)
-      + "\">Ask orchestrator</button></div></div>"
+      + "\">Ask orchestrator</button>"
+      + (project.deletion_eligible
+        ? " <button class=\"ghost\" data-delete-project=\"" + esc(project.id) + "\">Delete import</button>"
+        : "")
+      + "</div></div>"
     ).join("") || "<p class=\"muted\">No projects registered.</p>";
     const options = app.projects.map((project) =>
       "<option value=\"" + esc(project.id) + "\">" + esc(project.name) + "</option>"
@@ -435,14 +439,35 @@
     if (!app.board) return;
     const cardMarkup = (task, state, archived = false) => {
       const tags = (task.tags || []).map((tag) => "<span class=\"tag\">" + esc(tag) + "</span>").join(" ");
+      const dispatch = task.dispatch || {};
+      const dispatchLabel = task.dispatch_policy === "automatic"
+        ? "Auto" + (dispatch.rank ? " #" + dispatch.rank : "")
+        : task.dispatch_policy === "paused" ? "Paused" : "Manual";
+      const waitReason = task.dispatch_policy === "automatic" && dispatch.blockers?.length
+        ? "<div class=\"muted\">waiting · " + esc(dispatch.blockers[0].replaceAll("_", " ")) + "</div>"
+        : "";
+      const dispatchControl = !archived
+        && state === "ready"
+        && task.task_kind === "executable"
+        ? "<div class=\"controls\">"
+          + (task.dispatch_policy === "automatic"
+            ? "<button class=\"secondary\" data-dispatch-task=\"" + esc(task.id)
+              + "\" data-dispatch-operation=\"pause_dispatch\" data-task-version=\"" + esc(task.version)
+              + "\">Pause automatic</button>"
+            : "<button data-dispatch-task=\"" + esc(task.id)
+              + "\" data-dispatch-operation=\"release\" data-task-version=\"" + esc(task.version)
+              + "\">" + (task.dispatch_policy === "paused" ? "Resume automatic" : "Release automatically")
+              + "</button>")
+          + "</div>"
+        : "";
       return "<strong>" + esc(task.title) + "</strong><div class=\"muted\">"
         + esc(task.project_id) + " · v" + esc(task.version) + "</div>"
-        + "<div><span class=\"tag\">" + esc(task.task_kind || "executable") + "</span> " + tags + "</div>"
+        + "<div><span class=\"tag\">" + esc(task.task_kind || "executable") + "</span> "
+        + "<span class=\"tag\">" + esc(dispatchLabel) + " · p" + esc(task.priority || 0)
+        + "</span> " + tags + "</div>"
+        + waitReason
         + (archived ? "<div class=\"muted\">retained status · " + esc(state) + "</div>" : "")
-        + (!archived && (state === "ready" || state === "backlog") && task.task_kind === "executable"
-          ? "<div class=\"controls\"><button data-schedule=\"" + esc(task.id)
-            + "\" data-phase=\"implementation\">Schedule implementation</button></div>"
-          : "");
+        + dispatchControl;
     };
     for (const [state, tasks] of Object.entries(app.board.columns)) {
       const column = document.createElement("section");
@@ -585,6 +610,19 @@
         + (task.archived ? " · archived " + esc(task.archived_at) + " by " + esc(task.archived_by) : "")
         + " · revision " + esc(task.revision || "not fixed") + "</div>"
       + (task.archive_reason ? "<div class=\"muted\">Archive reason: " + esc(task.archive_reason) + "</div>" : "")
+      + (!task.archived && task.status === "ready" && task.task_kind === "executable"
+        ? "<h3>Automatic dispatch</h3><div class=\"controls\">"
+          + "<input id=\"task-dispatch-priority\" type=\"number\" min=\"-100\" max=\"100\" value=\""
+          + esc(task.priority || 0) + "\" aria-label=\"Task priority\">"
+          + (task.dispatch_policy === "automatic"
+            ? "<button class=\"secondary\" data-task-dispatch=\"pause_dispatch\">Pause</button>"
+              + "<button class=\"ghost\" data-task-dispatch=\"manualize_dispatch\">Return to manual</button>"
+            : "<button data-task-dispatch=\"release\">"
+              + (task.dispatch_policy === "paused" ? "Resume automatic" : "Release automatically")
+              + "</button>")
+          + "</div><div class=\"muted\">Policy " + esc(task.dispatch_policy)
+          + " · higher priority runs first; ties use release time then task ID.</div>"
+        : "")
       + lifecycleControl + phaseControls + completionControl
       + "<h3>Dependencies</h3><ul>" + dependencies + "</ul>"
       + "<h3>Decisions</h3>" + decisions
@@ -787,6 +825,44 @@
   });
 
   document.querySelector("#projects").addEventListener("click", async (event) => {
+    const deleteButton = event.target.closest("[data-delete-project]");
+    if (deleteButton) {
+      const project = app.projects.find((item) => item.id === deleteButton.dataset.deleteProject);
+      if (!project) return;
+      const confirmName = window.prompt(
+        "Type the exact project name to delete this unused managed import:",
+      );
+      if (confirmName === null) return;
+      const reason = window.prompt("Why is this unused import being deleted?");
+      if (reason === null) return;
+      deleteButton.disabled = true;
+      try {
+        const result = await request("/api/projects/" + encodeURIComponent(project.id), {
+          method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": key("project-delete"),
+          },
+          body: JSON.stringify({ confirmName, reason }),
+        });
+        mutationStatus(
+          result.cleanupPending
+            ? "Project hidden; managed checkout cleanup remains pending."
+            : "Unused managed import deleted safely.",
+        );
+        if (app.topicDetail?.conversation?.project_id === project.id) {
+          app.selectedTopicId = null;
+          app.topicDetail = null;
+          window.location.hash = "";
+        }
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+      } finally {
+        deleteButton.disabled = false;
+      }
+      return;
+    }
     const button = event.target.closest("[data-ask-project]");
     if (!button) return;
     button.disabled = true;
@@ -1013,17 +1089,25 @@
   });
 
   document.querySelector("#board").addEventListener("click", async (event) => {
-    const button = event.target.closest("[data-schedule]");
+    const button = event.target.closest("[data-dispatch-task]");
     if (!button) return;
     button.disabled = true;
     try {
-      const phase = button.dataset.phase;
-      await request("/api/tasks/" + encodeURIComponent(button.dataset.schedule) + "/schedule", {
+      const result = await request("/api/tasks/" + encodeURIComponent(button.dataset.dispatchTask) + "/dispatch", {
         method: "POST",
-        headers: { "content-type": "application/json", "idempotency-key": key("schedule-task") },
-        body: JSON.stringify({ phase }),
+        headers: { "content-type": "application/json", "idempotency-key": key("dispatch-task") },
+        body: JSON.stringify({
+          operation: button.dataset.dispatchOperation,
+          expectedVersion: Number(button.dataset.taskVersion),
+        }),
       });
-      mutationStatus("Task scheduled.");
+      mutationStatus(
+        result.dispatch?.scheduled
+          ? "Task released and implementation scheduled."
+          : result.dispatch
+            ? "Task released; waiting for " + result.dispatch.reason.replaceAll("_", " ") + "."
+            : "Task dispatch policy updated.",
+      );
       await refresh();
     } catch (error) {
       mutationStatus(error.message, true);
@@ -1034,7 +1118,7 @@
 
   document.querySelector("#board").addEventListener("click", (event) => {
     const task = event.target.closest("[data-task-id]");
-    if (task && !event.target.closest("[data-schedule]")) {
+    if (task && !event.target.closest("[data-dispatch-task]")) {
       void loadTask(task.dataset.taskId).catch((error) => mutationStatus(error.message, true));
     }
   });
@@ -1083,6 +1167,36 @@
   });
 
   document.querySelector("#task-detail").addEventListener("click", async (event) => {
+    const dispatchButton = event.target.closest("[data-task-dispatch]");
+    if (dispatchButton) {
+      dispatchButton.disabled = true;
+      try {
+        const result = await request(
+          "/api/tasks/" + encodeURIComponent(app.selectedTask.id) + "/dispatch",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "idempotency-key": key("task-dispatch") },
+            body: JSON.stringify({
+              operation: dispatchButton.dataset.taskDispatch,
+              expectedVersion: app.selectedTask.version,
+              priority: Number(document.querySelector("#task-dispatch-priority").value),
+            }),
+          },
+        );
+        mutationStatus(
+          result.dispatch?.scheduled
+            ? "Task released and implementation scheduled."
+            : result.dispatch
+              ? "Task released; waiting for " + result.dispatch.reason.replaceAll("_", " ") + "."
+              : "Task dispatch policy updated.",
+        );
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+        dispatchButton.disabled = false;
+      }
+      return;
+    }
     const archiveButton = event.target.closest("[data-archive-task]");
     if (archiveButton) {
       archiveButton.disabled = true;

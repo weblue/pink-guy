@@ -1,7 +1,7 @@
 # Phase 1 dogfood plan
 
-Status: Active dogfood — first project workflow completed and its recovery
-defects are regression-covered; two cross-repository scenarios remain
+Status: Both Phase 1 repository scenarios and deterministic Ready scheduling
+complete; live automatic-release acceptance smoke remains
 
 Last updated: 2026-07-18
 
@@ -118,6 +118,80 @@ artifact provenance. Completed run worktrees are disposable and may be removed
 after settlement; automatic worktree retirement remains Phase 2. Phase 1
 records the merge request but does not yet push or merge it, so external
 integration remains an owner action until Phase 2 policy is implemented.
+
+## New-project scenario result
+
+The `doc-map` prototype exercised system intake, model-less custody transfer
+to a newly initialized local repository, task creation, implementation,
+validation, requested-changes recovery, independent re-review, and completion.
+
+- System intake narrowed v1 to local file-existence checks and explicitly
+  deferred Markdown fragment/heading validation.
+- The bound project created one executable `prototype`, `cli`, `markdown`
+  task with concrete acceptance criteria.
+- Initial implementation checkpointed revision
+  `e05ea4b9be11a9f35d57a42a1daa9a3caa995a25`; validation passed, but review
+  correctly requested changes for balanced-parentheses and escaped-`)` link
+  destinations.
+- A resumed implementation checkpointed
+  `85baf0441c76c89f75cee13c7865e27babcbadfd` with deterministic scanner
+  coverage. Its command later failed with `fetch failed`, so the owner used
+  normal reset and schedule controls to accept the independently proven
+  checkpoint without replaying implementation.
+- Recovered validation passed three tests at the fixed revision. Independent
+  review approved with no findings, completion moved the task to Done, and a
+  merge request was recorded.
+- Host-side smoke testing outside the agent container passed `npm test` and
+  produced a clean JSON inventory for the repository.
+
+The run exposed four evidence-backed follow-ups:
+
+1. After system-intake binding, the resumed conversation initially retained
+   the stale belief that it was unbound until explicitly told to refresh
+   authoritative Boss Man state.
+2. The orchestrator can refine a task after requested changes but has no
+   structured resume tool; the owner-only resume control was required.
+3. A post-checkpoint transport failure has no direct “accept proven
+   checkpoint and continue validation” action. Reset plus explicit test
+   scheduling works but is unnecessarily indirect.
+4. Repository import initially had no normal cancel/delete control. The safe
+   managed-project deletion slice now provides an audited, idempotent cleanup
+   path for unused imports while refusing projects with retained work.
+
+## Maintenance-repository scenario result
+
+Boss Man imported the existing
+`https://github.com/weblue/inspector-gadget.git` repository into a host-owned
+checkout and created its durable project topic. The owner supplied a bounded
+maintenance request to add a model-less Bash syntax regression check.
+
+- The orchestrator made one explicit assumption: “tracked Bash scripts” means
+  the repository's current Git-tracked `.sh` files.
+- It created one executable `maintenance`, `bash`, `regression-test` task with
+  five concrete acceptance criteria and scheduled implementation.
+- Implementation produced fixed revision
+  `30f1cc551de44b08cf5d8573ea54ee7f40c8fb66`, adding
+  `check-bash-syntax.sh` and concise README usage in a 52-line diff.
+- The model-less coordinator automatically scheduled test at that exact
+  revision. Validation passed with inspected script/README evidence and a
+  successful syntax run.
+- The coordinator then automatically scheduled an independently identified
+  reviewer. Review approved the same revision; completion moved the task to
+  Done and recorded merge request
+  `bbcca053-1f89-4a59-ba66-8f9153815a3c`.
+- Host smoke outside the task container reported:
+  `bash -n passed for 6 tracked Bash scripts.`
+
+No owner phase button, direct SQLite mutation, probe helper, manual test/review
+schedule, remote push, or merge was used. The run proved checkout, scoped
+conversation refinement, implementation, fixed-revision validation,
+independent review, completion, and observable model-less phase continuation.
+
+That run sharpened the architecture boundary addressed by D-046. The
+conversational LLM still expresses release intent, but the implemented central
+scheduler now owns Ready eligibility, ordering, capacity, and initial
+sub-agent dispatch. A final small live smoke must use this path without the
+manual phase action.
 
 ## Exit evidence
 

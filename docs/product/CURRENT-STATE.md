@@ -1,6 +1,7 @@
 # Boss Man v2 current state
 
-Status: Phase 1 dogfood-ready — supervised real-repository runs are next
+Status: Phase 1 implementation and repository dogfood complete — one live
+automatic-release acceptance smoke remains
 
 Last updated: 2026-07-18
 
@@ -62,6 +63,21 @@ non-approved review, missing required phase evidence, decisions, and
 dependencies stop for explicit recovery. Untouched Ready tasks are never
 auto-started.
 
+Both repository dogfood scenarios now pass. The local `doc-map` prototype
+completed new-project intake and requested-changes recovery. The imported
+`inspector-gadget` repository completed a bounded maintenance task at fixed
+revision `30f1cc551de44b08cf5d8573ea54ee7f40c8fb66`: validation passed,
+independent review approved, completion recorded a merge request, and host
+smoke passed all six tracked Bash scripts. The canceled PowerToys import was
+removed through the audited safe-delete path without direct state edits.
+
+Initial Ready selection is now model-less after explicit release. Accepted
+D-046 keeps Pi responsible for refinement and release intent, while durable
+manual/automatic/paused policy, priority/release ordering, lease and capacity
+checks, atomic command creation, and sub-agent dispatch belong to the central
+scheduler. Existing tasks remain manual; the cockpit and terminal show rank
+and wait reasons. Direct phase scheduling remains an explicit recovery path.
+
 Task lifecycle is now explicit and orthogonal to execution status. Executable
 tasks can run phases; umbrella and intake artifacts cannot. Tags are optional,
 normalized organization labels. Archive/restore operations are versioned and
@@ -89,7 +105,7 @@ the runtime structure.
 
 | Area | Current capability | Remaining boundary |
 |---|---|---|
-| Authority and tasks | One central Node API owns the SQLite task projection, explicit executable/umbrella/intake kinds, normalized tags, reversible audited archival, capability-scoped agent mutations, audited loopback-owner task creation/scheduling/editing/decision resolution, review, validation, merge-request records, and per-project orchestrator leases. Explicit stop/resume and retry/reset controls preserve the no-automatic-replay rule. | Owner dependency editing, a consolidated attention queue, and richer command/run inspection remain. Actual merge/rebase/push is Phase 2. |
+| Authority and tasks | One central Node API owns the SQLite task projection, explicit executable/umbrella/intake kinds, normalized tags, reversible audited archival, capability-scoped agent mutations, audited loopback-owner task creation/scheduling/editing/decision resolution, review, validation, merge-request records, per-project orchestrator leases, and audited safe deletion of activity-free managed imports. Explicit stop/resume and retry/reset controls preserve the no-automatic-replay rule. | Owner dependency editing, a consolidated attention queue, and richer command/run inspection remain. Actual merge/rebase/push is Phase 2. |
 | Pi sessions | Upstream Pi runs in RPC mode inside recorded task containers and as a host-managed persistent orchestrator session. Native JSONL lifecycle, model-less resume/import, child provenance, task and conversation custody, custody-backed model switching, blocking orchestrator pre-compaction export, safe intake transfer, and C0-04 bundle-child consumption pass. Runs pin provider/model/thinking and prompt key/version/checksum; deterministic transfer and route-restart coverage proves no transcript resend. | True in-flight RPC reattachment and production session controls remain. |
 | Containers | The daemon creates, inspects, stops, and removes pinned Linux/ARM64 containers with a non-root user, read-only root, resource limits, minimal mounts, and no Docker socket. Restart reconciliation proves recorded ID, image, label, and liveness before cleanup. | True process reattachment and explicit production egress policy remain. Containers are damage containment, not a malicious-code boundary. |
 | Git and workspaces | Every phase worktree starts from the task's authoritative revision; the container edits files without usable shared Git metadata. Host checkpoints carry provenance, advance task revision, and invalidate stale validation/review evidence. | Final history policy, actual merge/rebase/push, conflicts, and worktree cleanup remain. |
@@ -100,7 +116,7 @@ the runtime structure.
 | Restart recovery | SQLite records immutable intent/completion/reconciliation receipts. Startup checks container identity/liveness, pauses verified idle runs, holds uncertain response/tool effects without replay, recovers checksum-valid snapshots, and recovers parent/provenance-valid Git commits without duplication. | The prototype conservatively stops the old container; true Pi RPC reattachment and host/Docker power-cycle coverage remain production work. |
 | Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
 | Developer cockpit | The loopback cockpit combines persistent Pi conversation, multi-project board, repository/source intake, prompt/model controls, fixed-revision phase controls, workspace/diff/test/review/context/artifact inspectors, command recovery, and tmux/SSH guidance. | Attention aggregation, richer artifact navigation, and owner dependency editing remain usage-driven. D-043 defers a browser PTY. |
-| Orchestrator interaction | First-class topic/conversation projections, central model/prompt policy, scoped leases, persistent Pi RPC, audited task-graph/lifecycle mutations, intake-to-project transfer, per-subagent route selection, settled implementation/test/review commands, and model-less automatic phase continuation are implemented. Passing independent review completes the task only when all policy gates pass. | Source refresh semantics, scheduling priority, and resource-pressure controls remain. |
+| Orchestrator interaction | First-class topic/conversation projections, central model/prompt policy, scoped leases, persistent Pi RPC, audited task-graph/lifecycle/dispatch mutations, intake-to-project transfer, per-subagent route selection, deterministic Ready selection, settled implementation/test/review commands, and model-less automatic phase continuation are implemented. Passing independent review completes the task only when all policy gates pass. | One live automatic-release acceptance smoke remains. Source refresh semantics and wider measured resource-pressure/concurrency controls are later work; Pi refines and releases work but does not pop the runnable queue. |
 
 ## Adoption readiness
 
@@ -167,20 +183,18 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 The executable checklist is
 [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
-1. **Publish and merge the current dogfood recovery slice.** It contains the
-   progress-aware runtime fixes, successful-phase continuation, explicit task
-   lifecycle, and the retained UI dogfood reconciliation. After merge, rerun
-   the model-less suite from `main`.
-2. **Dogfood two real repositories.** Use one bounded maintenance task and one
-   new-feature/prototype task. Exercise implementation → fixed checkpoint →
-   test → review through the cockpit, audit the inspector, and use only normal
-   owner/orchestrator controls.
-3. **Fix evidence-backed Phase 1 blockers.** Prioritize failures that prevent
-   task ingestion, phase advancement, validation/review, custody, or audit.
+1. **Publish and merge D-046.** Rerun all 14 model-less probes from `main`.
+2. **Run one live automatic-release acceptance smoke.** Use a bounded task
+   with deterministic validation, let the Pi orchestrator refine and release
+   it, and observe model-less implementation selection followed by automatic
+   test and review. Do not use the manual phase override.
+3. **Fix only evidence-backed Phase 1 blockers.** Prioritize failures that
+   prevent release, dispatch, phase advancement, validation/review, custody,
+   or audit.
    Source refresh UX, owner dependency editing, attention aggregation, richer
    artifact navigation, and a workspace shell are not Phase 1 blockers unless
    dogfooding proves otherwise.
-4. **Close Phase 1.** Record both dogfood receipts, update results/runbooks,
+4. **Close Phase 1.** Record the automatic-release receipt, update results/runbooks,
    and declare the supervised local workflow the preferred development path
    while retaining direct Pi/Codex as recovery.
 5. **Phase 2 — autonomy, recovery, and portability.** Add
@@ -242,10 +256,9 @@ Still open, but assigned to explicit gates rather than blocking current work:
   OpenAI Codex routes but no local provider, so a real local-model smoke awaits
   owner configuration. Add a routing intermediary only for a concrete Pi
   compatibility or policy gap.
-- **Project orchestration:** the durable command protocol and conservative
-  lease-loss policy plus model-less successful-phase continuation are
-  implemented. Explicit executable/umbrella/intake kinds and archival are also
-  implemented. Per-project task concurrency, scheduling priority, richer
-  recovery diagnosis, and global host-pressure limits remain to be specified
-  and measured.
+- **Project orchestration:** durable model-less initial dispatch and successful
+  phase continuation are implemented with explicit policy, bounded priority,
+  stable ordering, lease checks, and conservative one-command global/project
+  capacity. Wider concurrency, richer recovery diagnosis, and host-pressure
+  limits are Phase 2 measurement work.
 - **Remote credential UX:** Phase 3 must choose password-session mode, API-key mode, or both. Browser `localStorage` persistence remains an explicit convenience/security decision, not the default.

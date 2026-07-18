@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile, execFileSync } from "node:child_process";
 import { createServer } from "node:http";
-import { access, chmod, copyFile, mkdir, readFile, readdir, rm } from "node:fs/promises";
+import { access, chmod, copyFile, mkdir, readFile, readdir, rename, rm } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -233,6 +233,7 @@ export class DirectControlPlane {
     modelRoutePolicy = null,
     runtimeOffline = true,
     faultInjector = async () => undefined, enforceOrchestratorLease = false,
+    schedulerProjectCapacity = 1, schedulerGlobalCapacity = 1,
   }) {
     this.store = new Phase0Store(databasePath);
     this.stateRoot = stateRoot;
@@ -251,6 +252,8 @@ export class DirectControlPlane {
     this.runtimeOffline = runtimeOffline;
     this.faultInjector = faultInjector;
     this.enforceOrchestratorLease = enforceOrchestratorLease;
+    this.schedulerProjectCapacity = schedulerProjectCapacity;
+    this.schedulerGlobalCapacity = schedulerGlobalCapacity;
     this.credentialVault = new RunCredentialVault({ stateRoot, profile: credentialProfile });
     this.gitServices = new Map();
     this.git = fixturePath ? this.gitService(fixturePath) : null;
@@ -304,12 +307,144 @@ export class DirectControlPlane {
     return receipts;
   }
 
+  reconcileReadyDispatch(orchestratorToken) {
+    const orchestrator = this.store.authorizeActiveProjectOrchestrator(orchestratorToken);
+    return this.reconcileReadyProject(orchestrator.project_id);
+  }
+
+  reconcileReadyProject(projectId) {
+    return this.store.dispatchNextReadyTask({
+      projectId,
+      modelRoute: {
+        ...this.resolveModelRoute("implementation"),
+        policySource: "automatic_dispatch_default",
+      },
+      projectCapacity: this.schedulerProjectCapacity,
+      globalCapacity: this.schedulerGlobalCapacity,
+    });
+  }
+
   assertLocalOwnerProfile() {
     if (this.exposureProfile !== "local_smoke") {
       throw Object.assign(new Error("local owner mutations require the loopback local-smoke profile"), {
         code: "local_operator_denied",
       });
     }
+  }
+
+  projectDeletionProjection(project) {
+    const expectedPath = resolve(join(this.stateRoot, "repositories", project.id));
+    const managedPath = resolve(project.repository_path) === expectedPath;
+    const blockers = [
+      ...(project.deletion_blockers ?? []),
+      ...(managedPath ? [] : ["unmanaged_repository_path"]),
+    ];
+    return {
+      ...project,
+      deletion_eligible: blockers.length === 0,
+      deletion_blockers: blockers,
+    };
+  }
+
+  async deleteProject({
+    projectId,
+    confirmName,
+    reason,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    const project = this.store.getProject(projectId, { includeDeleted: true });
+    if (!project) {
+      throw Object.assign(new Error(`unknown project: ${projectId}`), { code: "not_found" });
+    }
+    const expectedPath = resolve(join(this.stateRoot, "repositories", projectId));
+    if (resolve(project.repository_path) !== expectedPath) {
+      throw Object.assign(
+        new Error("project deletion blocked: unmanaged_repository_path"),
+        { code: "deletion_blocked", blockers: ["unmanaged_repository_path"] },
+      );
+    }
+    const prior = this.store.projectDeletionReceiptByIdempotency(idempotencyKey);
+    const receiptId = prior?.id ?? randomUUID();
+    const quarantinePath = prior?.quarantine_path
+      ?? resolve(join(this.stateRoot, "project-trash", receiptId));
+    const begun = this.store.beginProjectDeletion({
+      receiptId,
+      projectId,
+      confirmName,
+      reason,
+      originalPath: expectedPath,
+      quarantinePath,
+      idempotencyKey,
+      actor,
+    });
+    let receipt = begun.receipt;
+    if (receipt.state === "complete") {
+      return { replayed: true, cleanupPending: false, receipt };
+    }
+
+    if (receipt.state === "prepared") {
+      await mkdir(dirname(receipt.quarantine_path), { recursive: true, mode: 0o700 });
+      const [originalExists, quarantineExists] = await Promise.all([
+        exists(receipt.original_path),
+        exists(receipt.quarantine_path),
+      ]);
+      if (originalExists === quarantineExists) {
+        throw Object.assign(
+          new Error("project checkout paths require reconciliation before deletion can continue"),
+          { code: "reconciliation_required" },
+        );
+      }
+      if (originalExists) await rename(receipt.original_path, receipt.quarantine_path);
+      try {
+        await this.faultInjector("project_delete_after_quarantine", { projectId, receiptId });
+        receipt = this.store.tombstoneProjectDeletion(receiptId);
+      } catch (error) {
+        if (
+          await exists(receipt.quarantine_path)
+          && !(await exists(receipt.original_path))
+        ) {
+          await rename(receipt.quarantine_path, receipt.original_path);
+        }
+        throw error;
+      }
+    }
+
+    if (receipt.state !== "tombstoned") {
+      throw Object.assign(
+        new Error(`project deletion requires reconciliation from state ${receipt.state}`),
+        { code: "reconciliation_required" },
+      );
+    }
+    const [originalExists, quarantineExists] = await Promise.all([
+      exists(receipt.original_path),
+      exists(receipt.quarantine_path),
+    ]);
+    if (originalExists) {
+      throw Object.assign(
+        new Error("tombstoned project checkout paths require reconciliation"),
+        { code: "reconciliation_required" },
+      );
+    }
+    if (quarantineExists) {
+      try {
+        await this.faultInjector("project_delete_before_cleanup", { projectId, receiptId });
+        await rm(receipt.quarantine_path, { recursive: true, force: true });
+      } catch (error) {
+        return {
+          replayed: begun.replayed,
+          cleanupPending: true,
+          receipt,
+          cleanupError: error.message,
+        };
+      }
+    }
+    receipt = this.store.completeProjectDeletion(receiptId);
+    return {
+      replayed: begun.replayed,
+      cleanupPending: false,
+      receipt,
+    };
   }
 
   gitService(repositoryPath) {
@@ -359,6 +494,63 @@ export class DirectControlPlane {
         revision: await repositoryRevision(project.repository_path),
         idempotencyKey,
       });
+    }
+    if (["release", "pause_dispatch", "manualize_dispatch", "set_priority"].includes(body.operation)) {
+      const active = this.store.activeConversationTurnForLease(token, turnId);
+      const task = this.store.getTask(body.taskId);
+      if (!task || task.project_id !== active.conversation.project_id) {
+        throw Object.assign(new Error("task is outside the active conversation project"), {
+          code: "orchestrator_denied",
+        });
+      }
+      const modelRoute = body.operation === "release"
+        ? this.resolveModelRoute("implementation", {
+          provider: body.modelProvider ?? undefined,
+          model: body.modelId ?? undefined,
+          thinking: body.thinkingLevel ?? undefined,
+          billingClass: body.billingClass ?? undefined,
+          policySource: "orchestrator_release",
+        })
+        : null;
+      if (modelRoute) {
+        assertConfiguredModelSelection(this.modelRoutePolicy, "implementation", modelRoute);
+      }
+      const result = this.store.setTaskDispatch({
+        taskId: task.id,
+        operation: body.operation,
+        expectedVersion: body.expectedVersion,
+        priority: body.priority ?? null,
+        modelRoute,
+        idempotencyKey,
+        actor: `orchestrator:${active.conversation.id}`,
+        actorRole: "orchestrator",
+      });
+      if (!result.replayed) {
+        this.store.appendConversationEvent(
+          active.conversation.id,
+          active.turn.id,
+          "task_mutation_applied",
+          "orchestrator",
+          {
+            operation: body.operation,
+            taskId: task.id,
+            taskVersion: result.task.version,
+            dispatchPolicy: result.task.dispatch_policy,
+            priority: result.task.priority,
+          },
+        );
+      }
+      const dispatch = body.operation === "release"
+        ? this.reconcileReadyProject(task.project_id)
+        : null;
+      return {
+        ...result,
+        task: this.store.getTaskDetails(task.id),
+        operation: body.operation,
+        childTask: null,
+        dispatch,
+        queue: this.store.taskDispatchProjection(task.id),
+      };
     }
     return this.store.mutateConversationTask({
       token,
@@ -994,7 +1186,9 @@ export class DirectControlPlane {
       }
       if (request.method === "GET" && url.pathname === "/api/board") return json(response, 200, this.store.board());
       if (request.method === "GET" && url.pathname === "/api/projects") {
-        return json(response, 200, { projects: this.store.projects() });
+        return json(response, 200, {
+          projects: this.store.projects().map((project) => this.projectDeletionProjection(project)),
+        });
       }
       if (request.method === "POST" && url.pathname === "/api/projects/import") {
         this.assertLocalOwnerProfile();
@@ -1040,6 +1234,18 @@ export class DirectControlPlane {
             { code: "git_operation_failed" },
           );
         }
+      }
+      const deleteProject = url.pathname.match(/^\/api\/projects\/([^/]+)$/);
+      if (request.method === "DELETE" && deleteProject) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = await this.deleteProject({
+          projectId: deleteProject[1],
+          confirmName: body.confirmName,
+          reason: body.reason,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.cleanupPending ? 202 : 200, result);
       }
       const projectSources = url.pathname.match(/^\/api\/projects\/([^/]+)\/sources$/);
       if (request.method === "GET" && projectSources) {
@@ -1349,6 +1555,7 @@ export class DirectControlPlane {
       if (request.method === "POST" && url.pathname === "/api/orchestrators/commands/claim") {
         const token = bearerToken(request);
         this.reconcileAutomaticPipelines(token);
+        this.reconcileReadyDispatch(token);
         const command = this.store.claimOrchestratorCommand(token);
         if (!command) {
           response.writeHead(204);
@@ -1367,11 +1574,16 @@ export class DirectControlPlane {
           state: body.state,
           result: body.result ?? {},
         });
+        const continuation = body.state === "succeeded"
+          ? this.reconcileAutomaticPipelines(token)
+          : [];
+        const readyDispatch = body.state === "succeeded"
+          ? this.reconcileReadyDispatch(token)
+          : { scheduled: false, reason: "prior_command_failed" };
         return json(response, 200, {
           command,
-          continuation: body.state === "succeeded"
-            ? this.reconcileAutomaticPipelines(token)
-            : [],
+          continuation,
+          readyDispatch,
         });
       }
 
@@ -1552,6 +1764,44 @@ export class DirectControlPlane {
         });
         return json(response, result.replayed ? 200 : 201, result);
       }
+      const dispatchTask = url.pathname.match(/^\/api\/tasks\/([^/]+)\/dispatch$/);
+      if (request.method === "POST" && dispatchTask) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const task = this.store.getTask(dispatchTask[1]);
+        if (!task) {
+          throw Object.assign(new Error(`unknown task: ${dispatchTask[1]}`), { code: "not_found" });
+        }
+        const modelRoute = body.operation === "release"
+          ? this.resolveModelRoute("implementation", {
+            provider: body.modelProvider ?? undefined,
+            model: body.modelId ?? undefined,
+            thinking: body.thinkingLevel ?? undefined,
+            billingClass: body.billingClass ?? undefined,
+            policySource: "owner_release",
+          })
+          : null;
+        if (modelRoute) {
+          assertConfiguredModelSelection(this.modelRoutePolicy, "implementation", modelRoute);
+        }
+        const result = this.store.setTaskDispatch({
+          taskId: task.id,
+          operation: body.operation,
+          expectedVersion: body.expectedVersion,
+          priority: body.priority ?? null,
+          modelRoute,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        const dispatch = body.operation === "release"
+          ? this.reconcileReadyProject(task.project_id)
+          : null;
+        return json(response, result.replayed ? 200 : 201, {
+          ...result,
+          task: this.store.getTaskDetails(task.id),
+          dispatch,
+          queue: this.store.taskDispatchProjection(task.id),
+        });
+      }
       const resumeTask = url.pathname.match(/^\/api\/tasks\/([^/]+)\/resume$/);
       if (request.method === "POST" && resumeTask) {
         this.assertLocalOwnerProfile();
@@ -1579,7 +1829,11 @@ export class DirectControlPlane {
         else this.assertLocalOwnerProfile();
         const task = this.store.getTaskDetails(taskDetail[1]);
         return task
-          ? json(response, 200, { ...task, activity: this.store.taskAudit(task.id) })
+          ? json(response, 200, {
+            ...task,
+            dispatch: this.store.taskDispatchProjection(task.id),
+            activity: this.store.taskAudit(task.id),
+          })
           : json(response, 404, { error: "not_found" });
       }
       if (request.method === "PUT" && taskDetail) {
@@ -1772,7 +2026,7 @@ export class DirectControlPlane {
     } catch (error) {
       const status = error.code === "not_found" ? 404
         : ["capability_denied", "self_approval_denied", "orchestrator_denied", "local_operator_denied"].includes(error.code) ? 403
-          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict", "project_required", "custody_required"].includes(error.code) ? 409
+          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict", "project_required", "custody_required", "confirmation_mismatch", "deletion_blocked", "reconciliation_required"].includes(error.code) ? 409
             : 400;
       return json(response, status, { error: error.code ?? "request_failed", message: error.message });
     }
