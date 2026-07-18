@@ -1,6 +1,7 @@
 # Boss Man v2 current state
 
-Status: Phase 1 dogfood-ready — supervised real-repository runs are next
+Status: Phase 1 dogfood active — new-project workflow complete; maintenance
+repository validation remains
 
 Last updated: 2026-07-18
 
@@ -171,10 +172,11 @@ The executable checklist is
    progress-aware runtime fixes, successful-phase continuation, explicit task
    lifecycle, and the retained UI dogfood reconciliation. After merge, rerun
    the model-less suite from `main`.
-2. **Dogfood two real repositories.** Use one bounded maintenance task and one
-   new-feature/prototype task. Exercise implementation → fixed checkpoint →
-   test → review through the cockpit, audit the inspector, and use only normal
-   owner/orchestrator controls.
+2. **Dogfood one maintenance repository.** The new-project `doc-map` scenario
+   completed with an approved fixed revision and recorded recovery defects.
+   Select one bounded maintenance task with deterministic regression coverage,
+   exercise implementation → fixed checkpoint → test → review, and use only
+   normal owner/orchestrator controls.
 3. **Fix evidence-backed Phase 1 blockers.** Prioritize failures that prevent
    task ingestion, phase advancement, validation/review, custody, or audit.
    Source refresh UX, owner dependency editing, attention aggregation, richer

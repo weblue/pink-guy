@@ -1,7 +1,7 @@
 # Phase 1 dogfood plan
 
-Status: Active dogfood — first project workflow completed and its recovery
-defects are regression-covered; two cross-repository scenarios remain
+Status: Active dogfood — the new-project scenario completed; one bounded
+maintenance-repository scenario remains
 
 Last updated: 2026-07-18
 
@@ -118,6 +118,45 @@ artifact provenance. Completed run worktrees are disposable and may be removed
 after settlement; automatic worktree retirement remains Phase 2. Phase 1
 records the merge request but does not yet push or merge it, so external
 integration remains an owner action until Phase 2 policy is implemented.
+
+## New-project scenario result
+
+The `doc-map` prototype exercised system intake, model-less custody transfer
+to a newly initialized local repository, task creation, implementation,
+validation, requested-changes recovery, independent re-review, and completion.
+
+- System intake narrowed v1 to local file-existence checks and explicitly
+  deferred Markdown fragment/heading validation.
+- The bound project created one executable `prototype`, `cli`, `markdown`
+  task with concrete acceptance criteria.
+- Initial implementation checkpointed revision
+  `e05ea4b9be11a9f35d57a42a1daa9a3caa995a25`; validation passed, but review
+  correctly requested changes for balanced-parentheses and escaped-`)` link
+  destinations.
+- A resumed implementation checkpointed
+  `85baf0441c76c89f75cee13c7865e27babcbadfd` with deterministic scanner
+  coverage. Its command later failed with `fetch failed`, so the owner used
+  normal reset and schedule controls to accept the independently proven
+  checkpoint without replaying implementation.
+- Recovered validation passed three tests at the fixed revision. Independent
+  review approved with no findings, completion moved the task to Done, and a
+  merge request was recorded.
+- Host-side smoke testing outside the agent container passed `npm test` and
+  produced a clean JSON inventory for the repository.
+
+The run exposed four evidence-backed follow-ups:
+
+1. After system-intake binding, the resumed conversation initially retained
+   the stale belief that it was unbound until explicitly told to refresh
+   authoritative Boss Man state.
+2. The orchestrator can refine a task after requested changes but has no
+   structured resume tool; the owner-only resume control was required.
+3. A post-checkpoint transport failure has no direct “accept proven
+   checkpoint and continue validation” action. Reset plus explicit test
+   scheduling works but is unnecessarily indirect.
+4. Repository import has no normal cancel/delete control. A rejected
+   PowerToys dogfood candidate could be left inert, but removing its imported
+   project would require bypassing the public control plane.
 
 ## Exit evidence
 

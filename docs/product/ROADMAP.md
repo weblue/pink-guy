@@ -35,8 +35,8 @@ Phase 0 does not require application authentication because its runnable profile
 
 ## Phase 1 — useful local-first developer cockpit
 
-Status: In progress — implementation gates complete; supervised dogfood across
-real repositories next
+Status: In progress — implementation gates and new-project dogfood complete;
+one maintenance-repository scenario remains
 
 Purpose: make Boss Man useful for supervised daily development on its host.
 
@@ -72,7 +72,8 @@ Automatic model-less implementation → test → review continuation is
 implemented with deterministic restart reconciliation and explicit stop
 conditions. Explicit executable/umbrella/intake task kinds, normalized tags,
 and reversible archive/restore keep retained planning artifacts off the active
-board. Supervised phase-flow dogfooding on two real repositories remains.
+board. The `doc-map` new-project phase-flow run is complete; one bounded
+maintenance-repository run remains.
 
 Scope:
 
