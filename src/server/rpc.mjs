@@ -22,6 +22,16 @@ export class PiRpcProcess {
     this.child.stderr.on("data", (chunk) => (this.stderr += chunk));
     this.child.stdout.setEncoding("utf8");
     this.child.stdout.on("data", (chunk) => this.consume(chunk));
+    this.child.once("exit", (code, signal) => {
+      const error = new Error(
+        `Pi RPC exited before completing pending work (code=${code ?? "none"}, signal=${signal ?? "none"})`,
+      );
+      for (const waiter of this.waiters.splice(0)) {
+        clearTimeout(waiter.timer);
+        clearTimeout(waiter.inactivityTimer);
+        waiter.reject(error);
+      }
+    });
   }
 
   consume(chunk) {
@@ -45,22 +55,60 @@ export class PiRpcProcess {
       this.onEvent(message);
       for (let index = this.waiters.length - 1; index >= 0; index -= 1) {
         const waiter = this.waiters[index];
-        if (this.messages.length - 1 >= waiter.from && waiter.predicate(message)) {
+        if (this.messages.length - 1 < waiter.from) continue;
+        if (waiter.inactivityTimeoutMs) {
+          clearTimeout(waiter.inactivityTimer);
+          waiter.inactivityTimer = setTimeout(() => {
+            const waiterIndex = this.waiters.indexOf(waiter);
+            if (waiterIndex >= 0) this.waiters.splice(waiterIndex, 1);
+            clearTimeout(waiter.timer);
+            waiter.reject(new Error(
+              `timed out waiting for ${waiter.description} after ${waiter.inactivityTimeoutMs}ms without RPC activity`,
+            ));
+          }, waiter.inactivityTimeoutMs);
+        }
+        if (waiter.predicate(message)) {
           this.waiters.splice(index, 1);
           clearTimeout(waiter.timer);
+          clearTimeout(waiter.inactivityTimer);
           waiter.resolve(message);
         }
       }
     }
   }
 
-  waitFor(predicate, description, from = 0, timeoutMs = 30_000) {
+  waitFor(predicate, description, from = 0, timeoutMs = 30_000, inactivityTimeoutMs = null) {
     for (let index = from; index < this.messages.length; index += 1) {
       if (predicate(this.messages[index])) return Promise.resolve(this.messages[index]);
     }
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`timed out waiting for ${description}`)), timeoutMs);
-      this.waiters.push({ predicate, description, from, resolve, reject, timer });
+      const waiter = {
+        predicate,
+        description,
+        from,
+        resolve,
+        reject,
+        timer: null,
+        inactivityTimer: null,
+        inactivityTimeoutMs,
+      };
+      waiter.timer = setTimeout(() => {
+        const index = this.waiters.indexOf(waiter);
+        if (index >= 0) this.waiters.splice(index, 1);
+        clearTimeout(waiter.inactivityTimer);
+        reject(new Error(`timed out waiting for ${description}`));
+      }, timeoutMs);
+      if (inactivityTimeoutMs) {
+        waiter.inactivityTimer = setTimeout(() => {
+          const index = this.waiters.indexOf(waiter);
+          if (index >= 0) this.waiters.splice(index, 1);
+          clearTimeout(waiter.timer);
+          reject(new Error(
+            `timed out waiting for ${description} after ${inactivityTimeoutMs}ms without RPC activity`,
+          ));
+        }, inactivityTimeoutMs);
+      }
+      this.waiters.push(waiter);
     });
   }
 

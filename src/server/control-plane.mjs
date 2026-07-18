@@ -11,6 +11,7 @@ import { ContextCustodyService } from "./context-service.mjs";
 import { redactValue, RunCredentialVault } from "./credentials.mjs";
 import { HostGitService } from "./git-service.mjs";
 import {
+  assertConfiguredModelSelection,
   createModelRoutePolicy,
   publicModelRoutePolicy,
   resolveModelRoute,
@@ -140,6 +141,47 @@ function sanitizePiConversationEvent(event) {
     };
   }
   return null;
+}
+
+export function sanitizePiTaskEvent(event) {
+  const projected = sanitizePiConversationEvent(event);
+  if (projected) return projected;
+  if (event?.type === "response") {
+    return {
+      type: "response",
+      payload: {
+        id: event.id ?? null,
+        command: event.command ?? null,
+        success: Boolean(event.success),
+        error: clippedText(event.error, 2_000),
+        ...(event.command === "get_state" ? {
+          state: {
+            sessionId: event.data?.sessionId ?? null,
+            sessionFile: event.data?.sessionFile ?? null,
+            modelProvider: event.data?.model?.provider ?? null,
+            modelId: event.data?.model?.id ?? null,
+            thinkingLevel: event.data?.thinkingLevel ?? null,
+          },
+        } : {}),
+      },
+    };
+  }
+  if (event?.type === "extension_ui_request") {
+    return {
+      type: "extension_ui_request",
+      payload: {
+        method: event.method ?? null,
+        message: clippedText(event.message, 2_000),
+        notifyType: event.notifyType ?? null,
+      },
+    };
+  }
+  return null;
+}
+
+export function taskStateAllowsPhase(status, phase) {
+  if (phase === "implementation") return status === "in_progress";
+  return ["in_progress", "review"].includes(status);
 }
 
 async function repositoryRevision(repositoryPath) {
@@ -302,11 +344,12 @@ export class DirectControlPlane {
   } = {}) {
     const task = this.store.getTask(taskId);
     if (!task) throw new Error(`unknown task: ${taskId}`);
-    if (!task.assigned_worker) throw new Error(`task must be assigned before starting a session: ${taskId}`);
-    if (
-      (phase === "review" && !["in_progress", "review"].includes(task.status))
-      || (phase !== "review" && task.status !== "in_progress")
-    ) throw new Error("task must be in the active state required by its agent phase");
+    if (phase === "implementation" && !task.assigned_worker) {
+      throw new Error(`implementation task must be assigned before starting a session: ${taskId}`);
+    }
+    if (!taskStateAllowsPhase(task.status, phase)) {
+      throw new Error("task must be in the active state required by its agent phase");
+    }
     const project = this.store.getProject(task.project_id);
     const orchestrator = this.enforceOrchestratorLease || orchestratorToken
       ? this.store.authorizeProjectOrchestrator(orchestratorToken, task.project_id)
@@ -398,10 +441,17 @@ export class DirectControlPlane {
           "--system-prompt", composeAgentSystemPrompt(phase, promptProfile.prompt_text),
         ]),
         onEvent: (event) => {
-          const safeEvent = sanitize(event);
+          const projected = sanitizePiTaskEvent(event);
+          if (!projected) return;
+          const safeEvent = sanitize(projected);
           if (active) {
             active.sequence += 1;
-            this.store.appendRunEvent(active.runId, active.sequence, safeEvent.type ?? "unknown", safeEvent);
+            this.store.appendRunEvent(
+              active.runId,
+              active.sequence,
+              safeEvent.type ?? "unknown",
+              safeEvent.payload ?? {},
+            );
           } else pending.push(safeEvent);
         },
       });
@@ -449,7 +499,12 @@ export class DirectControlPlane {
       active = { runId: run.id, sequence: 0 };
       for (const event of pending) {
         active.sequence += 1;
-        this.store.appendRunEvent(run.id, active.sequence, event.type ?? "unknown", event);
+        this.store.appendRunEvent(
+          run.id,
+          active.sequence,
+          event.type ?? "unknown",
+          event.payload ?? {},
+        );
       }
       const artifacts = new RtkArtifactIngestor({
         store: this.store, sessionId: state.sessionId, runId, artifactRoot: artifactDirectory,
@@ -491,7 +546,13 @@ export class DirectControlPlane {
     }).effect;
     const from = managed.rpc.messages.length;
     await managed.rpc.command({ type: "prompt", message });
-    await managed.rpc.waitFor((event) => event.type === "agent_settled", "agent settlement", from);
+    await managed.rpc.waitFor(
+      (event) => event.type === "agent_settled",
+      "agent settlement",
+      from,
+      10 * 60 * 1_000,
+      90 * 1_000,
+    );
     await this.faultInjector("provider_after_settled", { sideEffectId: journal.id, runId: managed.run.id, sessionId });
     await this.ingestSnapshots(managed);
     const rtkReceipts = await managed.artifacts.ingestPiArtifacts();
@@ -1153,6 +1214,7 @@ export class DirectControlPlane {
           billingClass: body.billingClass,
           policySource: "orchestrator_selection",
         });
+        assertConfiguredModelSelection(this.modelRoutePolicy, phase, modelRoute);
         const result = this.store.scheduleOwnerTaskRun({
           taskId: task.id,
           phase,

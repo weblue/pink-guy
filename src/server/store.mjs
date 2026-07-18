@@ -1149,11 +1149,15 @@ export class Phase0Store {
         throw codedError("transition_denied", "implementation requires an unassigned ready or backlog task");
       }
     } else if (phase === "test") {
-      if (!task.revision || !task.assigned_worker || !["in_progress", "review"].includes(task.status)) {
-        throw codedError("transition_denied", "test requires an active assigned task with a fixed revision");
+      if (
+        !task.revision
+        || task.requested_review_revision !== task.revision
+        || !["ready", "in_progress", "review"].includes(task.status)
+      ) {
+        throw codedError("transition_denied", "test requires a review-requested fixed revision");
       }
     } else if (
-      task.status !== "review"
+      !["ready", "review"].includes(task.status)
       || !task.revision
       || task.requested_review_revision !== task.revision
     ) {
@@ -1177,7 +1181,7 @@ export class Phase0Store {
         JSON.stringify(payload), commandRequestSha256, idempotencyKey, now, now,
       );
       const nextVersion = task.version + 1;
-      const nextStatus = phase === "implementation" ? "in_progress" : task.status;
+      const nextStatus = phase === "implementation" ? "in_progress" : "review";
       const nextAssignedWorker = phase === "implementation" ? actorId : task.assigned_worker;
       const changed = this.database.prepare(`UPDATE tasks SET
         status=?,assigned_worker=?,version=?,updated_at=? WHERE id=? AND version=?`).run(
@@ -3055,6 +3059,12 @@ export class Phase0Store {
       throw codedError("command_conflict", "orchestrator command must be claimed before completion");
     }
     const now = this.clock();
+    const failedTask = state === "failed" && command.task_id
+      ? this.getTask(command.task_id)
+      : null;
+    const priorFailedTask = failedTask && failedTask.status !== "done"
+      ? this.getTaskDetails(failedTask.id)
+      : null;
     this.database.exec("BEGIN IMMEDIATE");
     try {
       this.database.prepare(`UPDATE orchestrator_commands SET
@@ -3062,6 +3072,59 @@ export class Phase0Store {
         state, JSON.stringify(result), now, now, commandId,
       );
       this.appendOrchestratorCommandEvent(commandId, state, orchestrator.id, result, now);
+      if (priorFailedTask) {
+        const nextVersion = failedTask.version + 1;
+        const changed = this.database.prepare(`UPDATE tasks SET
+          status='blocked',version=?,updated_at=? WHERE id=? AND version=?`).run(
+          nextVersion,
+          now,
+          failedTask.id,
+          failedTask.version,
+        );
+        if (Number(changed.changes) !== 1) {
+          throw codedError("version_conflict", "task changed while recording command failure");
+        }
+        const currentTask = this.getTaskDetails(failedTask.id);
+        const failurePayload = {
+          commandId,
+          phase: command.phase,
+          error: result,
+          retryRequiresOwnerAction: true,
+        };
+        this.database.prepare(`INSERT INTO task_events(
+          task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+          actor_role,run_id,task_version
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+          failedTask.id,
+          "task_command_failed",
+          `project-orchestrator:${orchestrator.id}`,
+          failedTask.status,
+          "blocked",
+          JSON.stringify(failurePayload),
+          `command-failed:${commandId}`,
+          now,
+          "orchestrator",
+          null,
+          nextVersion,
+        );
+        this.database.prepare(`INSERT INTO audit_events(
+          task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+          idempotency_key,request_sha256,created_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+          failedTask.id,
+          "task_command_failed",
+          `project-orchestrator:${orchestrator.id}`,
+          "orchestrator",
+          null,
+          null,
+          JSON.stringify(priorFailedTask),
+          JSON.stringify(currentTask),
+          JSON.stringify(failurePayload),
+          `command-failed:${commandId}`,
+          sha256(JSON.stringify(failurePayload)),
+          now,
+        );
+      }
       this.database.exec("COMMIT");
     } catch (error) {
       this.database.exec("ROLLBACK");
@@ -3651,9 +3714,13 @@ export class Phase0Store {
     if (busy) return [];
     const phases = [];
     if (["ready", "backlog"].includes(task.status) && !task.assigned_worker) phases.push("implementation");
-    if (task.revision && task.assigned_worker && ["in_progress", "review"].includes(task.status)) phases.push("test");
     if (
-      task.status === "review"
+      task.revision
+      && task.requested_review_revision === task.revision
+      && ["ready", "in_progress", "review"].includes(task.status)
+    ) phases.push("test");
+    if (
+      ["ready", "review"].includes(task.status)
       && task.revision
       && task.requested_review_revision === task.revision
     ) phases.push("review");

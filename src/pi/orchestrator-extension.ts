@@ -195,7 +195,8 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
     promptSnippet: "Select the phase and model route for a scoped task sub-agent",
     promptGuidelines: [
       "Omit provider, model, and thinkingLevel to use the configured phase default.",
-      "Choose a different route only when task needs, cost, or local-model policy justify it.",
+      "Only select a route already declared in Boss Man model-route configuration.",
+      "Choose a different configured route only when task needs, cost, or local-model policy justify it.",
     ],
     parameters: Type.Object({
       taskId: Type.String({ minLength: 1 }),

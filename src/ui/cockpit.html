@@ -459,8 +459,8 @@
         + ["off", "minimal", "low", "medium", "high", "xhigh"].map((thinking) =>
           "<option" + (thinking === defaultRoute?.thinking ? " selected" : "") + ">" + thinking + "</option>"
         ).join("")
-        + "</select><button data-schedule-selected=\"" + esc(task.id) + "\">Schedule phase</button></div>"
-        + "<div class=\"muted\">The resolved provider, model, and thinking level are pinned to this sub-agent run.</div>"
+        + "</select><button data-schedule-selected=\"" + esc(task.id) + "\">Manually start phase</button></div>"
+        + "<div class=\"muted\">The orchestrator normally starts phases after refinement. Use this advanced control for an explicit owner override or recovery; the resolved route is pinned to the run.</div>"
       : "<p class=\"muted\">No phase is currently schedulable.</p>";
     const completionControl = workspace?.completion_evaluation?.allowed && task.status !== "done"
       ? "<button data-complete-task=\"" + esc(task.id) + "\">Complete validated + approved task</button>"
