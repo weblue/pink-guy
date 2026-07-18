@@ -408,7 +408,11 @@
       + "<div class=\"muted\">" + esc(project.task_count) + " total tasks · "
         + esc(project.archived_task_count || 0) + " archived · " + esc(project.repository_path) + "</div>"
       + "<div class=\"project-actions\"><button class=\"ghost\" data-ask-project=\"" + esc(project.id)
-      + "\">Ask orchestrator</button></div></div>"
+      + "\">Ask orchestrator</button>"
+      + (project.deletion_eligible
+        ? " <button class=\"ghost\" data-delete-project=\"" + esc(project.id) + "\">Delete import</button>"
+        : "")
+      + "</div></div>"
     ).join("") || "<p class=\"muted\">No projects registered.</p>";
     const options = app.projects.map((project) =>
       "<option value=\"" + esc(project.id) + "\">" + esc(project.name) + "</option>"
@@ -787,6 +791,44 @@
   });
 
   document.querySelector("#projects").addEventListener("click", async (event) => {
+    const deleteButton = event.target.closest("[data-delete-project]");
+    if (deleteButton) {
+      const project = app.projects.find((item) => item.id === deleteButton.dataset.deleteProject);
+      if (!project) return;
+      const confirmName = window.prompt(
+        "Type the exact project name to delete this unused managed import:",
+      );
+      if (confirmName === null) return;
+      const reason = window.prompt("Why is this unused import being deleted?");
+      if (reason === null) return;
+      deleteButton.disabled = true;
+      try {
+        const result = await request("/api/projects/" + encodeURIComponent(project.id), {
+          method: "DELETE",
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": key("project-delete"),
+          },
+          body: JSON.stringify({ confirmName, reason }),
+        });
+        mutationStatus(
+          result.cleanupPending
+            ? "Project hidden; managed checkout cleanup remains pending."
+            : "Unused managed import deleted safely.",
+        );
+        if (app.topicDetail?.conversation?.project_id === project.id) {
+          app.selectedTopicId = null;
+          app.topicDetail = null;
+          window.location.hash = "";
+        }
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+      } finally {
+        deleteButton.disabled = false;
+      }
+      return;
+    }
     const button = event.target.closest("[data-ask-project]");
     if (!button) return;
     button.disabled = true;

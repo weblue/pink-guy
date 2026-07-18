@@ -122,6 +122,18 @@ export class BossManClient {
     });
   }
 
+  async deleteProject(
+    projectId,
+    { confirmName, reason },
+    { idempotencyKey = `terminal-project-delete-${randomUUID()}` } = {},
+  ) {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}`, {
+      method: "DELETE",
+      idempotencyKey,
+      body: { confirmName, reason },
+    });
+  }
+
   async createSourceSnapshot(
     projectId,
     { kind, sourceRef = null, content },

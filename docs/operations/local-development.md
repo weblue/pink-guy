@@ -140,6 +140,8 @@ Useful commands:
 npm run boss -- status
 npm run boss -- topics
 npm run boss -- import --repo-url git@github.com:OWNER/REPOSITORY.git
+npm run boss -- delete-project --project PROJECT_ID \
+  --confirm "Exact project name" --reason "Canceled unused import"
 npm run boss -- chat --topic TOPIC_ID
 npm run boss -- chat --repo "$PWD" --message "Refine the acceptance criteria."
 printf '%s\n' "Create a test task." | npm run boss -- chat --repo "$PWD"
@@ -153,6 +155,11 @@ and opens its durable project topic. The browser also accepts an optional
 description and immutable generic source snapshot. SSH authentication is
 performed by host Git; never paste private keys or provider credentials into a
 topic or source snapshot.
+
+Safe deletion is limited to an activity-free managed import. It removes only
+the platform-owned checkout and retains an audited tombstone. Any task,
+source/context record, conversation activity, command, evidence, or active
+lease blocks deletion.
 
 Prompt profile edits are append-only revisions. They apply when the matching
 Pi process next starts; running processes keep their pinned revision. Model

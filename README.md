@@ -98,6 +98,8 @@ npm run boss -- chat --topic TOPIC_ID
 npm run boss -- chat --repo "$PWD" --message "Refine the next task."
 npm run boss -- chat --new-topic "Prototype a new tool"
 npm run boss -- import --repo-url git@github.com:OWNER/REPO.git
+npm run boss -- delete-project --project PROJECT_ID \
+  --confirm "Exact project name" --reason "Canceled unused import"
 npm run boss -- bind --topic TOPIC_ID --project PROJECT_ID
 npm run boss -- profiles
 ```
@@ -116,6 +118,12 @@ The active board distinguishes executable work from umbrella and intake
 artifacts. Optional task tags are organizational only. Settled planning records
 can be archived with an audited reason, remain fully inspectable, and can be
 restored without automatically scheduling work.
+
+Only an unused Boss Man-managed import can be deleted. The control plane
+refuses direct repositories and imports with tasks, source/context records,
+conversation activity, commands, evidence, or active leases. Successful
+deletion removes the managed checkout while retaining a tombstone and audited
+receipt.
 
 ## Select and swap models
 

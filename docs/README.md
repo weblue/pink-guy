@@ -35,6 +35,13 @@ verification results.
 - [Workspace inspectors and phase flow](features/workspace-phase-flow/)
 - [Automatic phase continuation](features/automatic-phase-continuation/)
 - [Task lifecycle and planning artifacts](features/task-lifecycle-artifacts/)
+- [Safe managed-project deletion](features/safe-project-deletion/)
+
+## Proposed closing slice
+
+- [Deterministic Ready scheduler](features/deterministic-ready-scheduler/) —
+  proposed D-046 moves eligibility, ordering, capacity, and sub-agent dispatch
+  out of the LLM while keeping conversational task refinement.
 
 P1-1 through P1-3 are usable. P1-4 now has its fixed-revision phase protocol,
 model-less automatic test/review continuation, workspace inspector, and

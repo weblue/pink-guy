@@ -118,6 +118,19 @@ function publicOrchestrationLease(row) {
   return { ...visible, metadata: parseJson(row.metadata_json) ?? {} };
 }
 
+function publicProjectDeletionReceipt(row) {
+  if (!row) return null;
+  const {
+    request_sha256: ignoredRequestHash,
+    project_snapshot_json: ignoredProjectSnapshotJson,
+    ...visible
+  } = row;
+  return {
+    ...visible,
+    project_snapshot: parseJson(row.project_snapshot_json) ?? {},
+  };
+}
+
 export class Phase0Store {
   constructor(path, { clock = () => new Date().toISOString() } = {}) {
     mkdirSync(dirname(path), { recursive: true });
@@ -142,6 +155,23 @@ export class Phase0Store {
         request_sha256 TEXT NOT NULL,
         idempotency_key TEXT NOT NULL UNIQUE,
         created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS project_deletion_receipts (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        idempotency_key TEXT NOT NULL UNIQUE,
+        request_sha256 TEXT NOT NULL,
+        project_snapshot_json TEXT NOT NULL,
+        original_path TEXT NOT NULL,
+        quarantine_path TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        state TEXT NOT NULL,
+        checkout_state TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        tombstoned_at TEXT,
+        completed_at TEXT,
+        updated_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS source_snapshots (
         id TEXT PRIMARY KEY,
@@ -695,6 +725,9 @@ export class Phase0Store {
     }
     this.ensureColumn("projects", "repository_id", "TEXT");
     this.ensureColumn("projects", "source_url", "TEXT");
+    this.ensureColumn("projects", "deleted_at", "TEXT");
+    this.ensureColumn("projects", "deleted_by", "TEXT");
+    this.ensureColumn("projects", "deletion_reason", "TEXT");
     this.ensureColumn("task_events", "actor_role", "TEXT");
     this.ensureColumn("task_events", "run_id", "TEXT");
     this.ensureColumn("task_events", "task_version", "INTEGER");
@@ -741,12 +774,16 @@ export class Phase0Store {
         ON conversation_custody_snapshots(conversation_id,created_at DESC);
       CREATE INDEX IF NOT EXISTS agent_prompt_revisions_profile_version
         ON agent_prompt_revisions(profile_key,version DESC);
-      CREATE UNIQUE INDEX IF NOT EXISTS one_project_per_import_source
-        ON projects(source_url) WHERE source_url IS NOT NULL;
       CREATE INDEX IF NOT EXISTS task_dependencies_reverse
         ON task_dependencies(depends_on_task_id,task_id);
       CREATE UNIQUE INDEX IF NOT EXISTS one_active_orchestration_lease_per_scope
         ON orchestration_leases(scope_type,scope_id) WHERE status='active';
+    `);
+    this.database.exec(`
+      DROP INDEX IF EXISTS one_project_per_import_source;
+      CREATE UNIQUE INDEX one_project_per_import_source
+        ON projects(source_url)
+        WHERE source_url IS NOT NULL AND deleted_at IS NULL;
     `);
   }
 
@@ -1506,12 +1543,16 @@ export class Phase0Store {
     return this.database.prepare("SELECT * FROM tasks WHERE id=?").get(taskId) ?? null;
   }
 
-  getProject(projectId) {
-    return this.database.prepare("SELECT * FROM projects WHERE id=?").get(projectId) ?? null;
+  getProject(projectId, { includeDeleted = false } = {}) {
+    return this.database.prepare(
+      `SELECT * FROM projects WHERE id=?${includeDeleted ? "" : " AND deleted_at IS NULL"}`,
+    ).get(projectId) ?? null;
   }
 
   projectBySourceUrl(sourceUrl) {
-    return this.database.prepare("SELECT * FROM projects WHERE source_url=?").get(sourceUrl) ?? null;
+    return this.database.prepare(
+      "SELECT * FROM projects WHERE source_url=? AND deleted_at IS NULL",
+    ).get(sourceUrl) ?? null;
   }
 
   importedProjectByRequest({ sourceUrl, name, idempotencyKey }) {
@@ -1664,7 +1705,265 @@ export class Phase0Store {
           AND t.status IN ('in_progress','review','blocked')) AS active_task_count,
       (SELECT COUNT(*) FROM tasks t
         WHERE t.project_id=p.id AND t.archived_at IS NOT NULL) AS archived_task_count
-      FROM projects p ORDER BY p.name,p.id`).all();
+      FROM projects p WHERE p.deleted_at IS NULL ORDER BY p.name,p.id`).all().map((project) => {
+      const deletion = this.projectDeletionEligibility(project.id);
+      return {
+        ...project,
+        deletion_eligible: deletion.eligible,
+        deletion_blockers: deletion.blockers,
+      };
+    });
+  }
+
+  projectDeletionEligibility(projectId) {
+    const project = this.getProject(projectId, { includeDeleted: true });
+    if (!project) throw codedError("not_found", `unknown project: ${projectId}`);
+    const counts = {
+      tasks: Number(this.database.prepare(
+        "SELECT COUNT(*) value FROM tasks WHERE project_id=?",
+      ).get(projectId).value),
+      sources: Number(this.database.prepare(
+        "SELECT COUNT(*) value FROM source_snapshots WHERE project_id=?",
+      ).get(projectId).value),
+      commands: Number(this.database.prepare(
+        "SELECT COUNT(*) value FROM orchestrator_commands WHERE project_id=?",
+      ).get(projectId).value),
+      memories: Number(this.database.prepare(
+        "SELECT COUNT(*) value FROM memory_records WHERE project_id=?",
+      ).get(projectId).value),
+      evidence: Number(this.database.prepare(
+        "SELECT COUNT(*) value FROM normalized_evidence WHERE project_id=?",
+      ).get(projectId).value),
+      active_project_orchestrators: Number(this.database.prepare(`SELECT COUNT(*) value
+        FROM project_orchestrators WHERE project_id=? AND status='active'`).get(projectId).value),
+      active_orchestration_leases: Number(this.database.prepare(`SELECT COUNT(*) value
+        FROM orchestration_leases
+        WHERE scope_type='project' AND scope_id=? AND status='active'`).get(projectId).value),
+      turns: Number(this.database.prepare(`SELECT COUNT(*) value
+        FROM conversation_turns turn
+        JOIN orchestrator_conversations conversation ON conversation.id=turn.conversation_id
+        WHERE conversation.project_id=?`).get(projectId).value),
+      conversation_runs: Number(this.database.prepare(`SELECT COUNT(*) value
+        FROM conversation_runs run
+        JOIN orchestrator_conversations conversation ON conversation.id=run.conversation_id
+        WHERE conversation.project_id=?`).get(projectId).value),
+      custody_snapshots: Number(this.database.prepare(`SELECT COUNT(*) value
+        FROM conversation_custody_snapshots snapshot
+        JOIN orchestrator_conversations conversation ON conversation.id=snapshot.conversation_id
+        WHERE conversation.project_id=?`).get(projectId).value),
+      model_changes: Number(this.database.prepare(`SELECT COUNT(*) value
+        FROM conversation_model_changes change
+        JOIN orchestrator_conversations conversation ON conversation.id=change.conversation_id
+        WHERE conversation.project_id=?`).get(projectId).value),
+      project_bindings: Number(this.database.prepare(
+        "SELECT COUNT(*) value FROM topic_project_bindings WHERE project_id=?",
+      ).get(projectId).value),
+      non_idle_conversations: Number(this.database.prepare(`SELECT COUNT(*) value
+        FROM orchestrator_conversations
+        WHERE project_id=? AND state NOT IN ('idle','archived')`).get(projectId).value),
+    };
+    const blockers = [];
+    if (project.deleted_at) blockers.push("already_deleted");
+    if (!project.source_url) blockers.push("not_managed_import");
+    for (const [kind, count] of Object.entries(counts)) {
+      if (count > 0) blockers.push(`${kind}:${count}`);
+    }
+    return {
+      project,
+      eligible: blockers.length === 0,
+      blockers,
+      counts,
+    };
+  }
+
+  projectDeletionReceiptByIdempotency(idempotencyKey) {
+    if (!idempotencyKey) return null;
+    return publicProjectDeletionReceipt(this.database.prepare(
+      "SELECT * FROM project_deletion_receipts WHERE idempotency_key=?",
+    ).get(idempotencyKey));
+  }
+
+  beginProjectDeletion({
+    receiptId,
+    projectId,
+    confirmName,
+    reason,
+    originalPath,
+    quarantinePath,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    const normalizedReason = typeof reason === "string" ? reason.trim() : "";
+    if (!normalizedReason || normalizedReason.length > 2_000 || normalizedReason.includes("\0")) {
+      throw codedError("invalid_request", "deletion reason must be between 1 and 2000 characters");
+    }
+    if (typeof confirmName !== "string" || confirmName.includes("\0")) {
+      throw codedError("invalid_request", "exact project-name confirmation is required");
+    }
+    const requestSha256 = sha256(JSON.stringify({
+      action: "delete_project",
+      projectId,
+      confirmName,
+      reason: normalizedReason,
+    }));
+    const prior = this.database.prepare(
+      "SELECT * FROM project_deletion_receipts WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256 || prior.project_id !== projectId) {
+        throw codedError(
+          "idempotency_conflict",
+          "idempotency key was reused for a different project deletion",
+        );
+      }
+      return { replayed: true, receipt: publicProjectDeletionReceipt(prior) };
+    }
+    const project = this.getProject(projectId);
+    if (!project) throw codedError("not_found", `unknown active project: ${projectId}`);
+    if (confirmName !== project.name) {
+      throw codedError("confirmation_mismatch", "project name confirmation did not match exactly");
+    }
+    const eligibility = this.projectDeletionEligibility(projectId);
+    if (!eligibility.eligible) {
+      throw codedError(
+        "deletion_blocked",
+        `project deletion blocked: ${eligibility.blockers.join(",")}`,
+        { blockers: eligibility.blockers },
+      );
+    }
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const lockedEligibility = this.projectDeletionEligibility(projectId);
+      if (!lockedEligibility.eligible) {
+        throw codedError(
+          "deletion_blocked",
+          `project deletion blocked: ${lockedEligibility.blockers.join(",")}`,
+          { blockers: lockedEligibility.blockers },
+        );
+      }
+      this.database.prepare(`INSERT INTO project_deletion_receipts(
+        id,project_id,idempotency_key,request_sha256,project_snapshot_json,
+        original_path,quarantine_path,reason,actor,state,checkout_state,
+        created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,'prepared','original',?,?)`).run(
+        receiptId,
+        projectId,
+        idempotencyKey,
+        requestSha256,
+        JSON.stringify(project),
+        originalPath,
+        quarantinePath,
+        normalizedReason,
+        actor,
+        now,
+        now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      replayed: false,
+      receipt: this.projectDeletionReceiptByIdempotency(idempotencyKey),
+    };
+  }
+
+  tombstoneProjectDeletion(receiptId) {
+    const receipt = this.database.prepare(
+      "SELECT * FROM project_deletion_receipts WHERE id=?",
+    ).get(receiptId);
+    if (!receipt) throw codedError("not_found", `unknown project deletion: ${receiptId}`);
+    if (["tombstoned", "complete"].includes(receipt.state)) {
+      return publicProjectDeletionReceipt(receipt);
+    }
+    if (receipt.state !== "prepared") {
+      throw codedError("transition_denied", `cannot tombstone deletion in state ${receipt.state}`);
+    }
+    const eligibility = this.projectDeletionEligibility(receipt.project_id);
+    if (!eligibility.eligible) {
+      throw codedError(
+        "deletion_blocked",
+        `project deletion blocked: ${eligibility.blockers.join(",")}`,
+        { blockers: eligibility.blockers },
+      );
+    }
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const lockedEligibility = this.projectDeletionEligibility(receipt.project_id);
+      if (!lockedEligibility.eligible) {
+        throw codedError(
+          "deletion_blocked",
+          `project deletion blocked: ${lockedEligibility.blockers.join(",")}`,
+          { blockers: lockedEligibility.blockers },
+        );
+      }
+      const topics = this.database.prepare(
+        "SELECT id FROM topics WHERE project_id=?",
+      ).all(receipt.project_id);
+      for (const topic of topics) {
+        this.database.prepare(
+          "UPDATE topics SET state='archived',version=version+1,updated_at=? WHERE id=?",
+        ).run(now, topic.id);
+        this.database.prepare(`UPDATE orchestrator_conversations SET
+          state='archived',current_turn_id=NULL,updated_at=? WHERE topic_id=?`).run(now, topic.id);
+        this.database.prepare(`INSERT INTO topic_events(
+          topic_id,type,actor,payload_json,idempotency_key,request_sha256,created_at
+        ) VALUES(?,'topic_archived',?,?,?,?,?)`).run(
+          topic.id,
+          receipt.actor,
+          JSON.stringify({ reason: "project_deleted", projectId: receipt.project_id }),
+          `project-delete:${receipt.id}:topic:${topic.id}`,
+          sha256(JSON.stringify({
+            action: "archive_topic_for_project_deletion",
+            projectId: receipt.project_id,
+            topicId: topic.id,
+          })),
+          now,
+        );
+      }
+      const changed = this.database.prepare(`UPDATE projects SET
+        deleted_at=?,deleted_by=?,deletion_reason=? WHERE id=? AND deleted_at IS NULL`).run(
+        now,
+        receipt.actor,
+        receipt.reason,
+        receipt.project_id,
+      );
+      if (Number(changed.changes) !== 1) {
+        throw codedError("version_conflict", "project changed during deletion");
+      }
+      this.database.prepare(`UPDATE project_deletion_receipts SET
+        state='tombstoned',checkout_state='quarantined',tombstoned_at=?,updated_at=?
+        WHERE id=? AND state='prepared'`).run(now, now, receipt.id);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return publicProjectDeletionReceipt(this.database.prepare(
+      "SELECT * FROM project_deletion_receipts WHERE id=?",
+    ).get(receipt.id));
+  }
+
+  completeProjectDeletion(receiptId) {
+    const receipt = this.database.prepare(
+      "SELECT * FROM project_deletion_receipts WHERE id=?",
+    ).get(receiptId);
+    if (!receipt) throw codedError("not_found", `unknown project deletion: ${receiptId}`);
+    if (receipt.state === "complete") return publicProjectDeletionReceipt(receipt);
+    if (receipt.state !== "tombstoned") {
+      throw codedError("transition_denied", `cannot complete deletion in state ${receipt.state}`);
+    }
+    const now = this.clock();
+    this.database.prepare(`UPDATE project_deletion_receipts SET
+      state='complete',checkout_state='removed',completed_at=?,updated_at=?
+      WHERE id=? AND state='tombstoned'`).run(now, now, receiptId);
+    return publicProjectDeletionReceipt(this.database.prepare(
+      "SELECT * FROM project_deletion_receipts WHERE id=?",
+    ).get(receiptId));
   }
 
   createTopic({

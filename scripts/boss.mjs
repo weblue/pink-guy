@@ -23,6 +23,8 @@ function usage(message) {
   boss bind --topic ID --project ID [--expected-version N] [--api URL] [--json]
   boss import --repo-url URL [--name NAME] [--description TEXT]
     [--api URL] [--json]
+  boss delete-project --project ID --confirm EXACT_NAME --reason TEXT
+    [--api URL] [--json]
   boss chat (--topic ID | --project ID | --repo PATH | --new-topic TITLE)
     [--description TEXT] [--message TEXT | --message-file PATH]
     [--no-wait] [--poll-ms 750] [--timeout-seconds 600] [--api URL] [--json]
@@ -38,7 +40,7 @@ function parseArguments(argv) {
   const command = argv[0];
   if (
     !command || command === "--help" || command === "-h"
-    || !["status", "topics", "profiles", "profile", "model", "bind", "import", "chat"].includes(command)
+    || !["status", "topics", "profiles", "profile", "model", "bind", "import", "delete-project", "chat"].includes(command)
   ) {
     usage(command ? `unknown command: ${command}` : null);
   }
@@ -69,6 +71,8 @@ function parseArguments(argv) {
     else if (argument === "--thinking") options.thinkingLevel = value();
     else if (argument === "--repo-url") options.repositoryUrl = value();
     else if (argument === "--name") options.projectName = value();
+    else if (argument === "--confirm") options.confirmName = value();
+    else if (argument === "--reason") options.reason = value();
     else if (argument === "--no-wait") options.noWait = true;
     else if (argument === "--poll-ms") options.pollMs = Number(value());
     else if (argument === "--timeout-seconds") options.timeoutMs = Number(value()) * 1_000;
@@ -88,6 +92,10 @@ function parseArguments(argv) {
     usage("bind requires --topic and --project");
   }
   if (command === "import" && !options.repositoryUrl) usage("import requires --repo-url");
+  if (
+    command === "delete-project"
+    && (!options.projectId || !options.confirmName || !options.reason)
+  ) usage("delete-project requires --project, --confirm, and --reason");
   if (options.prompt && options.promptFile) usage("choose --prompt or --prompt-file");
   if (
     options.expectedVersion !== undefined
@@ -234,6 +242,22 @@ Topic: ${result.topic.id}
 Browser: ${result.browserUrl}
 Terminal: npm run boss -- chat --topic ${result.topic.id}
 `);
+}
+
+async function runProjectDelete(client, options) {
+  const result = await client.deleteProject(options.projectId, {
+    confirmName: options.confirmName,
+    reason: options.reason,
+  });
+  if (options.json) {
+    writeJson(result);
+    return;
+  }
+  process.stdout.write(
+    result.cleanupPending
+      ? `Project tombstoned; checkout cleanup remains pending (${result.receipt.id}).\n`
+      : `Project deleted safely; retained receipt ${result.receipt.id}.\n`,
+  );
 }
 
 function writeConversationHeader(state) {
@@ -406,6 +430,8 @@ try {
     await runTopicBind(client, options);
   } else if (options.command === "import") {
     await runImport(client, options);
+  } else if (options.command === "delete-project") {
+    await runProjectDelete(client, options);
   } else {
     await runChat(client, options);
   }

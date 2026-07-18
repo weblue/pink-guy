@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile, execFileSync } from "node:child_process";
 import { createServer } from "node:http";
-import { access, chmod, copyFile, mkdir, readFile, readdir, rm } from "node:fs/promises";
+import { access, chmod, copyFile, mkdir, readFile, readdir, rename, rm } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -310,6 +310,121 @@ export class DirectControlPlane {
         code: "local_operator_denied",
       });
     }
+  }
+
+  projectDeletionProjection(project) {
+    const expectedPath = resolve(join(this.stateRoot, "repositories", project.id));
+    const managedPath = resolve(project.repository_path) === expectedPath;
+    const blockers = [
+      ...(project.deletion_blockers ?? []),
+      ...(managedPath ? [] : ["unmanaged_repository_path"]),
+    ];
+    return {
+      ...project,
+      deletion_eligible: blockers.length === 0,
+      deletion_blockers: blockers,
+    };
+  }
+
+  async deleteProject({
+    projectId,
+    confirmName,
+    reason,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    const project = this.store.getProject(projectId, { includeDeleted: true });
+    if (!project) {
+      throw Object.assign(new Error(`unknown project: ${projectId}`), { code: "not_found" });
+    }
+    const expectedPath = resolve(join(this.stateRoot, "repositories", projectId));
+    if (resolve(project.repository_path) !== expectedPath) {
+      throw Object.assign(
+        new Error("project deletion blocked: unmanaged_repository_path"),
+        { code: "deletion_blocked", blockers: ["unmanaged_repository_path"] },
+      );
+    }
+    const prior = this.store.projectDeletionReceiptByIdempotency(idempotencyKey);
+    const receiptId = prior?.id ?? randomUUID();
+    const quarantinePath = prior?.quarantine_path
+      ?? resolve(join(this.stateRoot, "project-trash", receiptId));
+    const begun = this.store.beginProjectDeletion({
+      receiptId,
+      projectId,
+      confirmName,
+      reason,
+      originalPath: expectedPath,
+      quarantinePath,
+      idempotencyKey,
+      actor,
+    });
+    let receipt = begun.receipt;
+    if (receipt.state === "complete") {
+      return { replayed: true, cleanupPending: false, receipt };
+    }
+
+    if (receipt.state === "prepared") {
+      await mkdir(dirname(receipt.quarantine_path), { recursive: true, mode: 0o700 });
+      const [originalExists, quarantineExists] = await Promise.all([
+        exists(receipt.original_path),
+        exists(receipt.quarantine_path),
+      ]);
+      if (originalExists === quarantineExists) {
+        throw Object.assign(
+          new Error("project checkout paths require reconciliation before deletion can continue"),
+          { code: "reconciliation_required" },
+        );
+      }
+      if (originalExists) await rename(receipt.original_path, receipt.quarantine_path);
+      try {
+        await this.faultInjector("project_delete_after_quarantine", { projectId, receiptId });
+        receipt = this.store.tombstoneProjectDeletion(receiptId);
+      } catch (error) {
+        if (
+          await exists(receipt.quarantine_path)
+          && !(await exists(receipt.original_path))
+        ) {
+          await rename(receipt.quarantine_path, receipt.original_path);
+        }
+        throw error;
+      }
+    }
+
+    if (receipt.state !== "tombstoned") {
+      throw Object.assign(
+        new Error(`project deletion requires reconciliation from state ${receipt.state}`),
+        { code: "reconciliation_required" },
+      );
+    }
+    const [originalExists, quarantineExists] = await Promise.all([
+      exists(receipt.original_path),
+      exists(receipt.quarantine_path),
+    ]);
+    if (originalExists) {
+      throw Object.assign(
+        new Error("tombstoned project checkout paths require reconciliation"),
+        { code: "reconciliation_required" },
+      );
+    }
+    if (quarantineExists) {
+      try {
+        await this.faultInjector("project_delete_before_cleanup", { projectId, receiptId });
+        await rm(receipt.quarantine_path, { recursive: true, force: true });
+      } catch (error) {
+        return {
+          replayed: begun.replayed,
+          cleanupPending: true,
+          receipt,
+          cleanupError: error.message,
+        };
+      }
+    }
+    receipt = this.store.completeProjectDeletion(receiptId);
+    return {
+      replayed: begun.replayed,
+      cleanupPending: false,
+      receipt,
+    };
   }
 
   gitService(repositoryPath) {
@@ -994,7 +1109,9 @@ export class DirectControlPlane {
       }
       if (request.method === "GET" && url.pathname === "/api/board") return json(response, 200, this.store.board());
       if (request.method === "GET" && url.pathname === "/api/projects") {
-        return json(response, 200, { projects: this.store.projects() });
+        return json(response, 200, {
+          projects: this.store.projects().map((project) => this.projectDeletionProjection(project)),
+        });
       }
       if (request.method === "POST" && url.pathname === "/api/projects/import") {
         this.assertLocalOwnerProfile();
@@ -1040,6 +1157,18 @@ export class DirectControlPlane {
             { code: "git_operation_failed" },
           );
         }
+      }
+      const deleteProject = url.pathname.match(/^\/api\/projects\/([^/]+)$/);
+      if (request.method === "DELETE" && deleteProject) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = await this.deleteProject({
+          projectId: deleteProject[1],
+          confirmName: body.confirmName,
+          reason: body.reason,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.cleanupPending ? 202 : 200, result);
       }
       const projectSources = url.pathname.match(/^\/api\/projects\/([^/]+)\/sources$/);
       if (request.method === "GET" && projectSources) {
@@ -1772,7 +1901,7 @@ export class DirectControlPlane {
     } catch (error) {
       const status = error.code === "not_found" ? 404
         : ["capability_denied", "self_approval_denied", "orchestrator_denied", "local_operator_denied"].includes(error.code) ? 403
-          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict", "project_required", "custody_required"].includes(error.code) ? 409
+          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict", "project_required", "custody_required", "confirmation_mismatch", "deletion_blocked", "reconciliation_required"].includes(error.code) ? 409
             : 400;
       return json(response, status, { error: error.code ?? "request_failed", message: error.message });
     }

@@ -2,7 +2,7 @@
 
 ## Core regression suite
 
-Run the ten deterministic Phase 1 probes together:
+Run the 13 deterministic Phase 1 probes together:
 
 ```sh
 npm test
@@ -13,7 +13,9 @@ local task controls, conversation/task projections, persistent fake-Pi RPC
 runtime, cockpit rendering, browser/terminal conversation parity, task-graph
 mutations, plain-text prompt defaults, per-agent model routes,
 pre-compaction/scope-transfer custody, and the fixed-revision phase workflow, then
-deletes the fixture. It makes no provider request and starts no task container.
+deletes the fixture. The suite also fault-tests safe managed-project deletion,
+quarantine restoration, and cleanup retry. It makes no provider request and
+starts no task container.
 
 Watch the phase protocol as a standalone model-less baseline:
 
