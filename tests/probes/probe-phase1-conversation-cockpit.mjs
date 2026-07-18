@@ -59,6 +59,9 @@ assert(
     && shell.value.includes("Ask orchestrator")
     && shell.value.includes("data-focus-task")
     && shell.value.includes("task.classList.add(\"focused\")")
+    && shell.value.includes('data-testid="terminal-command"')
+    && shell.value.includes("npm run boss -- chat --topic ")
+    && shell.value.includes("item.endpoint + \" · conversations\"")
     && !shell.value.includes("new Terminal(")
     && !shell.value.includes("xterm"),
   "cockpit does not expose the approved structured conversation workspace",
@@ -101,6 +104,8 @@ process.stdout.write(`${JSON.stringify({
   structured_change_surface: true,
   change_to_board_navigation: true,
   browser_terminal_emulator: false,
+  shared_terminal_command: true,
+  orchestrator_attach_endpoint: true,
   provider_requests: 0,
   isolated_root: root,
 }, null, 2)}\n`);

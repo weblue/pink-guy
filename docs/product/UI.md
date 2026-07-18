@@ -128,7 +128,12 @@ Mobile prioritizes triage over a squeezed desktop replica:
 5. Terminal opens full-screen with a persistent escape/control toolbar.
 6. High-impact actions require a deliberate confirmation surface that shows task, branch, and policy consequence.
 
-## Terminal contract
+## Deferred embedded workspace-terminal contract
+
+D-043 removes an embedded browser PTY from the Phase 1 baseline. The current
+terminal experience is the `boss` central-API conversation client plus
+cmux/tmux/SSH process attach and recovery. The rules below apply only if a
+later demonstrated workflow gap justifies a browser workspace shell.
 
 - Pi structured events are the primary semantic record; terminal output is an interactive and diagnostic surface.
 - A workspace shell is distinct from the Pi agent process so human smoke tests do not inject keystrokes into the agent conversation.
@@ -145,7 +150,8 @@ Mobile prioritizes triage over a squeezed desktop replica:
    conversation, never an identity-free global chat or a transcript list.
 3. Agent questions appear as attention items linked to the exact task and turn.
 4. Long tool output collapses into typed cards/artifacts instead of dominating the transcript.
-5. The conversation can be hidden without losing run controls, terminal access, diffs, tests, or review.
+5. The conversation can be hidden without losing run controls, terminal
+   attach/recovery information, diffs, tests, or review.
 6. Search spans tasks, files, artifacts, events, and conversations and identifies the result type.
 
 ## Foundation spike acceptance gates

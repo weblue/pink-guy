@@ -45,6 +45,5 @@ provider request.
 
 Add the task detail workspace and owner controls for editing task description,
 acceptance criteria, dependencies, and explicit failed-command
-reconciliation. Persistent PTY/reconnect can then attach to the resulting
-session-centric workflow.
-
+reconciliation. The workspace should expose the owning tmux/process endpoint
+for external attach and recovery; D-043 defers a persistent browser PTY.

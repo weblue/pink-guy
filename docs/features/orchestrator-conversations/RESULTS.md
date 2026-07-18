@@ -43,6 +43,14 @@ Last updated: 2026-07-17
 - owner/Pi turn lifecycle, structured task-change cards, and synchronized
   board/topic projections; and
 - explicit tmux/cmux/SSH attach guidance without a browser terminal emulator;
+- a dependency-free `boss` terminal client that resolves topics by topic ID,
+  project ID, or registered repository path and reuses the same project topic
+  as the cockpit;
+- interactive, piped, and one-shot terminal turns over the central API with
+  durable history, structured task-change projection, model/scope identity,
+  orchestrator lease status, and cockpit deep links;
+- cockpit display of the same terminal command and live tmux pane/process
+  endpoint;
 - optimistic-versioned task title and acceptance-criteria replacement;
 - one-child-per-call task splitting with parent/child origin records;
 - same-project, cycle-free task dependencies that block scheduling and
@@ -109,6 +117,17 @@ conflicts, exact turn provenance, split retry idempotency, cross-project
 denial, dependency-cycle rejection, unresolved-dependency scheduling gates,
 and a protected decision completion gate. It makes no provider requests and
 starts no task containers.
+
+The model-less terminal parity probe passes:
+
+```text
+node tests/probes/probe-phase1-terminal-client.mjs \
+  /Users/ND139178/Documents/boss-man
+```
+
+It proves repository-based topic selection, shared topic identity, durable
+history and structured task-change rendering, explicit offline lease status,
+cockpit deep links, and second-turn queueing without a provider request.
 
 An owner-authorized live Pi smoke test also passed through the integrated
 project orchestrator and the retained local API state. Pi ran with

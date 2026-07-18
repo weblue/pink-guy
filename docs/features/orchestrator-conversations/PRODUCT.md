@@ -150,6 +150,20 @@ Figma: none provided.
     concrete. Superseded proposals remain visible as history; only current
     structured tasks appear as actionable board work.
 
+25. The owner can open the same topic conversation from the browser cockpit or
+    a terminal client. Both surfaces use the central conversation and event
+    APIs, show the same topic/scope/model identity and durable turn history,
+    submit idempotent owner turns, expose structured task changes, and report
+    whether the matching orchestrator lease is online. Switching surfaces never
+    rebuilds or resends Pi history.
+
+26. The terminal client is suitable for a dedicated cmux/tmux pane. It can
+    select a conversation by topic, project ID, or registered repository path;
+    reuses the same project topic as **Ask orchestrator**; supports interactive
+    and one-shot input; and prints a browser deep link for visual inspection.
+    cmux/tmux hosts the orchestrator process and terminal client but does not
+    become a second authority or a raw Pi-terminal transport.
+
 ## Non-goals
 
 - making the entire dashboard a conversation list;
@@ -158,3 +172,5 @@ Figma: none provided.
 - allowing a topic without a repository to run code-changing agents;
 - letting source content act as trusted system instructions;
 - supporting a harness other than Pi.
+- treating terminal scrollback or a tmux pane as canonical conversation
+  history.

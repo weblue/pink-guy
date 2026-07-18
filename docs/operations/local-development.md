@@ -103,6 +103,47 @@ npm run orchestrator:system -- \
 
 For cmux, create or select a tmux-backed workspace and run the same command there. cmux/tmux and SSH are attach and process-management transports; they do not own durable Boss Man state.
 
+## Use the shared browser and terminal conversation
+
+The cockpit and terminal client consume the same central API projection and
+submit to the same persistent Pi conversation. Open the project conversation
+from a terminal or dedicated cmux pane:
+
+```sh
+npm run boss -- chat --repo "$PWD"
+```
+
+The client reuses the first active project topic, just like **Ask
+orchestrator**, and prints:
+
+- topic, conversation, scope, model, and thinking identity;
+- current orchestrator online/offline state and its tmux pane or process
+  endpoint;
+- durable owner/Pi turn history and structured task changes; and
+- the exact cockpit deep link.
+
+Terminal input is sent once to the central turn queue. Existing Pi context is
+neither copied into the request nor reconstructed from terminal output. If the
+matching orchestrator is offline, the message remains queued and the client
+returns with an explicit status.
+
+Useful commands:
+
+```sh
+npm run boss -- status
+npm run boss -- topics
+npm run boss -- chat --topic TOPIC_ID
+npm run boss -- chat --repo "$PWD" --message "Refine the acceptance criteria."
+printf '%s\n' "Create a test task." | npm run boss -- chat --repo "$PWD"
+```
+
+For multiple repositories on this laptop, use one central-API pane and one
+`npm run orchestrator:project` pane per active repository. Add `boss chat`
+panes only where terminal conversation is useful; the browser can open all
+topics and boards at once. Closing a chat pane does not stop Pi or lose
+history. Stopping an orchestrator pane releases that project's lease, while
+the queued conversation remains durable.
+
 ## Create and schedule phase-scoped work
 
 In the cockpit, use **Create task** to choose a project, provide a title and
