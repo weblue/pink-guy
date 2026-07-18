@@ -355,7 +355,10 @@ starting Pi; an agent cannot silently switch itself to a different route.
 
 14.1 One owner can start a new topic or attach an existing repository and external work item, converse with its orchestrator until only material ambiguity is resolved, and observe the resulting audited tasks on the local board.
 
-14.2 The owner can start a Pi session in an isolated worktree and container and use both structured session controls and an interactive workspace terminal.
+14.2 The owner can start a Pi session in an isolated worktree and container,
+use structured session controls, and open its explicit tmux/cmux workspace
+attach or recovery path. An embedded browser PTY is not required for this
+release boundary.
 
 14.3 Agents update the board, preserve context before compaction, and create inspectable raw and RTK-filtered command artifacts.
 

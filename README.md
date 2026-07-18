@@ -1,32 +1,47 @@
 # Boss Man
 
-Boss Man is a local-first developer cockpit for orchestrating Pi sessions across
-multiple Git repositories. One central API owns projects, tasks, audit history,
-worktrees, agent runs, and context artifacts; each project may have one active
-Pi orchestrator plus phase-scoped implementation, test, and review agents.
+Boss Man is a local-first, remote-ready developer cockpit for orchestrating
+[Pi](https://pi.dev/) across multiple Git repositories. One central API owns
+projects, tasks, audit history, worktrees, agent runs, and context artifacts.
+Each project can run one orchestrator plus phase-scoped implementation, test,
+and review agents.
 
-The current Phase 1 build provides a loopback-only web UI, durable SQLite
-state, persistent Pi RPC conversations, an agile task board, task scheduling,
-managed worktrees and containers, and model-less context custody. It is ready
-for local development, but it is not yet the authenticated remote deployment.
+Phase 1 currently includes a loopback web cockpit, durable SQLite state,
+persistent Pi RPC conversations, an agile task board, a shared terminal
+client, managed worktrees/containers, and model-less context custody.
+Authenticated remote access is a later phase.
 
-## Run it locally
+## Objectives
 
-### Prerequisites
+- Turn a conversation, repository, or refined work item into observable tasks.
+- Run multiple repository orchestrators without splitting durable authority.
+- Let agents implement, test, review, commit, and merge within explicit risk
+  boundaries.
+- Preserve complete sessions and portable context so work can resume across
+  provider limits, model changes, and new sessions.
+- Provide the same project state through the browser, terminal, cmux/tmux, and
+  future remote access.
 
-- macOS on Apple Silicon;
-- Node.js 24 or newer;
-- Git;
-- [Pi](https://pi.dev/) installed and authenticated;
-- Docker Desktop when running sandboxed task agents (not required to open the
-  cockpit or run the core test suite).
+## Values
 
-No dependency installation is currently required; the application uses Node's
-built-in modules.
+- **Durability over transcript replay.** Pi-native sessions and model-less
+  artifacts preserve context; clients never rebuild prompts from chat history.
+- **Observable autonomy.** Tasks, assumptions, decisions, tests, reviews, and
+  side effects are structured and auditable.
+- **One authority.** The central API owns leases, task state, artifacts, Git
+  operations, and session projections.
+- **Constrained execution.** Task agents are phase-scoped and run in managed
+  worktrees and containers; high-risk decisions remain human-owned.
+- **Model choice without silent routing.** Provider, model, and thinking policy
+  are centrally selected and recorded for every conversation and run.
 
-### 1. Start the central API and cockpit
+## Run locally
 
-From the repository root:
+Requirements: macOS on Apple Silicon, Node.js 24+, Git, and an authenticated
+Pi installation. Docker Desktop is needed only for sandboxed task agents.
+There are currently no npm dependencies to install.
+
+### 1. Start the API and cockpit
 
 ```sh
 npm start -- \
@@ -38,29 +53,16 @@ npm start -- \
   --thinking medium
 ```
 
-Use any absolute Git worktree path for `--repo`. Repeat `--repo` to register
-more than one project:
+Repeat `--repo /absolute/path` to register more repositories. Open
+[http://127.0.0.1:4310](http://127.0.0.1:4310).
 
-```sh
-npm start -- \
-  --repo "$HOME/projects/project-one" \
-  --repo "$HOME/projects/project-two" \
-  --state "$HOME/.local/share/boss-man/dev" \
-  --port 4310 \
-  --provider openai-codex \
-  --model gpt-5.4-mini
-```
+The local profile binds only to `127.0.0.1` and has no application
+authentication. Do not expose it publicly.
 
-Open [http://127.0.0.1:4310](http://127.0.0.1:4310). The UI is useful
-immediately for project, board, task, session, and command inspection.
+### 2. Start orchestrators
 
-The server intentionally listens only on `127.0.0.1` and has no application
-authentication in this profile. Do not expose this listener publicly.
-
-### 2. Start a project orchestrator
-
-Start one process per project that should accept conversation turns or launch
-task agents:
+Run one project orchestrator per active repository, preferably in its own
+cmux/tmux pane:
 
 ```sh
 npm run orchestrator:project -- \
@@ -70,12 +72,8 @@ npm run orchestrator:project -- \
   --credential-source "$HOME/.pi/agent/auth.json"
 ```
 
-Run this command in tmux or cmux when you want a reconnectable operational
-session. A second orchestrator for the same project is rejected while its
-lease is active. Each additional registered project gets its own process.
-
-For a new topic that is not yet attached to a repository, start the shared
-system-intake orchestrator instead:
+Run the shared intake orchestrator for topics that do not yet have a
+repository:
 
 ```sh
 npm run orchestrator:system -- \
@@ -85,13 +83,55 @@ npm run orchestrator:system -- \
   --credential-source "$HOME/.pi/agent/auth.json"
 ```
 
-Stop any foreground process with `Ctrl-C`. State survives under the directory
-passed to `--state`/`--state-root`.
+### 3. Use browser or terminal
 
-### 3. Build the task-agent image when needed
+The browser and terminal are projections of the same durable conversation:
 
-The cockpit and project orchestrator do not require Docker. Before starting a
-sandboxed task-agent run, build the pinned ARM64 image:
+```sh
+npm run boss -- status
+npm run boss -- topics
+npm run boss -- chat --repo "$PWD"
+npm run boss -- chat --topic TOPIC_ID
+npm run boss -- chat --repo "$PWD" --message "Refine the next task."
+npm run boss -- chat --new-topic "Prototype a new tool"
+```
+
+A practical cmux layout is one central-API pane, one orchestrator pane per
+active repository, and optional `boss chat` panes. Closing a chat pane does
+not stop Pi or lose history.
+
+## Select and swap models
+
+Model selection is a central, observable policy—not an agent-controlled
+choice. Boss Man persists the provider, model, and thinking level when a
+conversation is created and passes that exact route to Pi.
+
+List models available to the authenticated Pi installation:
+
+```sh
+pi --list-models
+```
+
+Select the default route for newly created conversations when starting Boss
+Man:
+
+```sh
+npm start -- \
+  --repo "$PWD" \
+  --provider PROVIDER \
+  --model MODEL_ID \
+  --thinking low
+```
+
+To change that default, stop the central API and restart it with different
+flags. Existing conversations remain pinned to their recorded route.
+
+Safe in-place switching of an existing conversation is a first-class Phase 1
+objective, but is intentionally not enabled yet. It will require a successful
+atomic, model-less custody snapshot before changing provider/model and
+resuming the Pi session. Do not edit SQLite to bypass this boundary.
+
+## Optional task-agent image
 
 ```sh
 docker build \
@@ -100,58 +140,27 @@ docker build \
   ./infra/container
 ```
 
-## Verify the checkout
+The cockpit, terminal client, and orchestrators do not require Docker.
 
-Run the deterministic Phase 1 core suite. It creates and removes its own
-temporary Git fixture and makes no provider request:
+## Verify
 
 ```sh
 npm test
-```
-
-Check a running server:
-
-```sh
+npm run test:baseline
 curl --fail http://127.0.0.1:4310/api/health
 ```
 
-More operational commands and troubleshooting live in the
-[local development runbook](docs/operations/local-development.md).
+The core suite is model-less and makes no provider requests.
 
-## Repository map
+## Documentation
 
-| Path | Purpose |
-|---|---|
-| `src/server/` | Central API, SQLite authority, conversations, runtime, Git, credentials, artifacts, and context custody |
-| `src/ui/` | Browser developer cockpit |
-| `src/pi/` | Pi extensions for orchestration, custody, task authority, and RTK |
-| `scripts/` | Stable operator entry points |
-| `config/` | Versioned schemas and redacted configuration examples |
-| `infra/` | Task-container and future remote-edge assets |
-| `tests/` | Core runner, deterministic fixtures, probes, and baseline metadata |
-| `docs/` | Product, architecture, feature, operations, research, and historical records |
+Start with [the documentation index](docs/README.md), then see:
 
-Start with the [documentation index](docs/README.md). The most useful
-documents are:
+- [current capabilities and next steps](docs/product/CURRENT-STATE.md)
+- [delivery roadmap](docs/product/ROADMAP.md)
+- [architecture decisions](docs/architecture/DECISIONS.md)
+- [local development runbook](docs/operations/local-development.md)
 
-- [current capabilities and next steps](docs/product/CURRENT-STATE.md);
-- [delivery roadmap](docs/product/ROADMAP.md);
-- [decision log](docs/architecture/DECISIONS.md);
-- [active orchestrator conversation contract](docs/features/orchestrator-conversations/PRODUCT.md);
-- [local development runbook](docs/operations/local-development.md).
-
-Completed Phase 0 plans and evidence remain under
-[`docs/history/phase0/`](docs/history/phase0/). They explain why the platform
-uses a direct Pi foundation, but they are no longer the repository's front
-door or its code layout.
-
-## Security and retention boundaries
-
-Tracked files must not contain credentials, SSH keys, native user sessions,
-runtime databases, provider transcripts, unredacted command output, worktrees,
-or container filesystems. Owner-managed Pi authentication remains outside the
-repository and is copied into private run state only when needed.
-
-The product direction is to retain complete sessions and artifacts until
-explicit deletion. Production deletion, quota, backup, authenticated remote
-access, and SWAG deployment are later milestones.
+Tracked files never contain credentials, SSH keys, provider transcripts,
+native user sessions, runtime databases, unredacted command logs, worktrees,
+or container filesystems.

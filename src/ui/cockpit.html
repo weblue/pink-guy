@@ -122,6 +122,16 @@
   .controls select { min-width: 0; flex: 1; }
   .change-card { border-left: 3px solid var(--green); }
   .status { min-height: 1.1rem; margin-top: .4rem; }
+  code {
+    background: #090d11;
+    border: 1px solid #26343e;
+    border-radius: .3rem;
+    display: block;
+    font-size: .72rem;
+    overflow-wrap: anywhere;
+    padding: .45rem;
+    user-select: all;
+  }
   .empty { border: 1px dashed #3a4956; border-radius: .4rem; padding: 1rem; }
   [hidden] { display: none !important; }
   @media (max-width: 1100px) {
@@ -186,6 +196,7 @@
         </div>
         <div><span id="workspace-scope" class="tag"></span> <span id="workspace-state" class="state"></span></div>
       </div>
+      <p id="workspace-runtime" class="muted" data-testid="orchestrator-runtime"></p>
       <div id="conversation" class="conversation" data-testid="conversation-stream"></div>
       <form id="conversation-form" class="composer" data-testid="conversation-form">
         <textarea id="conversation-message" required maxlength="32000" placeholder="Describe work, refine a task, or ask about project state"></textarea>
@@ -218,8 +229,9 @@
     </section>
     <section class="panel">
       <h2>Session attach</h2>
-      <p>Pi RPC owns the browser conversation stream.</p>
-      <p class="muted">Use tmux/cmux or SSH for exact-session operations and recovery. No browser terminal emulator is required.</p>
+      <p>Browser and terminal use the same durable Pi conversation.</p>
+      <code id="workspace-terminal" data-testid="terminal-command">Select a topic to show its terminal command.</code>
+      <p class="muted">Run the project orchestrator in cmux/tmux for process visibility. The central API—not terminal scrollback—owns conversation and task state.</p>
     </section>
   </aside>
 </main>
@@ -232,6 +244,7 @@
     topicDetail: null,
     conversationEvents: [],
     context: null,
+    leases: [],
     poll: null,
   };
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
@@ -326,6 +339,16 @@
       ? "project · " + detail.conversation.scope_id
       : "system intake";
     document.querySelector("#workspace-state").textContent = detail.conversation.state.replaceAll("_", " ");
+    const lease = app.leases.find((item) =>
+      item.scope_type === detail.conversation.scope_type
+      && item.scope_id === detail.conversation.scope_id
+      && item.status === "active"
+    );
+    document.querySelector("#workspace-runtime").textContent = lease
+      ? "Orchestrator online · " + lease.transport + " · " + lease.endpoint
+      : "Orchestrator offline · new messages remain queued until the matching process starts";
+    document.querySelector("#workspace-terminal").textContent =
+      "npm run boss -- chat --topic " + detail.topic.id;
     const conversation = document.querySelector("#conversation");
     conversation.innerHTML = detail.turns.map((turn) => {
       const assistantText = turn.result?.assistantText || streamedText(turn.id);
@@ -405,6 +428,7 @@
     ]);
     app.projects = projects.projects;
     app.topics = topics.topics;
+    app.leases = leases.leases;
     app.board = board;
     renderProjects();
     renderTopics();
@@ -416,7 +440,7 @@
       )).join("")
       + leases.leases.map((item) => row(
         item.scope_type + ":" + item.scope_id,
-        item.transport + " · " + item.status + " · conversations",
+        item.transport + " · " + item.status + " · " + item.endpoint + " · conversations",
       )).join("")
       || "<p class=\"muted\">No active leases.</p>";
     document.querySelector("#sessions").innerHTML = sessions.sessions.map((session) =>
@@ -498,7 +522,14 @@
         body: JSON.stringify({ message }),
       });
       document.querySelector("#conversation-message").value = "";
-      conversationStatus("Message queued in the persistent Pi session.");
+      const lease = app.leases.find((item) =>
+        item.scope_type === app.topicDetail.conversation.scope_type
+        && item.scope_id === app.topicDetail.conversation.scope_id
+        && item.status === "active"
+      );
+      conversationStatus(lease
+        ? "Message queued in the persistent Pi session."
+        : "Message retained. Start the matching orchestrator to process it.");
       await loadTopic(app.selectedTopicId, { quiet: true });
     } catch (error) {
       conversationStatus(error.message, true);

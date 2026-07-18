@@ -56,8 +56,10 @@ managed persistent Pi RPC bridge, sanitized reconnect stream, and audited
 create/update/split/dependency/assumption/decision task mutations are
 implemented. The first New topic/Ask orchestrator workspace, conversation
 stream, navigable change cards, and synchronized board projection are also
-implemented. Repository/source intake, conversation custody, and deeper
-inspectors remain.
+implemented. The `boss` terminal client now reopens that same durable
+conversation by topic, project, or repository and exposes the cockpit deep
+link plus orchestrator tmux/process endpoint. Repository/source intake,
+conversation custody, and deeper inspectors remain.
 
 Scope:
 

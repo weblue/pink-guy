@@ -390,9 +390,22 @@ Primary routes:
 - `/providers`
 - `/settings`
 
-Task detail combines specification/readiness, state, dependencies, assignments, live session, Git changes, tests, independent review, artifacts, timeline, conversation, and an interactive workspace terminal. Session detail combines structured timeline, conversation, terminal, context tree/snapshots, injected-memory receipts, model history, RTK output provenance, and controls. The memory route exposes candidates, active/contested/stale records, governed diffs, and evidence links. The complete layout and candidate evaluation live in `UI.md`.
+Task detail combines specification/readiness, state, dependencies, assignments,
+live session, Git changes, tests, independent review, artifacts, timeline,
+conversation, and external terminal attach/recovery information. Session detail
+combines structured timeline, conversation, context tree/snapshots,
+injected-memory receipts, model history, RTK output provenance, controls, and
+the owning tmux/process endpoint. The memory route exposes candidates,
+active/contested/stale records, governed diffs, and evidence links. The
+complete layout and candidate evaluation live in `UI.md`.
 
-The direct cockpit is selected. Use xterm.js for terminals and optionally launch code-server as a separately authenticated workspace application. Agent of Empires remains a behavior and interaction reference only; Ghostty and cmux remain local clients rather than server dependencies.
+The direct cockpit is selected. D-043 supersedes the earlier Phase 1 xterm.js
+assumption: the browser and `boss` terminal client project the same durable Pi
+RPC conversation, while Ghostty/cmux/tmux remain local process attach and
+recovery clients. Reconsider an embedded PTY or separately authenticated
+code-server only after a workflow cannot be expressed through the structured
+cockpit, central APIs, and explicit external attach information. Agent of
+Empires remains a behavior and interaction reference only.
 
 ## Critical sequences
 
@@ -521,7 +534,8 @@ Automate the local-first behaviors in `PRODUCT.md` §14, including a reviewer/ch
 
 - Project-orchestrator command queue and task-agent scheduling.
 - Multi-project board, task workspace, attention queue, decisions, tests, review, diffs, artifacts, and context inspector.
-- Persistent PTY/reconnect/scrollback and tmux/cmux attach information.
+- Shared browser/terminal Pi conversation projection plus tmux/cmux
+  process-endpoint and attach information; no Phase 1 browser PTY.
 - Host checkpoint/commit plus manual merge preparation.
 - Explicit trusted-LAN profile with selected private interface/CIDR policy and no application authentication.
 

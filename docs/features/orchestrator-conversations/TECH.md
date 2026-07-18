@@ -143,6 +143,17 @@ reconnectable view of Pi's persistent native session, while the central API
 owns task/audit state. An embedded terminal remains a later option only for
 developer workflows that Pi RPC and explicit cockpit controls cannot cover.
 
+The Phase 1 terminal client is another projection over the same local API, not
+an attach to Pi stdin. `boss chat` resolves a topic by explicit topic ID,
+project ID, or registered repository path; creates the same default
+project-orchestrator topic used by the cockpit when one does not exist; prints
+the durable turn history and structured mutation events; submits each owner
+message once with an idempotency key; and follows only new event sequences
+until the submitted turn settles. It also reports the matching scoped lease
+and the cockpit deep link. This gives a useful cmux pane without making
+terminal escape sequences, shell state, or process scrollback part of the
+conversation protocol.
+
 ### 4. Repository onboarding
 
 Add a host-owned repository import service:
@@ -258,6 +269,10 @@ flowchart TD
 - Invariants 3, 14, 16-19, 22: desktop browser tests cover New topic,
   existing-repository intake, streamed/reconnected turns, structured change
   cards, and actionable failures.
+- Invariants 14, 17, 19, 25-26: a model-less terminal probe proves repository
+  and topic selection, project-topic reuse, idempotent one-shot submission,
+  shared durable history/change projection, browser deep links, and explicit
+  offline-orchestrator status.
 - Existing command-loop, local-task-control, task-policy, context, foundation,
   and restart probes remain regression gates.
 
