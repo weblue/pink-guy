@@ -170,6 +170,17 @@ export class ConversationOrchestratorRuntime {
       await rpc.terminate();
       throw new Error("Pi RPC did not provide a native session file");
     }
+    if (
+      state.model?.provider !== conversation.model_provider
+      || state.model?.id !== conversation.model_id
+      || state.thinkingLevel !== conversation.thinking_level
+    ) {
+      await rpc.terminate();
+      throw new Error(
+        `Pi effective route ${state.model?.provider}/${state.model?.id} (${state.thinkingLevel}) `
+        + `does not match ${conversation.model_provider}/${conversation.model_id} (${conversation.thinking_level})`,
+      );
+    }
     const managed = {
       rpc,
       nativeSessionPath: state.sessionFile,
@@ -259,9 +270,23 @@ export class ConversationOrchestratorRuntime {
   }
 
   async runOnce() {
+    await this.retireOutOfScopeSessions();
     const claimed = await this.claim();
     if (!claimed) return null;
     return this.execute(claimed);
+  }
+
+  async retireOutOfScopeSessions() {
+    if (!this.token || this.sessions.size === 0) return;
+    for (const [conversationId, managed] of this.sessions) {
+      try {
+        await this.request(`/api/conversations/${encodeURIComponent(conversationId)}/context`);
+      } catch (error) {
+        if (!["orchestrator_denied", "not_found"].includes(error.code)) throw error;
+        await managed.rpc.terminate();
+        this.sessions.delete(conversationId);
+      }
+    }
   }
 
   async close({ release = true } = {}) {

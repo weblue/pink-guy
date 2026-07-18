@@ -40,6 +40,10 @@ panel patterns.
    rejected.
 9. The UI explains when an edit takes effect and never implies that it changed
    a currently running Pi process.
+10. Built-in profile guidance, phase kickoff messages, and platform policy
+    envelopes are stored as simple UTF-8 text files under `config/prompts/`.
+    Profile files are convenient editable defaults; policy files remain
+    source-controlled, non-editable platform policy.
 
 ## Non-goals
 

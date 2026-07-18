@@ -179,8 +179,8 @@ const snapshot = await request(`/api/projects/${imported.project.id}/sources`, {
   method: "POST",
   idempotencyKey: "terminal-source-snapshot",
   body: {
-    kind: "jira",
-    sourceRef: "JIRA-PROBE-42",
+    kind: "external",
+    sourceRef: "EXTERNAL-PROBE-42",
     content: "The refined ticket requires one deterministic maintenance change.",
   },
 });

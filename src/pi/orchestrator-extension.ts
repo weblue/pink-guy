@@ -65,6 +65,18 @@ async function mutateTask(
 }
 
 export default function orchestratorExtension(pi: ExtensionAPI): void {
+  pi.on("session_before_compact", async () => {
+    const configuration = configured();
+    await request(
+      `/api/orchestration/conversations/${encodeURIComponent(configuration.conversationId)}/custody`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ trigger: "before_compact" }),
+      },
+    );
+  });
+
   pi.registerTool({
     name: "boss_orchestrator_context",
     label: "Read Boss Man orchestration context",
@@ -173,6 +185,57 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
     }),
     async execute(toolCallId, params, signal) {
       return mutateTask(toolCallId, "require_decision", params, signal);
+    },
+  });
+
+  pi.registerTool({
+    name: "boss_orchestrator_schedule_task",
+    label: "Schedule a Boss Man task sub-agent",
+    description: "Queue one implementation, test, or review sub-agent with an explicit or configured model route.",
+    promptSnippet: "Select the phase and model route for a scoped task sub-agent",
+    promptGuidelines: [
+      "Omit provider, model, and thinkingLevel to use the configured phase default.",
+      "Choose a different route only when task needs, cost, or local-model policy justify it.",
+    ],
+    parameters: Type.Object({
+      taskId: Type.String({ minLength: 1 }),
+      phase: Type.Union([
+        Type.Literal("implementation"),
+        Type.Literal("test"),
+        Type.Literal("review"),
+      ]),
+      modelProvider: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+      modelId: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+      thinkingLevel: Type.Optional(Type.Union([
+        Type.Literal("off"),
+        Type.Literal("minimal"),
+        Type.Literal("low"),
+        Type.Literal("medium"),
+        Type.Literal("high"),
+        Type.Literal("xhigh"),
+      ])),
+      billingClass: Type.Optional(Type.Union([
+        Type.Literal("subscription"),
+        Type.Literal("direct_api"),
+        Type.Literal("prepaid"),
+        Type.Literal("local"),
+        Type.Literal("unknown"),
+      ])),
+    }),
+    async execute(toolCallId, params, signal) {
+      const configuration = configured();
+      return result(await request(
+        `/api/orchestration/conversations/${encodeURIComponent(configuration.conversationId)}/task-schedules`,
+        {
+          method: "POST",
+          signal,
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": `pi-tool:${toolCallId}`,
+          },
+          body: JSON.stringify(params),
+        },
+      ));
     },
   });
 }

@@ -1,6 +1,6 @@
 # Conversation custody and safe model switching
 
-Status: Implemented Phase 1 slice
+Status: Implemented Phase 1 custody contract
 
 Last updated: 2026-07-17
 
@@ -27,3 +27,13 @@ recorded route. Prompt-only edits intentionally do not trigger this restart.
 - `POST /api/conversations/:id/model`
 
 The current local profile exposes these as loopback-owner operations.
+
+`src/pi/orchestrator-extension.ts` handles `session_before_compact` by making a
+blocking, scope-authorized custody request. An export failure rejects the hook
+and prevents automatic compaction from continuing.
+
+`POST /api/topics/:id/project` creates a `scope_transfer` bundle before
+atomically changing the topic and conversation scope. The binding receipt
+retains prior/new conversation versions and the custody snapshot. A system
+intake runtime removes cached sessions that the central API reports as
+out-of-scope.

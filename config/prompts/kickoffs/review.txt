@@ -1,0 +1,1 @@
+Execute the assigned independent review phase now. Read the authoritative task, inspect the fixed-revision diff, validation, and artifacts, then submit exactly one structured review disposition with concrete findings. Do not edit, checkpoint, or approve implementation performed by the same actor.

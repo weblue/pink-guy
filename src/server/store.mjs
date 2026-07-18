@@ -7,6 +7,7 @@ import {
   DEFAULT_PROMPT_PROFILES,
   PROMPT_PROFILE_KEYS,
 } from "./prompt-profiles.mjs";
+import { validateModelRoute } from "./model-routes.mjs";
 
 const TASK_STATES = new Set(["backlog", "ready", "in_progress", "review", "blocked", "done"]);
 const RUN_PHASES = new Set(["implementation", "test", "review"]);
@@ -319,6 +320,19 @@ export class Phase0Store {
         new_version INTEGER NOT NULL,
         prior_route_json TEXT NOT NULL,
         new_route_json TEXT NOT NULL,
+        custody_snapshot_id TEXT NOT NULL REFERENCES conversation_custody_snapshots(snapshot_id),
+        actor TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        request_sha256 TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS topic_project_bindings (
+        id TEXT PRIMARY KEY,
+        topic_id TEXT NOT NULL REFERENCES topics(id),
+        conversation_id TEXT NOT NULL REFERENCES orchestrator_conversations(id),
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        prior_conversation_version INTEGER NOT NULL,
+        new_conversation_version INTEGER NOT NULL,
         custody_snapshot_id TEXT NOT NULL REFERENCES conversation_custody_snapshots(snapshot_id),
         actor TEXT NOT NULL,
         idempotency_key TEXT NOT NULL UNIQUE,
@@ -638,7 +652,13 @@ export class Phase0Store {
     this.ensureColumn("runs", "prompt_profile_key", "TEXT");
     this.ensureColumn("runs", "prompt_profile_version", "INTEGER");
     this.ensureColumn("runs", "prompt_sha256", "TEXT");
+    this.ensureColumn("runs", "model_provider", "TEXT");
+    this.ensureColumn("runs", "model_id", "TEXT");
+    this.ensureColumn("runs", "thinking_level", "TEXT");
+    this.ensureColumn("runs", "model_policy_source", "TEXT");
+    this.ensureColumn("runs", "billing_class", "TEXT");
     this.ensureColumn("orchestrator_conversations", "version", "INTEGER NOT NULL DEFAULT 1");
+    this.ensureColumn("conversation_custody_snapshots", "conversation_version", "INTEGER");
     this.seedPromptProfiles();
     this.database.exec(`
       CREATE INDEX IF NOT EXISTS memory_records_scope_status
@@ -1066,12 +1086,23 @@ export class Phase0Store {
     return { replayed: false, task: this.getTaskDetails(taskId) };
   }
 
-  scheduleOwnerTaskRun({ taskId, phase, idempotencyKey }) {
+  scheduleOwnerTaskRun({
+    taskId,
+    phase,
+    idempotencyKey,
+    modelRoute,
+    actor = "local-owner",
+    source = "local_owner",
+  }) {
     if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
     if (!RUN_PHASES.has(phase)) throw codedError("invalid_request", `unsupported run phase: ${phase}`);
     const task = this.getTask(taskId);
     if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
-    const payload = { source: "local_owner" };
+    const normalizedRoute = {
+      ...validateModelRoute(modelRoute, `${phase} scheduled model route`),
+      policySource: modelRoute?.policySource ?? "explicit_schedule",
+    };
+    const payload = { source, modelRoute: normalizedRoute };
     const commandRequest = {
       projectId: task.project_id, taskId, kind: "start_task", phase, payload,
     };
@@ -1132,7 +1163,10 @@ export class Phase0Store {
     const actorId = `task-agent:${phase}:${commandId}`;
     const now = this.clock();
     const prior = this.getTaskDetails(taskId);
-    const auditRequestSha256 = sha256(JSON.stringify({ action: "schedule_task", taskId, phase }));
+    const actorRole = actor === "local-owner" ? "owner" : "orchestrator";
+    const auditRequestSha256 = sha256(JSON.stringify({
+      action: "schedule_task", taskId, phase, modelRoute: normalizedRoute, actor,
+    }));
     this.database.exec("BEGIN IMMEDIATE");
     try {
       this.database.prepare(`INSERT INTO orchestrator_commands(
@@ -1152,23 +1186,30 @@ export class Phase0Store {
       if (Number(changed.changes) !== 1) throw codedError("version_conflict", "task changed during scheduling");
       const current = this.getTaskDetails(taskId);
       this.appendOrchestratorCommandEvent(commandId, "queued", orchestrator.id, {
-        projectId: task.project_id, taskId, kind: "start_task", phase, source: "local_owner",
+        projectId: task.project_id, taskId, kind: "start_task", phase, source,
+        modelRoute: normalizedRoute,
       }, now);
       this.database.prepare(`INSERT INTO task_events(
         task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
         actor_role,run_id,task_version
       ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
-        taskId, "task_scheduled", "local-owner", task.status, nextStatus,
-        JSON.stringify({ phase, commandId, phaseActor: actorId, assignedWorker: nextAssignedWorker }),
-        idempotencyKey, now, "owner", null, nextVersion,
+        taskId, "task_scheduled", actor, task.status, nextStatus,
+        JSON.stringify({
+          phase, commandId, phaseActor: actorId, assignedWorker: nextAssignedWorker,
+          modelRoute: normalizedRoute,
+        }),
+        idempotencyKey, now, actorRole, null, nextVersion,
       );
       this.database.prepare(`INSERT INTO audit_events(
         task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
         idempotency_key,request_sha256,created_at
       ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-        taskId, "task_scheduled", "local-owner", "owner", null, null,
+        taskId, "task_scheduled", actor, actorRole, null, null,
         JSON.stringify(prior), JSON.stringify(current),
-        JSON.stringify({ phase, commandId, phaseActor: actorId, assignedWorker: nextAssignedWorker }),
+        JSON.stringify({
+          phase, commandId, phaseActor: actorId, assignedWorker: nextAssignedWorker,
+          modelRoute: normalizedRoute,
+        }),
         idempotencyKey, auditRequestSha256, now,
       );
       this.database.exec("COMMIT");
@@ -1183,7 +1224,7 @@ export class Phase0Store {
     };
   }
 
-  resumeOwnerTaskRun({ taskId, phase, idempotencyKey }) {
+  resumeOwnerTaskRun({ taskId, phase, idempotencyKey, modelRoute }) {
     const task = this.getTask(taskId);
     if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
     if (!task.assigned_worker || !["in_progress", "blocked", "review"].includes(task.status)) {
@@ -1198,7 +1239,13 @@ export class Phase0Store {
       taskId,
       kind: "start_task",
       phase,
-      payload: { source: "local_owner_resume" },
+      payload: {
+        source: "local_owner_resume",
+        modelRoute: {
+          ...validateModelRoute(modelRoute, `${phase} resumed model route`),
+          policySource: modelRoute?.policySource ?? "explicit_resume",
+        },
+      },
       idempotencyKey,
     });
   }
@@ -1301,8 +1348,8 @@ export class Phase0Store {
   }) {
     if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
     if (!this.getProject(projectId)) throw codedError("not_found", `unknown project: ${projectId}`);
-    if (!["manual", "jira"].includes(kind)) {
-      throw codedError("invalid_request", "source snapshot kind must be manual or jira");
+    if (!["manual", "external"].includes(kind)) {
+      throw codedError("invalid_request", "source snapshot kind must be manual or external");
     }
     const normalizedContent = typeof content === "string" ? content.trim() : "";
     const normalizedRef = typeof sourceRef === "string" && sourceRef.trim() ? sourceRef.trim() : null;
@@ -1556,13 +1603,17 @@ export class Phase0Store {
     path,
     manifestSha256,
     nativeSha256 = null,
+    conversationVersion,
   }) {
-    if (!this.getConversation(conversationId)) {
+    const conversation = this.getConversation(conversationId);
+    if (!conversation) {
       throw codedError("not_found", `unknown conversation: ${conversationId}`);
     }
+    const capturedVersion = conversationVersion ?? conversation.version;
     this.database.prepare(`INSERT OR IGNORE INTO conversation_custody_snapshots(
-      snapshot_id,conversation_id,trigger,path,manifest_sha256,native_sha256,verified,created_at
-    ) VALUES(?,?,?,?,?,?,1,?)`).run(
+      snapshot_id,conversation_id,trigger,path,manifest_sha256,native_sha256,verified,created_at,
+      conversation_version
+    ) VALUES(?,?,?,?,?,?,1,?,?)`).run(
       snapshotId,
       conversationId,
       trigger,
@@ -1570,6 +1621,7 @@ export class Phase0Store {
       manifestSha256,
       nativeSha256,
       this.clock(),
+      capturedVersion,
     );
     const snapshot = this.database.prepare(
       "SELECT * FROM conversation_custody_snapshots WHERE snapshot_id=?",
@@ -1578,10 +1630,163 @@ export class Phase0Store {
       snapshot.conversation_id !== conversationId
       || snapshot.manifest_sha256 !== manifestSha256
       || snapshot.path !== path
+      || snapshot.conversation_version !== capturedVersion
     ) {
       throw codedError("idempotency_conflict", "conversation custody snapshot identity was reused");
     }
     return snapshot;
+  }
+
+  topicProjectBindingByIdempotency(idempotencyKey) {
+    if (!idempotencyKey) return null;
+    const binding = this.database.prepare(
+      "SELECT * FROM topic_project_bindings WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (!binding) return null;
+    return {
+      ...binding,
+      ...this.topicDetails(binding.topic_id),
+    };
+  }
+
+  bindTopicToProject({
+    topicId,
+    projectId,
+    expectedVersion,
+    custodySnapshotId,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
+      throw codedError("invalid_request", "expected conversation version must be a positive integer");
+    }
+    const request = {
+      action: "bind_topic_to_project",
+      topicId,
+      projectId,
+      expectedVersion,
+    };
+    const requestSha256 = sha256(JSON.stringify(request));
+    const prior = this.database.prepare(
+      "SELECT * FROM topic_project_bindings WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different topic binding");
+      }
+      return { replayed: true, binding: this.topicProjectBindingByIdempotency(idempotencyKey) };
+    }
+    const project = this.getProject(projectId);
+    if (!project) throw codedError("not_found", `unknown project: ${projectId}`);
+    const topic = this.database.prepare("SELECT * FROM topics WHERE id=?").get(topicId);
+    if (!topic) throw codedError("not_found", `unknown topic: ${topicId}`);
+    const conversation = this.database.prepare(
+      "SELECT * FROM orchestrator_conversations WHERE topic_id=?",
+    ).get(topicId);
+    if (topic.project_id || conversation.project_id || conversation.scope_type !== "system_intake") {
+      throw codedError("transition_denied", "topic is already bound to a project");
+    }
+    if (conversation.version !== expectedVersion) {
+      throw codedError(
+        "version_conflict",
+        `conversation is version ${conversation.version}, expected ${expectedVersion}`,
+      );
+    }
+    if (conversation.state === "running" || conversation.current_turn_id) {
+      throw codedError("transition_denied", "cannot transfer a topic while a conversation turn is running");
+    }
+    if (conversation.state === "reconciliation_required") {
+      throw codedError("transition_denied", "conversation requires reconciliation before scope transfer");
+    }
+    const snapshot = this.database.prepare(
+      "SELECT * FROM conversation_custody_snapshots WHERE snapshot_id=?",
+    ).get(custodySnapshotId);
+    if (
+      !snapshot
+      || snapshot.conversation_id !== conversation.id
+      || snapshot.trigger !== "scope_transfer"
+      || !snapshot.verified
+      || snapshot.conversation_version !== conversation.version
+    ) {
+      throw codedError("custody_required", "a current verified scope-transfer snapshot is required");
+    }
+    const now = this.clock();
+    const bindingId = randomUUID();
+    const newVersion = conversation.version + 1;
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`UPDATE topics SET
+        project_id=?,version=version+1,updated_at=? WHERE id=? AND project_id IS NULL`).run(
+        projectId,
+        now,
+        topicId,
+      );
+      const changed = this.database.prepare(`UPDATE orchestrator_conversations SET
+        project_id=?,scope_type='project',scope_id=?,version=?,state='idle',updated_at=?
+        WHERE id=? AND version=? AND project_id IS NULL`).run(
+        projectId,
+        projectId,
+        newVersion,
+        now,
+        conversation.id,
+        expectedVersion,
+      );
+      if (Number(changed.changes) !== 1) {
+        throw codedError("version_conflict", "conversation changed during scope transfer");
+      }
+      this.database.prepare(`INSERT INTO topic_project_bindings(
+        id,topic_id,conversation_id,project_id,prior_conversation_version,
+        new_conversation_version,custody_snapshot_id,actor,idempotency_key,
+        request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        bindingId,
+        topicId,
+        conversation.id,
+        projectId,
+        expectedVersion,
+        newVersion,
+        custodySnapshotId,
+        actor,
+        idempotencyKey,
+        requestSha256,
+        now,
+      );
+      this.database.prepare(`INSERT INTO topic_events(
+        topic_id,type,actor,payload_json,idempotency_key,request_sha256,created_at
+      ) VALUES(?,'topic_project_bound',?,?,?,?,?)`).run(
+        topicId,
+        actor,
+        JSON.stringify({
+          projectId,
+          conversationId: conversation.id,
+          custodySnapshotId,
+          priorScope: { type: "system_intake", id: "system-intake" },
+          newScope: { type: "project", id: projectId },
+          priorConversationVersion: expectedVersion,
+          newConversationVersion: newVersion,
+        }),
+        idempotencyKey,
+        requestSha256,
+        now,
+      );
+      this.appendConversationEvent(conversation.id, null, "scope_transferred", actor, {
+        projectId,
+        custodySnapshotId,
+        priorScope: { type: "system_intake", id: "system-intake" },
+        newScope: { type: "project", id: projectId },
+        priorVersion: expectedVersion,
+        newVersion,
+      }, now);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      replayed: false,
+      binding: this.topicProjectBindingByIdempotency(idempotencyKey),
+    };
   }
 
   conversationModelChangeByIdempotency(idempotencyKey) {
@@ -1657,7 +1862,12 @@ export class Phase0Store {
     const snapshot = this.database.prepare(
       "SELECT * FROM conversation_custody_snapshots WHERE snapshot_id=?",
     ).get(custodySnapshotId);
-    if (!snapshot || snapshot.conversation_id !== conversationId || !snapshot.verified) {
+    if (
+      !snapshot
+      || snapshot.conversation_id !== conversationId
+      || !snapshot.verified
+      || snapshot.conversation_version !== conversation.version
+    ) {
       throw codedError("custody_required", "a verified snapshot of this conversation is required");
     }
     const priorRoute = {
@@ -3523,6 +3733,8 @@ export class Phase0Store {
     id = randomUUID(), sessionId, processId = null, shellProcessId = null, containerId = null, imageId = null,
     workspaceId = null, credentialProfile = null, orchestratorId = null, phase = "implementation",
     promptProfileKey = null, promptProfileVersion = null, promptSha256 = null,
+    modelProvider = null, modelId = null, thinkingLevel = null,
+    modelPolicySource = null, billingClass = null,
   }) {
     if (!RUN_PHASES.has(phase)) throw codedError("invalid_request", `unsupported run phase: ${phase}`);
     if (orchestratorId) {
@@ -3536,12 +3748,14 @@ export class Phase0Store {
     this.database
       .prepare(`INSERT INTO runs(
         id,session_id,state,process_id,shell_process_id,started_at,container_id,image_id,workspace_id,
-        credential_profile,orchestrator_id,phase,prompt_profile_key,prompt_profile_version,prompt_sha256
-      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        credential_profile,orchestrator_id,phase,prompt_profile_key,prompt_profile_version,prompt_sha256,
+        model_provider,model_id,thinking_level,model_policy_source,billing_class
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(
         id, sessionId, "running", processId, shellProcessId, this.clock(), containerId, imageId,
         workspaceId, credentialProfile, orchestratorId, phase,
         promptProfileKey, promptProfileVersion, promptSha256,
+        modelProvider, modelId, thinkingLevel, modelPolicySource, billingClass,
       );
     return this.getRun(id);
   }

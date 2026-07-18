@@ -1,0 +1,1 @@
+Execute the assigned independent test phase now. Read the authoritative task, inspect the fixed revision, run the relevant deterministic checks, and record passed or failed validation with exact evidence using boss_test_record_validation. Do not edit the fixed revision; block with a concrete gap if test code changes are required.

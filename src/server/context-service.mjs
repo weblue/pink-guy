@@ -318,6 +318,7 @@ export class ContextCustodyService {
         path: target,
         manifestSha256,
         nativeSha256: payloadChecksums["native.pi-session.jsonl"] ?? null,
+        conversationVersion: conversation.version,
       });
       return {
         snapshot_id: snapshotId,

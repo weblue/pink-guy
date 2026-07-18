@@ -1,7 +1,6 @@
 # Phase 1 orchestrator conversations and project intake
 
-Status: Implementation in progress — shared browser/terminal conversation
-projection and audited task-graph mutations landed
+Status: Implemented Phase 1 conversation and transfer contract
 
 Last updated: 2026-07-17
 
@@ -286,11 +285,11 @@ the active instructions. The integrated feature branch now advances in this
 order:
 
 1. audited task-graph mutation tools and cockpit projections — implemented;
-2. model-less conversation custody and safe model/provider transfer —
-   implemented; scope transfer remains;
+2. model-less conversation custody, safe model/provider transfer,
+   pre-compaction export, and intake-to-project transfer — implemented;
 3. host-owned repository import and immutable source snapshots — implemented;
-4. deeper task/source/decision/custody inspectors and full phase-flow
-   dogfooding — next.
+4. deeper task/source/decision/custody inspectors — implemented;
+5. full live-provider phase-flow dogfooding — next.
 
 ## Risks and mitigations
 

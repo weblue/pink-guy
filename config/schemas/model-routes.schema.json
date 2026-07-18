@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://boss-man.invalid/schemas/model-routes.schema.json",
+  "title": "Boss Man model route defaults",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "default", "phases"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "default": { "$ref": "#/$defs/route" },
+    "phases": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "orchestrator": { "$ref": "#/$defs/route" },
+        "implementation": { "$ref": "#/$defs/route" },
+        "test": { "$ref": "#/$defs/route" },
+        "review": { "$ref": "#/$defs/route" }
+      }
+    }
+  },
+  "$defs": {
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "model", "thinking", "billing_class"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "model": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "thinking": {
+          "enum": ["off", "minimal", "low", "medium", "high", "xhigh"]
+        },
+        "billing_class": {
+          "enum": ["subscription", "direct_api", "prepaid", "local", "unknown"]
+        }
+      }
+    }
+  }
+}

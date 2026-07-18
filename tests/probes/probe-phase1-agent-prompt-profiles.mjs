@@ -205,13 +205,13 @@ await request("/api/orchestration/leases/current", {
 const cliModel = JSON.parse((await runCli([
   "model",
   "--topic", topic.value.topic.id,
-  "--provider", "openrouter",
-  "--model", "fallback-probe",
+  "--provider", "alternate-provider",
+  "--model", "alternate-probe",
   "--thinking", "low",
   "--json",
 ])).stdout);
 assert(
-  cliModel.change.new_route.modelProvider === "openrouter"
+  cliModel.change.new_route.modelProvider === "alternate-provider"
     && cliModel.custodySnapshot.snapshot_id,
   "terminal model switch did not enforce a custody snapshot",
 );

@@ -10,7 +10,12 @@ import { RtkArtifactIngestor } from "./artifacts.mjs";
 import { ContextCustodyService } from "./context-service.mjs";
 import { redactValue, RunCredentialVault } from "./credentials.mjs";
 import { HostGitService } from "./git-service.mjs";
-import { composeAgentSystemPrompt } from "./prompt-profiles.mjs";
+import {
+  createModelRoutePolicy,
+  publicModelRoutePolicy,
+  resolveModelRoute,
+} from "./model-routes.mjs";
+import { composeAgentSystemPrompt, phaseKickoffPrompt } from "./prompt-profiles.mjs";
 import { PiRpcProcess, WorkspaceShell } from "./rpc.mjs";
 import { DockerTaskRuntime } from "./runtime.mjs";
 import { Phase0Store } from "./store.mjs";
@@ -183,6 +188,7 @@ export class DirectControlPlane {
     runtimeImage = "boss-man:pi-0.80.9-rtk-0.42.3",
     dockerCommand = "docker", credentialProfile = null,
     runtimeProvider = "boss-man-phase0", runtimeModel = "complete", runtimeThinking = "medium",
+    modelRoutePolicy = null,
     runtimeOffline = true,
     faultInjector = async () => undefined, enforceOrchestratorLease = false,
   }) {
@@ -195,6 +201,11 @@ export class DirectControlPlane {
     this.runtimeProvider = runtimeProvider;
     this.runtimeModel = runtimeModel;
     this.runtimeThinking = runtimeThinking;
+    this.modelRoutePolicy = modelRoutePolicy ?? createModelRoutePolicy({
+      provider: runtimeProvider,
+      model: runtimeModel,
+      thinking: runtimeThinking,
+    });
     this.runtimeOffline = runtimeOffline;
     this.faultInjector = faultInjector;
     this.enforceOrchestratorLease = enforceOrchestratorLease;
@@ -208,6 +219,10 @@ export class DirectControlPlane {
     this.recoveryResults = [];
     this.recoveryChecked = false;
     this.exposureProfile = null;
+  }
+
+  resolveModelRoute(phase, route = null) {
+    return resolveModelRoute(this.modelRoutePolicy, phase, route);
   }
 
   assertLocalOwnerProfile() {
@@ -280,7 +295,11 @@ export class DirectControlPlane {
     });
   }
 
-  async startTask(taskId, { orchestratorToken = null, phase = "implementation" } = {}) {
+  async startTask(taskId, {
+    orchestratorToken = null,
+    phase = "implementation",
+    modelRoute = null,
+  } = {}) {
     const task = this.store.getTask(taskId);
     if (!task) throw new Error(`unknown task: ${taskId}`);
     if (!task.assigned_worker) throw new Error(`task must be assigned before starting a session: ${taskId}`);
@@ -294,6 +313,7 @@ export class DirectControlPlane {
       : null;
     const promptProfile = this.store.getAgentPromptProfile(phase);
     const capabilityRole = phase === "review" ? "reviewer" : phase === "test" ? "validator" : "worker";
+    const resolvedModelRoute = this.resolveModelRoute(phase, modelRoute);
 
     const runId = randomUUID();
     const instanceRoot = join(this.stateRoot, "runs", runId);
@@ -373,8 +393,8 @@ export class DirectControlPlane {
           "--extension", "/boss-man/extensions/rtk-managed-extension.ts",
           "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-context-files", "--no-approve",
           ...(this.runtimeOffline ? ["--offline"] : []),
-          "--provider", this.runtimeProvider, "--model", this.runtimeModel,
-          "--thinking", this.runtimeThinking,
+          "--provider", resolvedModelRoute.provider, "--model", resolvedModelRoute.model,
+          "--thinking", resolvedModelRoute.thinking,
           "--system-prompt", composeAgentSystemPrompt(phase, promptProfile.prompt_text),
         ]),
         onEvent: (event) => {
@@ -386,6 +406,16 @@ export class DirectControlPlane {
         },
       });
       const state = await rpc.command({ type: "get_state" });
+      if (
+        state.model?.provider !== resolvedModelRoute.provider
+        || state.model?.id !== resolvedModelRoute.model
+        || state.thinkingLevel !== resolvedModelRoute.thinking
+      ) {
+        throw Object.assign(new Error(
+          `Pi effective route ${state.model?.provider}/${state.model?.id} (${state.thinkingLevel}) `
+          + `does not match ${resolvedModelRoute.provider}/${resolvedModelRoute.model} (${resolvedModelRoute.thinking})`,
+        ), { code: "model_route_mismatch" });
+      }
       const shell = new WorkspaceShell({ child: runtime.spawn("sh") });
       const nativePath = state.sessionFile?.startsWith("/sessions/")
         ? join(sessionDirectory, basename(state.sessionFile)) : state.sessionFile;
@@ -410,6 +440,11 @@ export class DirectControlPlane {
         promptProfileKey: promptProfile.profile_key,
         promptProfileVersion: promptProfile.active_version,
         promptSha256: promptProfile.prompt_sha256,
+        modelProvider: resolvedModelRoute.provider,
+        modelId: resolvedModelRoute.model,
+        thinkingLevel: resolvedModelRoute.thinking,
+        modelPolicySource: resolvedModelRoute.policySource,
+        billingClass: resolvedModelRoute.billingClass,
       });
       active = { runId: run.id, sequence: 0 };
       for (const event of pending) {
@@ -423,7 +458,7 @@ export class DirectControlPlane {
       const managed = {
         taskId, state, run, rpc, shell, runtime, runtimeState, workspace, credential, git,
         artifactDirectory, snapshotDirectory, configDirectory: config, active, capability, artifacts, sanitize,
-        promptProfile,
+        promptProfile, modelRoute: resolvedModelRoute,
         extensionEvidencePath: join(artifactDirectory, "boss-man-tools.json"),
       };
       this.sessions.set(state.sessionId, managed);
@@ -449,8 +484,8 @@ export class DirectControlPlane {
       idempotencyKey: `provider-response:${operationId}`,
       intent: {
         sessionId,
-        provider: managed.state.model?.provider ?? this.runtimeProvider,
-        model: managed.state.model?.id ?? this.runtimeModel,
+        provider: managed.state.model?.provider ?? managed.modelRoute.provider,
+        model: managed.state.model?.id ?? managed.modelRoute.model,
         promptSha256: sha256(message),
       },
     }).effect;
@@ -484,17 +519,11 @@ export class DirectControlPlane {
   }
 
   phaseKickoff(phase) {
-    if (phase === "implementation") {
-      return "Execute the assigned implementation phase now. Read the authoritative task, implement only its acceptance criteria, run proportionate checks, create a host-owned Git checkpoint or commit for the coherent result, then request independent review and record a concise completion proposal. Use Boss Man tools for every authoritative transition.";
-    }
-    if (phase === "test") {
-      return "Execute the assigned independent test phase now. Read the authoritative task, inspect the fixed revision, run the relevant deterministic checks, and record passed or failed validation with exact evidence using boss_test_record_validation. Do not edit the fixed revision; block with a concrete gap if test code changes are required.";
-    }
-    return "Execute the assigned independent review phase now. Read the authoritative task, inspect the fixed-revision diff, validation, and artifacts, then submit exactly one structured review disposition with concrete findings. Do not edit, checkpoint, or approve implementation performed by the same actor.";
+    return phaseKickoffPrompt(phase);
   }
 
-  async executeTaskPhase(taskId, { orchestratorToken, phase }) {
-    const started = await this.startTask(taskId, { orchestratorToken, phase });
+  async executeTaskPhase(taskId, { orchestratorToken, phase, modelRoute = null }) {
+    const started = await this.startTask(taskId, { orchestratorToken, phase, modelRoute });
     try {
       const execution = await this.prompt(started.session.id, this.phaseKickoff(phase));
       let completion = null;
@@ -911,6 +940,9 @@ export class DirectControlPlane {
       if (request.method === "GET" && url.pathname === "/api/agent-profiles") {
         return json(response, 200, { profiles: this.store.agentPromptProfiles() });
       }
+      if (request.method === "GET" && url.pathname === "/api/model-routes") {
+        return json(response, 200, publicModelRoutePolicy(this.modelRoutePolicy));
+      }
       const agentPromptProfile = url.pathname.match(/^\/api\/agent-profiles\/([^/]+)$/);
       if (request.method === "GET" && agentPromptProfile) {
         return json(
@@ -938,17 +970,24 @@ export class DirectControlPlane {
       if (request.method === "POST" && url.pathname === "/api/topics") {
         this.assertLocalOwnerProfile();
         const body = await readBody(request);
+        const route = this.resolveModelRoute("orchestrator", {
+          provider: body.modelProvider,
+          model: body.modelId,
+          thinking: body.thinkingLevel,
+          billingClass: body.billingClass,
+          policySource: "topic_override",
+        });
         const result = this.store.createTopic({
           title: body.title,
           ownerDescription: body.ownerDescription ?? null,
           projectId: body.projectId ?? null,
           idempotencyKey: request.headers["idempotency-key"],
-          modelProvider: body.modelProvider ?? this.runtimeProvider,
-          modelId: body.modelId ?? this.runtimeModel,
-          thinkingLevel: body.thinkingLevel ?? this.runtimeThinking,
+          modelProvider: route.provider,
+          modelId: route.model,
+          thinkingLevel: route.thinking,
           modelPolicy: {
-            source: "control_plane_default",
-            billingClass: body.billingClass ?? "unknown",
+            source: route.policySource,
+            billingClass: route.billingClass,
           },
         });
         return json(response, result.replayed ? 200 : 201, result);
@@ -1091,6 +1130,68 @@ export class DirectControlPlane {
         return json(response, result.replayed ? 200 : 201, result);
       }
 
+      const activeConversationTaskSchedule = url.pathname.match(
+        /^\/api\/orchestration\/conversations\/([^/]+)\/task-schedules$/,
+      );
+      if (request.method === "POST" && activeConversationTaskSchedule) {
+        const body = await readBody(request);
+        const active = this.store.activeConversationTurnForConversation(
+          bearerToken(request),
+          activeConversationTaskSchedule[1],
+        );
+        const task = this.store.getTask(body.taskId);
+        if (!task || task.project_id !== active.conversation.project_id) {
+          throw Object.assign(new Error("task is outside the active conversation project"), {
+            code: "orchestrator_denied",
+          });
+        }
+        const phase = body.phase ?? "implementation";
+        const modelRoute = this.resolveModelRoute(phase, {
+          provider: body.modelProvider,
+          model: body.modelId,
+          thinking: body.thinkingLevel,
+          billingClass: body.billingClass,
+          policySource: "orchestrator_selection",
+        });
+        const result = this.store.scheduleOwnerTaskRun({
+          taskId: task.id,
+          phase,
+          modelRoute,
+          actor: `orchestrator:${active.conversation.id}`,
+          source: "orchestrator_conversation",
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const orchestratorConversationCustody = url.pathname.match(
+        /^\/api\/orchestration\/conversations\/([^/]+)\/custody$/,
+      );
+      if (request.method === "POST" && orchestratorConversationCustody) {
+        const body = await readBody(request);
+        if (body.trigger !== "before_compact") {
+          throw Object.assign(new Error("orchestrator custody trigger must be before_compact"), {
+            code: "invalid_request",
+          });
+        }
+        const authorized = this.store.authorizeOrchestrationConversation(
+          bearerToken(request),
+          orchestratorConversationCustody[1],
+        );
+        const snapshot = await this.context.exportConversation({
+          conversationId: authorized.conversation.id,
+          trigger: "before_compact",
+        });
+        this.store.appendConversationEvent(
+          authorized.conversation.id,
+          authorized.conversation.current_turn_id,
+          "pre_compaction_custody_exported",
+          "control_plane",
+          { snapshotId: snapshot.snapshot_id, manifestSha256: snapshot.manifest_sha256 },
+        );
+        return json(response, 201, { snapshot });
+      }
+
       const completeTurn = url.pathname.match(/^\/api\/orchestration\/turns\/([^/]+)\/complete$/);
       if (request.method === "POST" && completeTurn) {
         const body = await readBody(request);
@@ -1165,6 +1266,35 @@ export class DirectControlPlane {
       if (request.method === "GET" && topicDetail) {
         const result = this.store.topicDetails(topicDetail[1]);
         return result ? json(response, 200, result) : json(response, 404, { error: "not_found" });
+      }
+
+      const bindTopicProject = url.pathname.match(/^\/api\/topics\/([^/]+)\/project$/);
+      if (request.method === "POST" && bindTopicProject) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const idempotencyKey = request.headers["idempotency-key"];
+        const prior = this.store.topicProjectBindingByIdempotency(idempotencyKey);
+        const topic = this.store.topicDetails(bindTopicProject[1]);
+        if (!topic) {
+          throw Object.assign(new Error(`unknown topic: ${bindTopicProject[1]}`), { code: "not_found" });
+        }
+        const snapshot = prior
+          ? { snapshot_id: prior.custody_snapshot_id }
+          : await this.context.exportConversation({
+            conversationId: topic.conversation.id,
+            trigger: "scope_transfer",
+          });
+        const result = this.store.bindTopicToProject({
+          topicId: bindTopicProject[1],
+          projectId: body.projectId,
+          expectedVersion: body.expectedVersion,
+          custodySnapshotId: snapshot.snapshot_id,
+          idempotencyKey,
+        });
+        return json(response, result.replayed ? 200 : 201, {
+          ...result,
+          custodySnapshot: snapshot,
+        });
       }
 
       const archiveTopic = url.pathname.match(/^\/api\/topics\/([^/]+)\/archive$/);
@@ -1276,9 +1406,18 @@ export class DirectControlPlane {
       if (request.method === "POST" && scheduleTask) {
         this.assertLocalOwnerProfile();
         const body = await readBody(request);
+        const phase = body.phase ?? "implementation";
+        const modelRoute = this.resolveModelRoute(phase, {
+          provider: body.modelProvider,
+          model: body.modelId,
+          thinking: body.thinkingLevel,
+          billingClass: body.billingClass,
+          policySource: "owner_schedule",
+        });
         const result = this.store.scheduleOwnerTaskRun({
           taskId: scheduleTask[1],
-          phase: body.phase,
+          phase,
+          modelRoute,
           idempotencyKey: request.headers["idempotency-key"],
         });
         return json(response, result.replayed ? 200 : 201, result);
@@ -1287,9 +1426,17 @@ export class DirectControlPlane {
       if (request.method === "POST" && resumeTask) {
         this.assertLocalOwnerProfile();
         const body = await readBody(request);
+        const phase = body.phase ?? "implementation";
         const result = this.store.resumeOwnerTaskRun({
           taskId: resumeTask[1],
-          phase: body.phase,
+          phase,
+          modelRoute: this.resolveModelRoute(phase, {
+            provider: body.modelProvider,
+            model: body.modelId,
+            thinking: body.thinkingLevel,
+            billingClass: body.billingClass,
+            policySource: "owner_resume",
+          }),
           idempotencyKey: request.headers["idempotency-key"],
         });
         return json(response, result.replayed ? 200 : 201, result);
@@ -1406,9 +1553,17 @@ export class DirectControlPlane {
       const start = url.pathname.match(/^\/api\/tasks\/([^/]+)\/sessions$/);
       if (request.method === "POST" && start) {
         const body = await readBody(request);
+        const phase = body.phase ?? "implementation";
         const options = {
           orchestratorToken: bearerToken(request),
-          phase: body.phase ?? "implementation",
+          phase,
+          modelRoute: this.resolveModelRoute(phase, {
+            provider: body.modelProvider,
+            model: body.modelId,
+            thinking: body.thinkingLevel,
+            billingClass: body.billingClass,
+            policySource: body.modelPolicySource ?? "scheduled_run",
+          }),
         };
         return json(response, 201, body.execute
           ? await this.executeTaskPhase(start[1], options)

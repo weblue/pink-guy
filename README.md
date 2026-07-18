@@ -51,9 +51,8 @@ npm start -- \
   --repo "$PWD" \
   --state "$HOME/.local/share/boss-man/dev" \
   --port 4310 \
-  --provider openai-codex \
-  --model gpt-5.4-mini \
-  --thinking medium
+  --model-config "$PWD/config/model-routes.json" \
+  --credential-source "$HOME/.pi/agent/auth.json"
 ```
 
 Repeat `--repo /absolute/path` to register more repositories. Open
@@ -98,6 +97,7 @@ npm run boss -- chat --topic TOPIC_ID
 npm run boss -- chat --repo "$PWD" --message "Refine the next task."
 npm run boss -- chat --new-topic "Prototype a new tool"
 npm run boss -- import --repo-url git@github.com:OWNER/REPO.git
+npm run boss -- bind --topic TOPIC_ID --project PROJECT_ID
 npm run boss -- profiles
 ```
 
@@ -111,9 +111,10 @@ Model selection is a central, observable policy—not an agent-controlled
 choice. Boss Man persists the provider, model, and thinking level when a
 conversation is created and passes that exact route to Pi.
 
-Conversation routes can be selected and changed today. Explicit per-task or
-per-phase sub-agent route assignment is the next Phase 1 slice; until it lands,
-task agents inherit the daemon startup route.
+Conversation routes can be selected and changed. Every task phase also resolves
+and records its own provider, model, thinking level, policy source, and billing
+class. The owner can select that route in the task workspace, and the
+orchestrator can select it when scheduling a sub-agent.
 
 List models available to the authenticated Pi installation:
 
@@ -125,12 +126,14 @@ A local model uses the same provider/model fields when it is exposed by the
 configured Pi installation; Boss Man does not require a separate routing
 service.
 
-Select the default route for newly created conversations when starting Boss
-Man:
+Edit [`config/model-routes.json`](config/model-routes.json) to set the default
+and optional `orchestrator`, `implementation`, `test`, or `review` overrides.
+Command-line values override only the configured default:
 
 ```sh
 npm start -- \
   --repo "$PWD" \
+  --model-config "$PWD/config/model-routes.json" \
   --provider PROVIDER \
   --model MODEL_ID \
   --thinking low
@@ -155,11 +158,14 @@ npm run boss -- profiles
 npm run boss -- profile --key orchestrator
 npm run boss -- profile \
   --key implementation \
-  --prompt-file ./my-implementation-prompt.txt
+  --prompt-file ./config/prompts/profiles/implementation.txt
 ```
 
-Prompt edits apply to new or restarted processes. Every run records the exact
-profile version and checksum it consumed.
+Human-readable defaults live under `config/prompts/`. Profile files are
+owner-editable guidance; policy-envelope and kickoff files are source-controlled
+platform behavior. Apply an edited profile through the command above or the
+cockpit. Prompt edits apply to new or restarted processes, and every run records
+the exact profile version and checksum it consumed.
 
 ## Optional task-agent image
 

@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0.0",
+  "default": {
+    "provider": "openai-codex",
+    "model": "gpt-5.4-mini",
+    "thinking": "medium",
+    "billing_class": "subscription"
+  },
+  "phases": {}
+}

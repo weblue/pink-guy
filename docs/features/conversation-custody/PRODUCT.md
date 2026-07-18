@@ -1,6 +1,6 @@
 # Conversation custody and safe model switching
 
-Status: Implemented Phase 1 slice
+Status: Implemented Phase 1 custody contract
 
 Last updated: 2026-07-17
 
@@ -26,10 +26,14 @@ session before processing the next turn.
    successor resumes the native session with the new provider/model/thinking
    arguments; clients do not resend prior messages.
 6. Browser and terminal surfaces show the route and snapshot boundary.
+7. Orchestrator-native compaction blocks until a verified conversation bundle
+   containing the pre-compaction native bytes is published.
+8. Binding a system-intake topic to a project requires a current verified
+   scope-transfer bundle. The project orchestrator resumes the same native Pi
+   session, while the intake runtime retires its now out-of-scope process.
 
 ## Remaining boundary
 
-- Export before orchestrator-native compaction and system-intake to project
-  transfer.
 - Conversation snapshot deletion, quota, backup, and restore UX.
+- True in-flight process reattachment after a control-plane restart.
 - Provider availability and spend-policy checks before accepting a route.

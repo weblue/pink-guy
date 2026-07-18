@@ -1,9 +1,8 @@
 # Phase 1 orchestrator conversations — substrate results
 
-Status: Durable conversation runtime, shared browser/terminal clients, and
-audited task-graph mutations implemented; custody and intake adapters remain
+Status: Phase 1 conversation, transfer, and task-scheduling contract verified
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## Delivered in this increment
 
@@ -139,10 +138,14 @@ same durable browser event projection. The run recorded 1,962 input tokens,
 authoritative board remained unchanged. The orchestrator released its lease
 and deleted its private credential copy on shutdown.
 
-## Remaining in the approved slice
+## Phase 1 closure
 
 Conversation custody for model switching, repository import/dedup, immutable
-external-source snapshots, task detail, and owner decision resolution are now
-implemented by later Phase 1 slices. Custody before orchestrator compaction
-and scope transfer plus deeper source/decision/custody/workspace inspectors
-remain.
+external-source snapshots, task detail, owner decision resolution, blocking
+pre-compaction export, intake-to-project transfer, independent task-agent
+routes, and deeper source/decision/custody/workspace inspectors are implemented
+by later Phase 1 slices. Deterministic dogfood-readiness coverage proves the
+whole intake → transfer → project continuation → independently routed task
+schedule boundary without an LLM request. A bounded real-provider container
+smoke also passes. Supervised work on real repositories is now the remaining
+Phase 1 evidence rather than an implementation prerequisite.
