@@ -3,7 +3,7 @@
 Status: Implementation in progress — shared browser/terminal conversation
 projection and audited task-graph mutations landed
 
-Last updated: 2026-07-18
+Last updated: 2026-07-17
 
 ## Context
 
@@ -206,9 +206,10 @@ The implemented increments now include topic create/list/open/archive,
 conversation turn submit/list, ordered event listing with reconnect cursors,
 scoped orchestration lease claim/complete routes, managed persistent Pi RPC
 runs, sanitized event ingestion, and provenance-linked task
-create/update/split/dependency/assumption/decision tools. Repository/source
-endpoints, conversation custody, owner decision-resolution UI, and deeper
-task/source/decision inspectors remain the next increments. See
+create/update/split/dependency/assumption/decision tools. Later Phase 1 slices
+also implement repository/source endpoints, custody-backed model switching,
+and owner task/decision/reconciliation controls. Deeper workspace inspectors
+and scope-transfer custody remain. See
 [RESULTS.md](./RESULTS.md).
 
 The cockpit adds a prominent **New topic** action and an **Ask orchestrator**
@@ -283,10 +284,12 @@ The earlier temporary-worktree plan is complete and intentionally removed from
 the active instructions. The integrated feature branch now advances in this
 order:
 
-1. audited task-graph mutation tools and cockpit projections;
-2. model-less conversation custody and safe scope/model/provider transfer;
-3. host-owned repository import and immutable source snapshots; and
-4. deeper task/source/decision/custody inspectors plus owner reconciliation.
+1. audited task-graph mutation tools and cockpit projections — implemented;
+2. model-less conversation custody and safe model/provider transfer —
+   implemented; scope transfer remains;
+3. host-owned repository import and immutable source snapshots — implemented;
+4. deeper task/source/decision/custody inspectors and full phase-flow
+   dogfooding — next.
 
 ## Risks and mitigations
 

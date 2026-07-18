@@ -8,7 +8,9 @@ and review agents.
 
 Phase 1 currently includes a loopback web cockpit, durable SQLite state,
 persistent Pi RPC conversations, an agile task board, a shared terminal
-client, managed worktrees/containers, and model-less context custody.
+client, host-owned repository intake, editable agent profiles, safe model
+switching, task/reconciliation controls, managed worktrees/containers, and
+model-less context custody.
 Authenticated remote access is a later phase.
 
 ## Objectives
@@ -94,6 +96,8 @@ npm run boss -- chat --repo "$PWD"
 npm run boss -- chat --topic TOPIC_ID
 npm run boss -- chat --repo "$PWD" --message "Refine the next task."
 npm run boss -- chat --new-topic "Prototype a new tool"
+npm run boss -- import --repo-url git@github.com:OWNER/REPO.git
+npm run boss -- profiles
 ```
 
 A practical cmux layout is one central-API pane, one orchestrator pane per
@@ -123,13 +127,30 @@ npm start -- \
   --thinking low
 ```
 
-To change that default, stop the central API and restart it with different
-flags. Existing conversations remain pinned to their recorded route.
+Safely switch an existing conversation. This first writes and verifies a
+model-less custody snapshot, then restarts Pi against the same native session
+before its next turn:
 
-Safe in-place switching of an existing conversation is a first-class Phase 1
-objective, but is intentionally not enabled yet. It will require a successful
-atomic, model-less custody snapshot before changing provider/model and
-resuming the Pi session. Do not edit SQLite to bypass this boundary.
+```sh
+npm run boss -- model \
+  --topic TOPIC_ID \
+  --provider PROVIDER \
+  --model MODEL_ID \
+  --thinking medium
+```
+
+Edit the orchestrator or phase-agent role guidance without changing source:
+
+```sh
+npm run boss -- profiles
+npm run boss -- profile --key orchestrator
+npm run boss -- profile \
+  --key implementation \
+  --prompt-file ./my-implementation-prompt.txt
+```
+
+Prompt edits apply to new or restarted processes. Every run records the exact
+profile version and checksum it consumed.
 
 ## Optional task-agent image
 

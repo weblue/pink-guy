@@ -174,6 +174,52 @@ assert(
     && !JSON.stringify(publicCommands.value).includes(registrationA.value.token),
   "public command projection leaked an orchestrator credential",
 );
+const replacementRegistration = await request("/api/orchestrators", {
+  method: "POST",
+  body: { projectId: "project-a", transport: "daemon", endpoint: "pid:phase1-a2", leaseSeconds: 90 },
+});
+const retried = await request(`/api/commands/${releasedCommand.id}/reconcile`, {
+  method: "POST",
+  idempotencyKey: "phase1-owner-retry",
+  body: { action: "retry" },
+});
+assert(
+  retried.status === 201
+    && retried.value.retryCommand.state === "queued"
+    && retried.value.retryCommand.payload.retryOf === releasedCommand.id,
+  "owner reconciliation did not create one explicit retry command",
+);
+const retryReplay = await request(`/api/commands/${releasedCommand.id}/reconcile`, {
+  method: "POST",
+  idempotencyKey: "phase1-owner-retry",
+  body: { action: "retry" },
+});
+assert(
+  retryReplay.status === 200 && retryReplay.value.replayed,
+  "owner retry reconciliation was not idempotent",
+);
+const claimedRetry = await request("/api/orchestrators/commands/claim", {
+  method: "POST",
+  body: {},
+  token: replacementRegistration.value.token,
+});
+await request(`/api/orchestrators/commands/${claimedRetry.value.command.id}/complete`, {
+  method: "POST",
+  token: replacementRegistration.value.token,
+  body: { state: "failed", result: { reason: "deterministic_probe_failure" } },
+});
+const reset = await request(`/api/commands/${claimedRetry.value.command.id}/reconcile`, {
+  method: "POST",
+  idempotencyKey: "phase1-owner-reset",
+  body: { action: "reset" },
+});
+assert(
+  reset.status === 201
+    && reset.value.command.state === "cancelled"
+    && reset.value.task.status === "ready"
+    && reset.value.task.assigned_worker === null,
+  "owner reset did not close the failed command and restore schedulable task state",
+);
 
 let clock = "2026-07-17T12:00:00.000Z";
 const expiryStore = new Phase0Store(join(root, "expiry", "boss-man.sqlite"), { clock: () => clock });
@@ -316,6 +362,8 @@ const result = {
   cross_project_claim_denied: true,
   lease_release_reconciliation: true,
   lease_expiry_reconciliation: true,
+  explicit_owner_retry: true,
+  explicit_owner_reset: true,
   automatic_replay: false,
   consumer_success_and_failure: true,
   public_token_leak: false,

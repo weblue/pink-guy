@@ -15,6 +15,13 @@ function usage(message) {
   process.stderr.write(`usage:
   boss status [--api URL] [--json]
   boss topics [--api URL] [--json]
+  boss profiles [--api URL] [--json]
+  boss profile --key KEY [--prompt TEXT | --prompt-file PATH]
+    [--expected-version N] [--api URL] [--json]
+  boss model --topic ID --provider PROVIDER --model MODEL_ID --thinking LEVEL
+    [--expected-version N] [--api URL] [--json]
+  boss import --repo-url URL [--name NAME] [--description TEXT]
+    [--api URL] [--json]
   boss chat (--topic ID | --project ID | --repo PATH | --new-topic TITLE)
     [--description TEXT] [--message TEXT | --message-file PATH]
     [--no-wait] [--poll-ms 750] [--timeout-seconds 600] [--api URL] [--json]
@@ -28,7 +35,10 @@ interactive.
 
 function parseArguments(argv) {
   const command = argv[0];
-  if (!command || command === "--help" || command === "-h" || !["status", "topics", "chat"].includes(command)) {
+  if (
+    !command || command === "--help" || command === "-h"
+    || !["status", "topics", "profiles", "profile", "model", "import", "chat"].includes(command)
+  ) {
     usage(command ? `unknown command: ${command}` : null);
   }
   const options = {
@@ -49,6 +59,15 @@ function parseArguments(argv) {
     else if (argument === "--description") options.description = value();
     else if (argument === "--message") options.message = value();
     else if (argument === "--message-file") options.messageFile = value();
+    else if (argument === "--key") options.profileKey = value();
+    else if (argument === "--prompt") options.prompt = value();
+    else if (argument === "--prompt-file") options.promptFile = value();
+    else if (argument === "--expected-version") options.expectedVersion = Number(value());
+    else if (argument === "--provider") options.modelProvider = value();
+    else if (argument === "--model") options.modelId = value();
+    else if (argument === "--thinking") options.thinkingLevel = value();
+    else if (argument === "--repo-url") options.repositoryUrl = value();
+    else if (argument === "--name") options.projectName = value();
     else if (argument === "--no-wait") options.noWait = true;
     else if (argument === "--poll-ms") options.pollMs = Number(value());
     else if (argument === "--timeout-seconds") options.timeoutMs = Number(value()) * 1_000;
@@ -59,6 +78,17 @@ function parseArguments(argv) {
     !Number.isInteger(options.pollMs) || options.pollMs < 100 || options.pollMs > 60_000
     || !Number.isInteger(options.timeoutMs) || options.timeoutMs < 1_000
   ) usage("poll and timeout values are outside their supported range");
+  if (command === "profile" && !options.profileKey) usage("profile requires --key");
+  if (
+    command === "model"
+    && (!options.topicId || !options.modelProvider || !options.modelId || !options.thinkingLevel)
+  ) usage("model requires --topic, --provider, --model, and --thinking");
+  if (command === "import" && !options.repositoryUrl) usage("import requires --repo-url");
+  if (options.prompt && options.promptFile) usage("choose --prompt or --prompt-file");
+  if (
+    options.expectedVersion !== undefined
+    && (!Number.isInteger(options.expectedVersion) || options.expectedVersion < 1)
+  ) usage("expected version must be a positive integer");
   return options;
 }
 
@@ -91,6 +121,98 @@ function writeTopics(topics, api) {
   ${api}/#${topic.id}
 `);
   }
+}
+
+function writeProfiles(profiles) {
+  for (const profile of profiles) {
+    process.stdout.write(
+      `${profile.profile_key}  ${profile.display_name} · ${profile.role} · v${profile.active_version}`
+      + ` · ${profile.prompt_sha256.slice(0, 12)}…\n`,
+    );
+  }
+}
+
+function writeProfile(profile) {
+  process.stdout.write(`${profile.display_name}
+Key: ${profile.profile_key}
+Role: ${profile.role}
+Active revision: v${profile.active_version}
+SHA-256: ${profile.prompt_sha256}
+Updated: ${profile.updated_at}
+
+${profile.prompt_text}
+
+New or restarted Pi processes use this revision; running processes keep their pinned prompt.
+`);
+}
+
+async function runProfile(client, options) {
+  const current = await client.agentProfile(options.profileKey);
+  let prompt = options.prompt;
+  if (options.promptFile) prompt = await readFile(options.promptFile, "utf8");
+  if (prompt === undefined) {
+    if (options.json) writeJson(current);
+    else writeProfile(current);
+    return;
+  }
+  const result = await client.updateAgentProfile(
+    options.profileKey,
+    prompt,
+    options.expectedVersion ?? current.active_version,
+  );
+  if (options.json) writeJson(result);
+  else {
+    process.stdout.write(
+      `Saved ${result.profile.profile_key} v${result.profile.active_version}`
+      + ` (${result.profile.prompt_sha256.slice(0, 12)}…).\n`
+      + "It applies at the next Pi process start.\n",
+    );
+  }
+}
+
+async function runModelSwitch(client, options) {
+  const detail = await client.topicDetail(options.topicId);
+  const result = await client.switchConversationModel(detail.conversation.id, {
+    modelProvider: options.modelProvider,
+    modelId: options.modelId,
+    thinkingLevel: options.thinkingLevel,
+    expectedVersion: options.expectedVersion ?? detail.conversation.version,
+  });
+  if (options.json) {
+    writeJson(result);
+    return;
+  }
+  process.stdout.write(
+    `Saved custody snapshot ${result.change.custody_snapshot_id}.\n`
+    + `Conversation now uses ${result.change.new_route.modelProvider}/`
+    + `${result.change.new_route.modelId} (${result.change.new_route.thinkingLevel}).\n`
+    + "The orchestrator restarts the durable Pi session before processing the next turn.\n",
+  );
+}
+
+async function runImport(client, options) {
+  const imported = await client.importProject(options.repositoryUrl, { name: options.projectName });
+  const detail = await client.resolveTopic({
+    projectId: imported.project.id,
+    description: options.description ?? null,
+  });
+  const result = {
+    project: imported.project,
+    topic: detail.topic,
+    conversation: detail.conversation,
+    browserUrl: `${client.api}/#${detail.topic.id}`,
+    reused: Boolean(imported.replayed),
+  };
+  if (options.json) {
+    writeJson(result);
+    return;
+  }
+  process.stdout.write(`Project: ${result.project.name}
+Repository: ${result.project.repository_path}
+Topic: ${result.topic.id}
+Browser: ${result.browserUrl}
+Terminal: npm run boss -- chat --topic ${result.topic.id}
+`);
 }
 
 function writeConversationHeader(state) {
@@ -251,6 +373,16 @@ try {
     const fleet = await client.fleet();
     if (options.json) writeJson({ topics: fleet.topics });
     else writeTopics(fleet.topics, client.api);
+  } else if (options.command === "profiles") {
+    const profiles = await client.agentProfiles();
+    if (options.json) writeJson({ profiles });
+    else writeProfiles(profiles);
+  } else if (options.command === "profile") {
+    await runProfile(client, options);
+  } else if (options.command === "model") {
+    await runModelSwitch(client, options);
+  } else if (options.command === "import") {
+    await runImport(client, options);
   } else {
     await runChat(client, options);
   }

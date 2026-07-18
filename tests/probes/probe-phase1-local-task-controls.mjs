@@ -106,6 +106,56 @@ const createConflict = await request("/api/projects/controls-project/tasks", {
 });
 assert(createConflict.status === 409, "task creation idempotency mismatch was accepted");
 
+const ownerDetail = await request(`/api/tasks/${taskId}`);
+assert(
+  ownerDetail.status === 200 && ownerDetail.value.id === taskId,
+  "loopback owner could not inspect authoritative task detail",
+);
+const edited = await request(`/api/tasks/${taskId}`, {
+  method: "PUT",
+  idempotencyKey: "controls-edit",
+  body: {
+    title: "Build useful local task controls",
+    description: "Expose description, acceptance, decisions, and activity without internal APIs.",
+    acceptanceCriteria: [...createBody.acceptanceCriteria, "Edit and resolve from task detail"],
+    expectedVersion: 1,
+  },
+});
+assert(
+  edited.status === 201
+    && edited.value.task.version === 2
+    && edited.value.task.description.includes("description, acceptance")
+    && edited.value.task.activity.some((event) => event.type === "task_updated"),
+  "owner task-detail edit did not preserve versioned activity",
+);
+const decision = await request(`/api/tasks/${taskId}/actions/add_decision_gate`, {
+  method: "POST",
+  idempotencyKey: "controls-decision",
+  body: {
+    expectedVersion: 2,
+    payload: {
+      id: "controls-decision-gate",
+      category: "architecture",
+      question: "Keep the first task inspector dependency-free?",
+    },
+  },
+});
+const resolved = await request(`/api/tasks/${taskId}/actions/resolve_decision`, {
+  method: "POST",
+  idempotencyKey: "controls-decision-resolve",
+  body: {
+    expectedVersion: 3,
+    payload: { id: "controls-decision-gate", resolution: "Yes, use the existing cockpit." },
+  },
+});
+assert(
+  decision.status === 201
+    && resolved.status === 201
+    && resolved.value.task.version === 4
+    && resolved.value.task.decision_gates[0].status === "resolved",
+  "loopback owner could not resolve a protected decision through task detail controls",
+);
+
 const noOrchestrator = await request(`/api/tasks/${taskId}/schedule`, {
   method: "POST",
   idempotencyKey: "controls-no-orchestrator",
@@ -114,7 +164,7 @@ const noOrchestrator = await request(`/api/tasks/${taskId}/schedule`, {
 assert(noOrchestrator.status === 409, "task scheduled without an active project orchestrator");
 assert(
   authority.store.getTask(taskId).status === "ready"
-    && authority.store.getTask(taskId).version === 1
+    && authority.store.getTask(taskId).version === 4
     && authority.store.orchestratorCommands({ projectId: "controls-project" }).length === 0,
   "failed scheduling partially mutated task or command state",
 );
@@ -144,7 +194,7 @@ const scheduled = await request(`/api/tasks/${taskId}/schedule`, {
 assert(
   scheduled.status === 201
     && scheduled.value.task.status === "in_progress"
-    && scheduled.value.task.version === 2
+    && scheduled.value.task.version === 5
     && scheduled.value.task.assigned_worker.startsWith("task-agent:test:")
     && scheduled.value.command.state === "queued"
     && scheduled.value.command.phase === "test",
@@ -167,7 +217,7 @@ const scheduleReplay = await request(`/api/tasks/${taskId}/schedule`, {
 assert(
   scheduleReplay.status === 200
     && scheduleReplay.value.replayed
-    && scheduleReplay.value.task.version === 2
+    && scheduleReplay.value.task.version === 5
     && scheduleReplay.value.command.id === scheduled.value.command.id,
   "scheduling retry duplicated task transition or command",
 );
@@ -179,7 +229,7 @@ const scheduleConflict = await request(`/api/tasks/${taskId}/schedule`, {
 assert(scheduleConflict.status === 409, "scheduling idempotency mismatch was accepted");
 const auditTypes = authority.store.taskAudit(taskId).map((event) => event.type);
 assert(
-  auditTypes.join(",") === "task_created,task_scheduled",
+  auditTypes.join(",") === "task_created,task_updated,decision_required,decision_resolved,task_scheduled",
   `owner mutation audit is incomplete: ${auditTypes.join(",")}`,
 );
 
@@ -202,6 +252,8 @@ const result = {
   task_creation: true,
   current_revision_server_derived: true,
   acceptance_criteria_preserved: true,
+  task_detail_editing: true,
+  owner_decision_resolution: true,
   create_idempotency: true,
   no_orchestrator_atomic_rollback: true,
   phase_scoped_schedule: "test",

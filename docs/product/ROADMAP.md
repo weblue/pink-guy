@@ -2,7 +2,7 @@
 
 Status: Active
 
-Last updated: 2026-07-18
+Last updated: 2026-07-17
 
 This is the canonical phase sequence. Phase 0 research artifacts remain useful evidence, but they no longer make remote authentication or second-host reproduction prerequisites for local product development.
 
@@ -36,8 +36,8 @@ Phase 0 does not require application authentication because its runnable profile
 
 ## Phase 1 — useful local-first developer cockpit
 
-Status: In progress — control loop, task controls, conversations, cockpit, and
-shared terminal client implemented
+Status: In progress — P1-1 through P1-3 usable increments implemented; P1-4
+inspectors and real-repository phase-flow dogfood next
 
 Purpose: make Boss Man useful for daily development on the host and, when explicitly enabled, a trusted LAN.
 
@@ -61,8 +61,10 @@ implemented. The first New topic/Ask orchestrator workspace, conversation
 stream, navigable change cards, and synchronized board projection are also
 implemented. The `boss` terminal client now reopens that same durable
 conversation by topic, project, or repository and exposes the cockpit deep
-link plus orchestrator tmux/process endpoint. Repository/source intake,
-conversation custody, and deeper inspectors remain.
+link plus orchestrator tmux/process endpoint. Versioned agent prompts,
+custody-backed model switching, repository/source intake, task detail and
+owner reconciliation controls are also implemented. Deeper workspace
+inspectors and full real-repository phase-flow dogfooding remain.
 
 Scope:
 
@@ -99,7 +101,7 @@ Scope:
 - policy-governed merge/rebase/push, conflict handling, and worktree cleanup;
 - orchestrator restart recovery, paused-session resume, and uncertain-effect resolution UX;
 - retention deletion, quotas, backup/restore, encryption expectations, and storage-pressure behavior;
-- provider failure drills, manual safe-boundary switching, and optional paid fallback decision;
+- provider failure drills, switch recovery, and optional paid fallback decision;
 - measured global/per-project concurrency and host-pressure limits for the 64 GB M1 Max;
 - clean second-ARM64-host reproduction and migration rehearsal;
 - security review of terminal, artifact, capability, and trusted-LAN boundaries.

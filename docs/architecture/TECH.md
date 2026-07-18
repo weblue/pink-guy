@@ -2,7 +2,7 @@
 
 Status: Direct-Pi foundation approved; Phase 0 closure
 
-Last updated: 2026-07-18
+Last updated: 2026-07-17
 
 ## Context and evidence
 
@@ -543,7 +543,7 @@ Automate the local-first behaviors in `PRODUCT.md` §14, including a reviewer/ch
 
 - Policy-governed merge/rebase/push, conflict handling, and cleanup.
 - Recovery/resume UX, retention/deletion/quotas, backup/restore, and storage pressure.
-- Provider failure drills, manual model switching, and paid-fallback decision.
+- Provider failure drills, custody-backed switch recovery, and paid-fallback decision.
 - Measured concurrency/resource limits on the target Mac.
 - Second clean ARM64 reproduction and migration rehearsal.
 
