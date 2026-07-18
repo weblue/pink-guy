@@ -1,9 +1,0 @@
-f3d46e641c07c496ac0f7dafc6ab85423f5fa0e112b6882d6847c9f187ebc8f7  phase0/fixtures/decoy-project/README.md
-155834791c700585c814ba1c92054294835424e40f3ae5b318499d508cff345b  phase0/fixtures/task-repo/TASK.md
-5c8fc26cb0151f7a40a25ec2f3a00153c9db1a8e127c990dfc74e8f8adcec415  phase0/fixtures/task-repo/memory/decision-active.md
-8617902bfb03992e906868a94184143a28f9e61a9e1e7c9579eca396d4c38f16  phase0/fixtures/task-repo/memory/decision-superseded.md
-7387d7fd68bf6bb7ebcdd58d21e8d94ba239b3bcbcf7983edd144b2c1840c12b  phase0/fixtures/task-repo/memory/failure-report.md
-c14c15bea44846a5b2fe5f48121cd8ed634ceed18a47bbb278de65560e7e695a  phase0/fixtures/task-repo/memory/runbook.md
-e05f33638ad3a778afd9f73f147a940c08365bc71455dc0c6238f487d1cc9b4e  phase0/fixtures/task-repo/package.json
-a4dad5a8fb976e2efced250a62d22c0972e13b36c015694f143b837b3620b046  phase0/fixtures/task-repo/src/slugify.js
-6987b8a608a684c37c116ec79ddf5504f10ed2386bac1abf4d8a7ce996326683  phase0/fixtures/task-repo/test/slugify.test.js
