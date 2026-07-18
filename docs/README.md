@@ -30,8 +30,21 @@ verification results.
 - [Orchestrator conversations](features/orchestrator-conversations/)
 
 The orchestrator-conversation slice is the current implementation frontier.
-Conversation custody, repository/source intake, task-detail reconciliation,
-and developer inspectors follow it.
+Browser/terminal parity is complete. Conversation custody and safe model
+switching are next, followed by repository/source intake, task-detail
+reconciliation, and developer inspectors.
+
+## Adoption checkpoints
+
+- **Dogfood now:** use Boss Man alongside a direct coding client for
+  noncritical, supervised work.
+- **Supervised daily driver:** complete Phase 1 and validate the full
+  implementation → test → review → checkpoint flow across multiple real
+  repositories.
+- **Full-time local replacement:** complete Phase 2 recovery, Git completion,
+  credential/concurrency, backup, and portability gates.
+- **Remote-first operation:** complete Phase 3 authentication and SWAG
+  deployment.
 
 ## Operations and testing
 

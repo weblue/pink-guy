@@ -1,8 +1,8 @@
 # Boss Man v2 current state
 
-Status: Phase 1 in progress — managed orchestrator conversations underway
+Status: Phase 1 in progress — shared browser/terminal orchestration landed
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## Current position
 
@@ -27,7 +27,11 @@ fast path. The owner approved the first-class topic, system-intake
 orchestrator, and read-only source-snapshot directions as D-039 through D-041
 on 2026-07-17. The topic/turn substrate, persistent Pi RPC bridge, sanitized
 event projection, cockpit, and provenance-linked task-graph mutations are
-implemented.
+implemented. The dependency-free `boss` client now reopens the same durable
+topic by topic, project, or repository and exposes the same history, task
+changes, model route, browser deep link, and orchestrator process endpoint as
+the cockpit. Terminal scrollback remains a client view rather than a second
+conversation authority.
 
 The repository has graduated from its Phase 0 research layout. Live platform
 code now has stable product paths under `src/`, operator entry points live
@@ -51,6 +55,24 @@ the runtime structure.
 | Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
 | Developer cockpit | The loopback Phase 1 cockpit keeps projects and the multi-project board visible while adding New topic, project Ask orchestrator, a persistent conversation composer, reconnectable Pi text/lifecycle state, structured task-change cards with board navigation, synchronized topic/board projections, sessions, commands, and live tmux/SSH attach guidance. A dependency-free `boss chat` client opens the same conversation by topic, project, or repository, shows durable history/task changes/model/lease identity and a cockpit deep link, and supports interactive, piped, or one-shot turns. Direct task creation/scheduling remains a secondary fast path. | Task detail/decision/reconciliation, diffs/tests/review/source/custody inspectors, and optional trusted-LAN access remain. D-043 defers a browser PTY. |
 | Orchestrator interaction | First-class topic/conversation projections, central model policy, ordered turns/events, scoped leases, one-turn claiming, no-replay lease-loss reconciliation, persistent managed Pi RPC runs, sanitized reconnect streams, audited create/update/split/dependency/assumption/decision task mutations, and the first browser workspace are implemented. Two-turn deterministic coverage and an owner-authorized live turn prove no history resend. D-039 through D-043 govern the accepted slice. | Conversation custody and repository import/source snapshots remain. |
+
+## Adoption readiness
+
+Boss Man is currently a **development preview suitable for supervised
+dogfooding**, not yet a full-time replacement for a direct Codex or Pi coding
+session.
+
+| Checkpoint | Required capability | Recommended use |
+|---|---|---|
+| Current | Durable local API, project conversations, shared browser/terminal view, task graph, phase scheduling, managed runtime/Git/context foundations | Run alongside a direct coding client on noncritical work |
+| Phase 1 exit | Conversation custody and safe model switching; repository/source intake; task/decision/reconciliation controls; diff/test/review/context/artifact inspectors; complete implementation → test → review → checkpoint flow across multiple real repositories | Prefer Boss Man for supervised local development; retain a direct client as recovery fallback |
+| Phase 2 exit | Dependable restart/resume, merge/rebase/push/conflicts/cleanup, credential concurrency, retention/backup, measured resource limits, provider drills, and second-host reproduction | Use Boss Man as the full-time local coding environment |
+| Phase 3 exit | Authenticated SWAG deployment with proxy, session/key, streaming, reconnect, rate-limit, and recovery controls | Use the intended remote-first experience |
+
+Phase 1 completion is the earliest reasonable point to prefer Boss Man for
+ordinary supervised work. Phase 2 completion is the trust threshold for using
+it full time instead of Codex: losing the control process, provider access, or
+host must not lose work or require direct SQLite repair.
 
 ## Artifact and data layout
 
@@ -96,20 +118,27 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 
 ## Next steps
 
-1. **Phase 1 — conversation custody.** Extend the model-less bundle with topic,
-   conversation turn/run, and task-origin records; make it the blocking
-   precondition for compaction, scope transfer, and model/provider switching.
-2. **Phase 1 — repository and source intake.** Add host-owned repository URL
+1. **P1-1 — conversation custody and safe model switching.** Extend the
+   model-less bundle with topic, conversation turn/run, and task-origin
+   records. Require an atomic validated snapshot before compaction, intake →
+   project transfer, or provider/model changes, then expose the first-class
+   switch operation through the central API and clients.
+2. **P1-2 — repository and source intake.** Add host-owned repository URL
    import plus immutable manual/Jira snapshots with no write-back.
-3. **Phase 1 — task detail and reconciliation.** Add description/acceptance
+3. **P1-3 — task detail and reconciliation.** Add description/acceptance
    editing, dependencies, activity, command failure detail, and explicit owner
-   reconciliation actions.
-4. **Phase 1 — workspace inspectors.** Add source/decision/custody navigation
-   plus diff/test/review/context/artifact inspectors around the landed
-   conversation workspace. D-043 keeps a browser PTY out of the Phase 1
-   baseline; tmux/SSH remains the escape hatch.
-5. **Phase 2 — autonomy, recovery, and portability.** Add merge/rebase/push, recovery UX, retention/backup, resource limits, and second-host reproduction.
-6. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally configured password verifier or API-key hash after the local product is mature.
+   reconciliation, stop, and resume actions.
+4. **P1-4 — workspace inspectors and real-workflow dogfood.** Add
+   source/decision/custody navigation plus diff/test/review/context/artifact
+   inspectors. Prove the complete phase flow across at least two real
+   repositories without probe helpers or SQLite edits. D-043 keeps a browser
+   PTY out of the baseline; tmux/SSH remains the escape hatch.
+5. **Phase 2 — autonomy, recovery, and portability.** Add
+   merge/rebase/push, recovery UX, credential concurrency, retention/backup,
+   measured resource limits, and second-host reproduction.
+6. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
+   configured password verifier or API-key hash after the local product is
+   mature.
 
 ## Questions exposed by implementation
 

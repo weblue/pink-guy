@@ -1,9 +1,9 @@
 # Phase 1 orchestrator conversations — substrate results
 
-Status: Durable conversation runtime, cockpit, and audited task-graph mutations
-implemented; custody and intake adapters remain
+Status: Durable conversation runtime, shared browser/terminal clients, and
+audited task-graph mutations implemented; custody and intake adapters remain
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## Delivered in this increment
 

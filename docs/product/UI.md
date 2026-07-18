@@ -2,7 +2,7 @@
 
 Status: Draft for Phase 1 local-first product planning; direct-Pi foundation selected
 
-Last updated: 2026-07-17
+Last updated: 2026-07-18
 
 ## Decision summary
 
