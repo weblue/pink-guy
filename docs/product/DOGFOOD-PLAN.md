@@ -4,6 +4,10 @@ Status: Complete — Phase 1 accepted for supervised local development
 
 Last updated: 2026-07-18
 
+This is the retained Phase 1 acceptance record. The current sustained-dogfood
+gate and UX evidence protocol are defined in
+[`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md).
+
 ## Objective
 
 Prove that Pink Guy can replace a direct coding client for supervised,

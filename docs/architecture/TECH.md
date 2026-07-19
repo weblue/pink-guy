@@ -1,8 +1,8 @@
 # Pink Guy v2 technical design
 
-Status: Direct-Pi foundation; Phase 1 complete; Phase 2 active
+Status: Direct-Pi foundation; Phase 1 complete; Phase 2 active through P2-3
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 ## Context and evidence
 
@@ -418,7 +418,7 @@ active/contested/stale records, governed diffs, and evidence links. The
 complete layout and candidate evaluation live in `UI.md`.
 
 The direct cockpit is selected. D-043 supersedes the earlier Phase 1 xterm.js
-assumption: the browser and `boss` terminal client project the same durable Pi
+assumption: the browser and `pink` terminal client project the same durable Pi
 RPC conversation, while Ghostty/cmux/tmux remain local process attach and
 recovery clients. Reconsider an embedded PTY or separately authenticated
 code-server only after a workflow cannot be expressed through the structured
@@ -576,7 +576,9 @@ failed UI tests.
 - Recovery/resume UX, retention/deletion/quotas, backup/restore, and storage pressure.
 - Provider failure drills and custody-backed switch recovery.
 - Measured concurrency/resource limits on the target Mac.
-- Second clean ARM64 reproduction and migration rehearsal.
+- Model-less continuity export and isolated same-host restore. A second clean
+  ARM64 host is explicitly deferred by D-054 until format stability or
+  dogfood proves the need.
 
 The dependency order and exit evidence live in
 [`../product/PHASE2-PLAN.md`](../product/PHASE2-PLAN.md). Execution recovery is
@@ -644,7 +646,7 @@ The owner resolved the foundation ADR in favor of direct Pi on 2026-07-16.
 Phase 0 and Phase 1 are complete. The supervised local cockpit has passed
 multi-repository implementation, fixed-revision validation, independent
 review, deterministic Ready dispatch, and live automatic-release dogfood.
-Phase 2 is active with approved D-047 through D-049 execution-recovery
-contracts as its first slice. Second-host reproduction closes Phase 2; SWAG
-and owner authentication remain Phase 3. `ROADMAP.md` is the canonical
-delivery sequence.
+Phase 2 is active with approved D-047 through D-054 governing recovery, Git,
+retention, adoption, and bounded continuity. Isolated same-host restore closes
+the portability gate; SWAG and owner authentication remain Phase 3.
+`ROADMAP.md` is the canonical delivery sequence.

@@ -1,8 +1,8 @@
 # Pink Guy v2 developer cockpit
 
-Status: Phase 1 cockpit plus P2-1 through P2-3 control surfaces implemented
+Status: Current cockpit contract; Phase 2U redesign inputs recorded
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 ## Decision summary
 
@@ -139,7 +139,7 @@ Mobile prioritizes triage over a squeezed desktop replica:
 ## Deferred embedded workspace-terminal contract
 
 D-043 removes an embedded browser PTY from the Phase 1 baseline. The current
-terminal experience is the `boss` central-API conversation client plus
+terminal experience is the `pink` central-API conversation client plus
 cmux/tmux/SSH process attach and recovery. The rules below apply only if a
 later demonstrated workflow gap justifies a browser workspace shell.
 
@@ -178,6 +178,31 @@ usage-driven:
 No browser terminal or full browser IDE is required to close Phase 1. A
 polished chat screen is not a substitute for task, evidence, and risk
 observability.
+
+### Phase 2D friction evidence
+
+Record a friction event when the owner loses position, cannot identify the
+next action, cannot explain a visible element, leaves Pink Guy to finish
+ordinary work, or performs an avoidable recovery action. Each event records:
+
+- journey and project/task/topic;
+- intended action and actual outcome;
+- frequency and severity (`blocking`, `costly`, or `cosmetic`);
+- screenshot or event/time reference where useful;
+- workaround and whether a direct Pi/Codex client was required.
+
+Known hypotheses—not yet accepted redesign requirements—are:
+
+- orchestrator chat can bounce away from the owner's scroll position;
+- populated panels or the page can grow and scroll without a useful bound;
+- task, execution, evidence, Git, retention, and recovery details compete for
+  attention without enough explanation or progressive disclosure.
+
+The executable evidence and interview sequence live in
+[`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md). Phase 2U begins with an owner
+interview, produces a mockup based on the existing cockpit, and requires owner
+acceptance before implementation. A bounded fix may land earlier only when a
+known scrolling defect blocks Phase 2D evidence collection.
 
 ## Visual system notes
 

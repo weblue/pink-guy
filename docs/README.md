@@ -12,8 +12,12 @@ and retained history.
 - [Roadmap](product/ROADMAP.md) — canonical phase and exposure sequence.
 - [Phase 2 delivery plan](product/PHASE2-PLAN.md) — recovery-first sequence,
   dependencies, exit evidence, and deferred work.
+- [Phase 2 closure and adoption plan](product/PHASE2-CLOSURE.md) — the
+  executable path from PR #17 through calibration, continuity, sustained
+  dogfood, and the owner-reviewed UX redesign.
 - [Phase 1 dogfood plan](product/DOGFOOD-PLAN.md) — entry gates, two real-work
-  scenarios, evidence, and explicit non-requirements.
+  scenarios, evidence, and explicit non-requirements; retained as the completed
+  Phase 1 record.
 - [Decision log](architecture/DECISIONS.md) — owner-approved, proposed, and
   deferred decisions.
 
@@ -49,6 +53,9 @@ orchestrator-release task passed implementation, fixed-revision validation,
 independent review, and completion, so Phase 1 is complete.
 
 ## Active Phase 2 features
+
+These features are implemented on the current Phase 2 branch and await merge
+in [PR #17](https://github.com/weblue/pink-guy/pull/17).
 
 - [Execution recovery and late evidence](features/execution-recovery/) —
   central accepted-execution settlement, mutation fencing, paused/recovery

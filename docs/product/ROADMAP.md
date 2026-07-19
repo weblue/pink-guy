@@ -144,7 +144,8 @@ Scope:
 - provider failure drills and switch recovery across configured direct Pi
   routes;
 - measured global/per-project concurrency and host-pressure limits for the 64 GB M1 Max;
-- clean second-ARM64-host reproduction and migration rehearsal;
+- model-less continuity export and isolated same-host restore, with a
+  second-host rehearsal deferred under D-054;
 - security review of artifact, capability, optional workspace-shell, and
   network boundaries.
 
@@ -171,6 +172,9 @@ Scope:
   restart, provider exhaustion, conflict, pause, and recovery;
 - a restored continuity export;
 - a friction log for every direct Codex/Pi fallback.
+
+The exact entry, evidence, and exit checklist is maintained in
+[`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md).
 
 Exit: for an owner-approved measured window, normal coding needs no direct
 SQLite repair, manual artifact reconstruction, or routine escape to another

@@ -1,6 +1,6 @@
 # Phase 2 delivery plan
 
-Status: Active — P2-1 through P2-3 implemented; P2-4 calibration next
+Status: Active — P2-1 through P2-3 implemented in PR #17; P2-4 calibration next
 
 Last updated: 2026-07-19
 
@@ -15,6 +15,9 @@ the workflow and Phase 2U accepts its usability before the full-time switch.
 
 Phase 1 is the entry gate and is complete. Authenticated SWAG exposure remains
 Phase 3.
+
+The concise execution checklist from merge through dogfood and UX acceptance
+is [`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md).
 
 ## Delivery principles
 

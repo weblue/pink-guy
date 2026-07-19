@@ -15,7 +15,9 @@ evidence inspectors, deterministic Ready scheduling, managed
 worktrees/containers, and model-less context custody.
 Authenticated remote access is a later phase.
 
-Phase 2 is active. P2-1 through P2-3 are implemented. Recovery now provides
+Phase 2 is active. P2-1 through P2-3 are implemented on the current Phase 2
+branch and are awaiting merge in
+[PR #17](https://github.com/weblue/pink-guy/pull/17). Recovery now provides
 durable command execution identity, central asynchronous settlement, mutation
 fencing, restart reconciliation, explicit pause/retry/cancel actions, and
 owner-only late-checkpoint recovery. Governed Git adds prepare-only defaults,
@@ -25,6 +27,9 @@ worktree/container cleanup, explicit session deletion manifests, storage
 inventory, and dispatch blocking under configured hard pressure. P2-4 host and
 provider calibration is next. See the
 [Phase 2 delivery map](docs/product/PHASE2-PLAN.md).
+The operational sequence from merge through calibration, continuity, dogfood,
+and UX acceptance is in the
+[Phase 2 closure plan](docs/product/PHASE2-CLOSURE.md).
 
 After continuity work, Phase 2D will collect long-turn reliability and
 UX-friction evidence through sustained dogfood. A Phase 2U owner interview and

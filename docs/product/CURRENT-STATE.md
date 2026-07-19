@@ -1,6 +1,6 @@
 # Pink Guy v2 current state
 
-Status: Phase 2 active — P2-1 through P2-3 implemented
+Status: Phase 2 active — P2-1 through P2-3 implemented in PR #17
 
 Last updated: 2026-07-19
 
@@ -196,22 +196,26 @@ export/restore and production backup policy remain.
 ## Next steps
 
 The active delivery map is
-[`PHASE2-PLAN.md`](PHASE2-PLAN.md). Phase 1 dogfood evidence remains in
-[`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
+[`PHASE2-PLAN.md`](PHASE2-PLAN.md), and the executable closure/adoption
+sequence is [`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md). Phase 1 dogfood evidence
+remains in [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
-1. **Calibrate P2-4 together.** Measure host, Docker, provider, credential, and
+1. **Merge PR #17 and verify main.** Run the complete model-less suite and
+   local cockpit smoke against one recorded mainline revision.
+2. **Calibrate P2-4 together.** Measure host, Docker, provider, credential, and
    local-model behavior before changing concurrency/fallback policy.
-2. **Run the real remote Git drill.** Exercise one explicitly authorized
+3. **Run the remaining live side-effect drills.** Exercise one explicitly authorized
    normal push or pull-request publication without widening default policy.
-3. **Build the bounded P2-5 continuity proof.** Export and restore into an
+   Verify cleanup against a settled disposable Docker task.
+4. **Build the bounded P2-5 continuity proof.** Export and restore into an
    isolated state root on this Mac, excluding credentials and containers.
-4. **Enter Phase 2D dogfood.** Exercise long conversations and at least ten
+5. **Enter Phase 2D dogfood.** Exercise long conversations and at least ten
    tasks across multiple repositories while logging every direct-client exit
    and recurring UX friction.
-5. **Run Phase 2U UX review.** Interview the owner, mock up changes from the
+6. **Run Phase 2U UX review.** Interview the owner, mock up changes from the
    existing cockpit, and fix accepted high-frequency scrolling,
    comprehension, and navigation problems.
-6. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
+7. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
    configured password verifier or API-key hash after the local product is
    mature.
 

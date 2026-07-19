@@ -1,6 +1,6 @@
 # Pink Guy local development runbook
 
-Status: Current local cockpit and shared terminal client; P2-1 through P2-3 implemented
+Status: Current local cockpit and shared terminal client; P2-1 through P2-3 implemented in PR #17
 
 The current application can be served locally for multi-project observability
 and durable project-orchestrator command delivery. The local-smoke profile
