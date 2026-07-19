@@ -48,7 +48,7 @@ observer baseline and deterministic initial Ready dispatch. A live
 orchestrator-release task passed implementation, fixed-revision validation,
 independent review, and completion, so Phase 1 is complete.
 
-## Proposed Phase 2 feature contracts
+## Approved Phase 2 feature contracts
 
 - [Execution recovery and late evidence](features/execution-recovery/) —
   central accepted-execution settlement, mutation fencing, paused/recovery

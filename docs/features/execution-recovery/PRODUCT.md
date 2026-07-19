@@ -1,6 +1,6 @@
 # Execution recovery and late-evidence contract
 
-Status: Proposed for owner approval
+Status: Approved for implementation
 
 Last updated: 2026-07-18
 
@@ -157,20 +157,24 @@ authority for execution settlement and explicit treatment of late evidence.
     revision, side-effect receipts, and discovery method. It remains retained
     even when rejected for task advancement.
 
-20. Late evidence never changes the task revision, validation, review,
+20. Recovery candidates form a dead-letter-style quarantine for late
+    evidence, not a runnable or dead task queue. They are excluded from Ready
+    scheduling and every automatic phase selector.
+
+21. Late evidence never changes the task revision, validation, review,
     completion, dispatch eligibility, or automatic pipeline by itself.
 
-21. A Git checkpoint is eligible to become a recovery candidate only when Boss
+22. A Git checkpoint is eligible to become a recovery candidate only when Boss
     Man proves its repository, workspace, run, task, parent/base revision,
     commit identity, and relevant Git side-effect receipt. An ambiguous,
     missing, cross-task, or non-descendant commit remains evidence but cannot
     be accepted.
 
-22. Only the human owner may accept or reject a late checkpoint in this
+23. Only the human owner may accept or reject a late checkpoint in this
     contract. An orchestrator or sub-agent may summarize evidence and recommend
     an action but cannot resolve the recovery gate.
 
-23. Before accepting a late checkpoint, the owner sees:
+24. Before accepting a late checkpoint, the owner sees:
     - the candidate and current authoritative revisions;
     - the diff and checkpoint provenance;
     - whether newer task work exists;
@@ -178,24 +182,24 @@ authority for execution settlement and explicit treatment of late evidence.
     - the exact task status/revision changes acceptance will make; and
     - the fact that validation and review must run again.
 
-24. Accepting a proven late checkpoint atomically advances the authoritative
+25. Accepting a proven late checkpoint atomically advances the authoritative
     task revision, invalidates stale validation/review evidence, records the
     owner and rationale, and makes a fresh test phase eligible. It does not
     declare implementation, validation, review, completion, merge, or push
     successful.
 
-25. Rejecting a recovery candidate marks it rejected with an owner and reason
+26. Rejecting a recovery candidate marks it rejected with an owner and reason
     but preserves the commit, diff, custody, and audit record until explicit
     retention deletion. Rejection does not delete a worktree or branch as an
     incidental side effect.
 
-26. If the task has advanced from the candidate's expected authoritative
+27. If the task has advanced from the candidate's expected authoritative
     revision, acceptance is denied until the owner deliberately chooses a
     separate Git integration path. Recovery never overwrites newer task work.
 
 ### Recovery actions
 
-27. The recovery surface offers only actions valid for the current proven
+28. The recovery surface offers only actions valid for the current proven
     state:
     - **Stop** fences and terminates active work.
     - **Pause** stops safely while preserving resumable custody.
@@ -203,57 +207,57 @@ authority for execution settlement and explicit treatment of late evidence.
       native session/context at a safe boundary.
     - **Retry phase** creates a new command from the current authoritative
       revision after all earlier execution authority is closed.
-    - **Accept checkpoint** applies a proven late candidate under (23–24).
-    - **Reject checkpoint** retains but excludes a candidate under (25).
+    - **Accept checkpoint** applies a proven late candidate under (24–25).
+    - **Reject checkpoint** retains but excludes a candidate under (26).
     - **Cancel** closes the execution without scheduling replacement work.
 
-28. Retry and resume are distinct. Retry starts a new phase attempt from the
+29. Retry and resume are distinct. Retry starts a new phase attempt from the
     task's authoritative revision and may use a new model route. Resume uses
     retained native/context custody from the paused attempt. Both create new
     execution identities and preserve their ancestry.
 
-29. Retry, resume, or return-to-Ready is denied while an earlier execution can
+30. Retry, resume, or return-to-Ready is denied while an earlier execution can
     still mutate, while a stop is unverified, or while an uncertain side
     effect capable of changing the intended base remains unresolved.
 
-30. Every recovery action requires an idempotency key, expected task/execution
+31. Every recovery action requires an idempotency key, expected task/execution
     version, owner identity, and non-empty reason. Repeating the same action
     returns its original receipt; conflicting reuse is rejected.
 
-31. The existing ambiguous **Reset task** action is replaced by explicit
+32. The existing ambiguous **Reset task** action is replaced by explicit
     state-aware actions. No control both dismisses failure and makes a task
     schedulable unless its stop/fence and revision consequences are shown.
 
 ### Restart and cross-surface observability
 
-32. On control-plane restart, Boss Man reconciles every nonterminal execution
+33. On control-plane restart, Boss Man reconciles every nonterminal execution
     before dispatching new work. It checks durable execution/run identity,
     container identity, process state where available, capabilities, side
     effects, workspace/Git provenance, native custody, and required phase
     outcomes.
 
-33. Boss Man does not replay an uncertain provider response, tool call, Git
+34. Boss Man does not replay an uncertain provider response, tool call, Git
     operation, or phase after restart. A proven completed outcome settles;
     proven safely stopped work becomes Paused or Failed as appropriate; all
     other cases require reconciliation.
 
-34. True in-flight process reattachment is not required for this slice. When
+35. True in-flight process reattachment is not required for this slice. When
     the control plane cannot prove safe reattachment, it fences and stops the
     old execution, preserves custody, and exposes resume/retry after
     reconciliation.
 
-35. Cockpit and `boss` terminal views present the same state, last activity,
+36. Cockpit and `boss` terminal views present the same state, last activity,
     failure class, process/container evidence, late candidates, allowed
     actions, and action receipts. tmux output is supplementary diagnostics,
     not execution authority.
 
-36. Paused and Needs reconciliation work appears in a consolidated attention
+37. Paused and Needs reconciliation work appears in a consolidated attention
     projection and remains easy to audit. It is never hidden merely because
     the task left In progress or because the underlying process stopped.
 
-37. All automatic classifications and owner resolutions append command,
+38. All automatic classifications and owner resolutions append command,
     execution, run, task, side-effect, and audit events as applicable.
     Existing evidence is never rewritten to make the final path look clean.
 
-38. Complete sessions and recovery evidence remain retained until explicit
+39. Complete sessions and recovery evidence remain retained until explicit
     deletion. This feature does not introduce automatic age-based cleanup.

@@ -17,8 +17,8 @@ Authenticated remote access is a later phase.
 
 Phase 2 is now in design, beginning with the
 [execution recovery contract](docs/features/execution-recovery/PRODUCT.md) and
-[delivery map](docs/product/PHASE2-PLAN.md). Runtime behavior remains Phase 1
-until those proposed decisions are approved and implemented.
+[delivery map](docs/product/PHASE2-PLAN.md). D-047 through D-049 are approved;
+runtime behavior remains the Phase 1 feature set until P2-1 is implemented.
 
 ## Objectives
 

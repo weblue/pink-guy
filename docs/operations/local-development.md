@@ -1,6 +1,6 @@
 # Boss Man local development runbook
 
-Status: Phase 1 local cockpit and shared terminal client
+Status: Current local cockpit and shared terminal client; Phase 1 complete
 
 The current application can be served locally for multi-project observability
 and durable project-orchestrator command delivery. The local-smoke profile

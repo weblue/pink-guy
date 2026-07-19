@@ -1,6 +1,6 @@
 # Phase 2 delivery plan
 
-Status: Proposed map; recovery contract awaiting owner approval
+Status: Active — P2-1 recovery contract approved for implementation
 
 Last updated: 2026-07-18
 
@@ -186,15 +186,17 @@ Phase 2 is complete only when:
    direct Pi/Codex session only as an emergency tool, not a routine repair
    path.
 
-## Proposed decisions awaiting approval
+## Accepted P2-1 authority decisions
 
 - **D-047:** the central API owns settlement of every accepted task execution;
   the project daemon performs short idempotent acceptance and observation, not
   long-request success/failure arbitration.
 - **D-048:** stop/failure begins with a durable mutation fence; late evidence
   is retained but never advances task state automatically.
-- **D-049:** only the human owner may accept/reject a proven late checkpoint;
-  acceptance invalidates stale validation/review and requires fresh gates.
+- **D-049:** proven late checkpoints enter a dead-letter-style recovery queue
+  separate from runnable tasks; only the human owner may accept/reject a
+  candidate, and acceptance invalidates stale validation/review and requires
+  fresh gates.
 
-These are hard-to-change authority choices. Implementation should not begin
-until the owner accepts or amends them.
+The owner approved D-047 through D-049 on 2026-07-18. P2-1 implementation may
+begin from the checked-in product and technical contracts.

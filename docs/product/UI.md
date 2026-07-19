@@ -1,6 +1,6 @@
 # Boss Man v2 developer cockpit
 
-Status: Active Phase 1 cockpit direction; direct-Pi foundation implemented
+Status: Phase 1 cockpit implemented; Phase 2 recovery-surface design active
 
 Last updated: 2026-07-18
 

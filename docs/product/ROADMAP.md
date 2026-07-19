@@ -115,12 +115,12 @@ direct coding client remains the emergency fallback.
 
 ## Phase 2 — autonomy, recovery, and portability
 
-Status: Designing — execution recovery contract proposed
+Status: Active — P2-1 execution recovery contract approved
 
 Purpose: make unattended local operation dependable before adding a public edge.
 
 The delivery order and closure evidence are defined in
-[`PHASE2-PLAN.md`](PHASE2-PLAN.md). The first blocking slice is the proposed
+[`PHASE2-PLAN.md`](PHASE2-PLAN.md). The first blocking slice is the approved
 execution recovery [product contract](../features/execution-recovery/PRODUCT.md)
 and [technical design](../features/execution-recovery/TECH.md).
 

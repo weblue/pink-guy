@@ -1,6 +1,6 @@
 # Execution recovery and late-evidence contract
 
-Status: Proposed for owner approval
+Status: Approved for implementation
 
 Last updated: 2026-07-18
 
@@ -41,7 +41,7 @@ The durable ingredients are present, but no record exists between a claimed
 command and a fully created run. Command completion authority is also split
 between the project daemon and central API.
 
-## Proposed changes
+## Implementation design
 
 ### 1. Add a durable command-execution aggregate
 
@@ -338,13 +338,13 @@ behavior:
 - setup failure before and after a side-effect intent (11);
 - Pi exit, protocol error, inactivity, and hard-deadline triggers (12–13);
 - capability and Git generation fencing, including a checkpoint completing
-  after fence (4, 14–16, 19–21);
-- retry/reset denial until stop proof exists (27–31);
+  after fence (4, 14–16, 19–22);
+- retry/reset denial until stop proof exists (28–32);
 - proven late-checkpoint accept, reject, stale-task refusal, and fresh
-  test/review requirement (22–26);
+  test/review requirement (23–27);
 - restart at accepted-before-run, running, outcome-recorded-before-settlement,
-  and stop-before-receipt boundaries (32–34);
-- cockpit/terminal attention parity and paused visibility (2, 5, 17, 35–38).
+  and stop-before-receipt boundaries (33–35);
+- cockpit/terminal attention parity and paused visibility (2, 5, 17, 36–39).
 
 Fault injection must pause at named durable boundaries rather than rely on
 timing sleeps. The probe makes no provider request and uses fake Pi/Docker/Git

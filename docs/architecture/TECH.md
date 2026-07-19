@@ -1,6 +1,6 @@
 # Boss Man v2 technical design
 
-Status: Direct-Pi Phase 1 implementation
+Status: Direct-Pi foundation; Phase 1 complete; Phase 2 active
 
 Last updated: 2026-07-18
 
@@ -639,4 +639,11 @@ The main integration agent owns schema definitions, migrations, shared generated
 
 ## Implementation gate
 
-The owner resolved the foundation ADR in favor of direct Pi on 2026-07-16. The bounded Phase 0 local closure now integrates task policy, runtime/Git/credentials, active recovery, governed context retrieval, project-orchestrator leases, and a loopback operator smoke. Begin Phase 1 with the local cockpit and orchestrator command loop. Second-host reproduction is Phase 2; SWAG and owner authentication are Phase 3. Phase 0 evidence is summarized in `PHASE0-RESULTS.md`, and `ROADMAP.md` is the canonical delivery sequence.
+The owner resolved the foundation ADR in favor of direct Pi on 2026-07-16.
+Phase 0 and Phase 1 are complete. The supervised local cockpit has passed
+multi-repository implementation, fixed-revision validation, independent
+review, deterministic Ready dispatch, and live automatic-release dogfood.
+Phase 2 is active with approved D-047 through D-049 execution-recovery
+contracts as its first slice. Second-host reproduction closes Phase 2; SWAG
+and owner authentication remain Phase 3. `ROADMAP.md` is the canonical
+delivery sequence.
