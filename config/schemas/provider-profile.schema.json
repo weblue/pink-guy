@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://boss-man.invalid/schemas/provider-profile.schema.json",
-  "title": "Boss Man provider credential profile reference",
+  "title": "Pink Guy provider credential profile reference",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "id", "provider", "auth_type", "billing_mode", "source", "max_concurrent_runs"],

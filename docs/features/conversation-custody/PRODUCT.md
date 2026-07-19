@@ -7,7 +7,7 @@ Last updated: 2026-07-17
 ## Summary
 
 An owner can change the provider, model, or thinking level of an existing
-orchestrator conversation without reconstructing its transcript. Boss Man
+orchestrator conversation without reconstructing its transcript. Pink Guy
 first creates and verifies a model-less custody snapshot, updates the central
 route with optimistic concurrency, and restarts Pi against the same native
 session before processing the next turn.

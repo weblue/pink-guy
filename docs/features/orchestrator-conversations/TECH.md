@@ -130,7 +130,7 @@ cannot mutate executable tasks.
 
 D-043 is accepted:
 
-- the browser renders Pi RPC conversation events and structured Boss Man task,
+- the browser renders Pi RPC conversation events and structured Pink Guy task,
   source, decision, and custody projections;
 - the browser never owns the Pi process and never synthesizes a replacement
   prompt from stored chat history;
@@ -138,13 +138,13 @@ D-043 is accepted:
   orchestrator path; and
 - tmux/SSH remains an exact-session operational and recovery attach path.
 
-This is not the original Boss Man “chat wrapper” design. The browser is a
+This is not the original Pink Guy “chat wrapper” design. The browser is a
 reconnectable view of Pi's persistent native session, while the central API
 owns task/audit state. An embedded terminal remains a later option only for
 developer workflows that Pi RPC and explicit cockpit controls cannot cover.
 
 The Phase 1 terminal client is another projection over the same local API, not
-an attach to Pi stdin. `boss chat` resolves a topic by explicit topic ID,
+an attach to Pi stdin. `pink chat` resolves a topic by explicit topic ID,
 project ID, or registered repository path; creates the same default
 project-orchestrator topic used by the cockpit when one does not exist; prints
 the durable turn history and structured mutation events; submits each owner

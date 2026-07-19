@@ -1,4 +1,4 @@
-# Boss Man documentation
+# Pink Guy documentation
 
 This index separates current operating truth from feature contracts, research,
 and retained history.
@@ -48,19 +48,31 @@ observer baseline and deterministic initial Ready dispatch. A live
 orchestrator-release task passed implementation, fixed-revision validation,
 independent review, and completion, so Phase 1 is complete.
 
-## Approved Phase 2 feature contracts
+## Active Phase 2 features
 
 - [Execution recovery and late evidence](features/execution-recovery/) —
   central accepted-execution settlement, mutation fencing, paused/recovery
-  states, and owner-governed checkpoint recovery.
+  states, and owner-governed checkpoint recovery are implemented and accepted.
+- [Governed Git integration](features/governed-git-integration/) —
+  prepare-only defaults, owner policy, merge/squash/rebase simulation,
+  compare-and-swap local integration, optional push/PR, and conflict/restart
+  attention are implemented.
+- [Runtime retention](features/runtime-retention/) — retention holds, safe
+  worktree/container cleanup, session deletion manifests/tombstones, storage
+  inventory, and hard-pressure dispatch blocking are implemented.
 
 ## Adoption checkpoints
 
-- **Supervised daily driver:** Phase 1 is complete; prefer Boss Man for
+- **Supervised daily driver:** Phase 1 is complete; prefer Pink Guy for
   noncritical supervised local work while retaining a direct client for
   recovery.
-- **Full-time local replacement:** complete Phase 2 recovery, Git completion,
-  credential/concurrency, backup, and portability gates.
+- **Sustained dogfood:** complete P2-4 host/provider calibration and P2-5
+  isolated-root continuity restore, then enter Phase 2D.
+- **UX acceptance:** use Phase 2D evidence in a Phase 2U owner interview and
+  existing-cockpit mockup; fix accepted scrolling, comprehension, and
+  navigation friction.
+- **Full-time local replacement:** pass Phase 2D and Phase 2U without routine
+  direct-client repair.
 - **Remote-first operation:** complete Phase 3 authentication and SWAG
   deployment.
 

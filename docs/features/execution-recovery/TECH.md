@@ -1,6 +1,6 @@
 # Execution recovery and late-evidence contract
 
-Status: Approved for implementation
+Status: Implemented and accepted
 
 Last updated: 2026-07-18
 
@@ -42,6 +42,14 @@ command and a fully created run. Command completion authority is also split
 between the project daemon and central API.
 
 ## Implementation design
+
+The implementation now lives in the migration-managed store, central control
+plane, project daemon, shared terminal client, and cockpit. The checked-in
+model-less recovery probe covers acceptance identity, observer disconnect,
+generation fencing, late-checkpoint quarantine, candidate resolution, and
+accepted-before-run restart recovery. The initial restart contract
+conservatively stops rather than reattaches, and resume copies retained native
+Pi JSONL into a new managed execution before invoking Pi with `--session`.
 
 ### 1. Add a durable command-execution aggregate
 

@@ -159,7 +159,7 @@ assert(
 assert(
   startups.length === 2
     && startups.every((startup) => startup.systemPrompt.includes("Runtime probe orchestrator guidance."))
-    && startups.every((startup) => startup.systemPrompt.includes("Boss Man tools and the central API are authoritative"))
+    && startups.every((startup) => startup.systemPrompt.includes("Pink Guy tools and the central API are authoritative"))
     && startups[0].provider === "openai"
     && startups[1].provider === "anthropic"
     && startups[1].model === "claude-probe",

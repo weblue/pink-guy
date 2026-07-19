@@ -3,14 +3,16 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 type JsonObject = Record<string, unknown>;
 
-const apiUrl = process.env.BOSS_MAN_API_URL;
-const conversationId = process.env.BOSS_MAN_CONVERSATION_ID;
-const orchestrationToken = process.env.BOSS_MAN_ORCHESTRATION_TOKEN;
+const apiUrl = process.env.PINK_GUY_API_URL ?? process.env.BOSS_MAN_API_URL;
+const conversationId =
+  process.env.PINK_GUY_CONVERSATION_ID ?? process.env.BOSS_MAN_CONVERSATION_ID;
+const orchestrationToken =
+  process.env.PINK_GUY_ORCHESTRATION_TOKEN ?? process.env.BOSS_MAN_ORCHESTRATION_TOKEN;
 
 function configured(): { apiUrl: string; conversationId: string; orchestrationToken: string } {
   if (!apiUrl || !conversationId || !orchestrationToken) {
     throw new Error(
-      "Boss Man orchestrator tools require BOSS_MAN_API_URL, BOSS_MAN_CONVERSATION_ID, and BOSS_MAN_ORCHESTRATION_TOKEN",
+      "Pink Guy orchestrator tools require PINK_GUY_API_URL, PINK_GUY_CONVERSATION_ID, and PINK_GUY_ORCHESTRATION_TOKEN",
     );
   }
   return { apiUrl, conversationId, orchestrationToken };
@@ -79,9 +81,9 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_orchestrator_context",
-    label: "Read Boss Man orchestration context",
+    label: "Read Pink Guy orchestration context",
     description: "Read the authoritative topic, project, conversation policy, and current project tasks.",
-    promptSnippet: "Read authoritative Boss Man topic, project, and task state",
+    promptSnippet: "Read authoritative Pink Guy topic, project, and task state",
     promptGuidelines: ["Use this before proposing or applying task graph changes."],
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, signal) {
@@ -95,7 +97,7 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_orchestrator_create_task",
-    label: "Create a Boss Man task",
+    label: "Create a Pink Guy task",
     description: "Create one ready task in the bound project with exact conversation-turn provenance.",
     promptSnippet: "Create a scoped project task only when intent and acceptance criteria are sufficiently concrete",
     parameters: Type.Object({
@@ -123,7 +125,7 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_orchestrator_update_task",
-    label: "Update a Boss Man task",
+    label: "Update a Pink Guy task",
     description: "Replace a scoped task's title and acceptance criteria using its current version.",
     promptSnippet: "Refine a current task without changing its execution state",
     parameters: Type.Object({
@@ -148,7 +150,7 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_orchestrator_split_task",
-    label: "Split a Boss Man task",
+    label: "Split a Pink Guy task",
     description: "Create one ready child task beneath a scoped parent; call again for another child.",
     promptSnippet: "Split a task into independently observable child work while leaving the parent intact",
     parameters: Type.Object({
@@ -164,7 +166,7 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_orchestrator_add_dependency",
-    label: "Add a Boss Man task dependency",
+    label: "Add a Pink Guy task dependency",
     description: "Make one scoped task depend on another task in the same project; cycles are rejected.",
     promptSnippet: "Record only dependencies that materially constrain task ordering",
     parameters: Type.Object({
@@ -179,7 +181,7 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_orchestrator_record_assumption",
-    label: "Record a Boss Man task assumption",
+    label: "Record a Pink Guy task assumption",
     description: "Record a low-risk reversible assumption against one scoped task.",
     promptSnippet: "State an assumption explicitly before proceeding through low-risk ambiguity",
     parameters: Type.Object({
@@ -194,7 +196,7 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_orchestrator_require_decision",
-    label: "Require a Boss Man owner decision",
+    label: "Require a Pink Guy owner decision",
     description: "Create an unresolved protected decision gate against one scoped task.",
     promptSnippet: "Escalate high-risk or hard-to-change ambiguity to the owner",
     parameters: Type.Object({
@@ -210,7 +212,7 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_orchestrator_archive_task",
-    label: "Archive a Boss Man task artifact",
+    label: "Archive a Pink Guy task artifact",
     description: "Remove a settled task or planning artifact from the active board while retaining its complete history.",
     promptSnippet: "Archive only when the record is no longer active and state the concrete reason",
     parameters: Type.Object({
@@ -225,7 +227,7 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_orchestrator_restore_task",
-    label: "Restore a Boss Man task artifact",
+    label: "Restore a Pink Guy task artifact",
     description: "Return one archived task to its retained execution-status column without scheduling it.",
     promptSnippet: "Restore an archived task only when it should become active again",
     parameters: Type.Object({
@@ -240,7 +242,7 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_orchestrator_release_task",
-    label: "Release a Boss Man task for automatic dispatch",
+    label: "Release a Pink Guy task for automatic dispatch",
     description: "Durably release one refined Ready task to the deterministic scheduler with optional priority and model route.",
     promptSnippet: "Release concrete work after ambiguity and protected decisions are resolved",
     promptGuidelines: [
@@ -278,7 +280,7 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_orchestrator_update_dispatch",
-    label: "Update Boss Man task dispatch policy",
+    label: "Update Pink Guy task dispatch policy",
     description: "Pause, return to manual, or reprioritize one queued task without starting it.",
     promptSnippet: "Adjust queued automatic work only when owner intent or task ordering materially changed",
     parameters: Type.Object({
@@ -299,13 +301,13 @@ export default function orchestratorExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_orchestrator_schedule_task",
-    label: "Manually schedule a Boss Man task phase",
+    label: "Manually schedule a Pink Guy task phase",
     description: "Explicit recovery/override: directly queue one implementation, test, or review sub-agent.",
     promptSnippet: "Use direct scheduling only for explicit recovery or owner-requested override",
     promptGuidelines: [
       "For normal new work, release the refined task to deterministic automatic dispatch instead.",
       "Omit provider, model, and thinkingLevel to use the configured phase default.",
-      "Only select a route already declared in Boss Man model-route configuration.",
+      "Only select a route already declared in Pink Guy model-route configuration.",
       "Choose a different configured route only when task needs, cost, or local-model policy justify it.",
     ],
     parameters: Type.Object({

@@ -1,6 +1,6 @@
 # Execution recovery and late-evidence contract
 
-Status: Approved for implementation
+Status: Implemented and accepted
 
 Last updated: 2026-07-18
 
@@ -9,7 +9,7 @@ surfaces; detailed visual styling is not part of this slice.
 
 ## Summary
 
-Boss Man must distinguish an execution request, an accepted command, a live
+Pink Guy must distinguish an execution request, an accepted command, a live
 Pi run, and a settled phase outcome. Transport loss, process failure, timeout,
 stop, pause, and uncertain side effects must produce different observable
 states so the platform never reports failure while an agent can still mutate
@@ -59,11 +59,11 @@ authority for execution settlement and explicit treatment of late evidence.
      ready yet.
    - **Running:** a managed Pi run is active and allowed to mutate within its
      phase capability.
-   - **Stopping:** authority has been fenced and Boss Man is terminating or
+   - **Stopping:** authority has been fenced and Pink Guy is terminating or
      verifying termination of managed processes.
    - **Paused:** processes are stopped, retained context is safe, and no
      unresolved side effect prevents an explicit resume or retry.
-   - **Failed:** processes are stopped and Boss Man has authoritative evidence
+   - **Failed:** processes are stopped and Pink Guy has authoritative evidence
      that the phase failed.
    - **Needs reconciliation:** processes are stopped or quarantined, but one or
      more outcomes or side effects remain uncertain.
@@ -89,7 +89,7 @@ authority for execution settlement and explicit treatment of late evidence.
 
 ### Acceptance and settlement
 
-6. Execution acceptance is a short, idempotent operation. Once Boss Man
+6. Execution acceptance is a short, idempotent operation. Once Pink Guy
    returns an accepted execution identity, disconnecting the project daemon,
    browser, terminal, or initiating HTTP client cannot change the execution
    to Failed or cause a duplicate run.
@@ -113,7 +113,7 @@ authority for execution settlement and explicit treatment of late evidence.
     reconciliation executions never advance automatically.
 
 11. A setup error before any Pi run or uncertain side effect exists may fail
-    authoritatively. If Boss Man cannot prove that no process or side effect
+    authoritatively. If Pink Guy cannot prove that no process or side effect
     exists, the execution requires reconciliation instead.
 
 ### Failure detection, fencing, and stop
@@ -123,7 +123,7 @@ authority for execution settlement and explicit treatment of late evidence.
     inactivity or hard deadline to learn about them.
 
 13. Meaningful Pi RPC activity refreshes an inactivity watchdog. When that
-    watchdog expires, Boss Man begins the fenced stop flow and records
+    watchdog expires, Pink Guy begins the fenced stop flow and records
     inactivity as the trigger. A longer hard deadline remains a final bound,
     not the normal failure detector.
 
@@ -136,7 +136,7 @@ authority for execution settlement and explicit treatment of late evidence.
     API retries, or restart cannot grant authority again, launch a duplicate
     stop, or produce conflicting terminal states.
 
-16. Boss Man attempts graceful Pi and shell termination, then bounded forced
+16. Pink Guy attempts graceful Pi and shell termination, then bounded forced
     termination, then container removal. It verifies credential cleanup and
     capability revocation. An unverified step is visible and changes the
     result to Needs reconciliation rather than being silently ignored.
@@ -230,13 +230,13 @@ authority for execution settlement and explicit treatment of late evidence.
 
 ### Restart and cross-surface observability
 
-33. On control-plane restart, Boss Man reconciles every nonterminal execution
+33. On control-plane restart, Pink Guy reconciles every nonterminal execution
     before dispatching new work. It checks durable execution/run identity,
     container identity, process state where available, capabilities, side
     effects, workspace/Git provenance, native custody, and required phase
     outcomes.
 
-34. Boss Man does not replay an uncertain provider response, tool call, Git
+34. Pink Guy does not replay an uncertain provider response, tool call, Git
     operation, or phase after restart. A proven completed outcome settles;
     proven safely stopped work becomes Paused or Failed as appropriate; all
     other cases require reconciliation.

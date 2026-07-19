@@ -1,6 +1,6 @@
-# Boss Man local development runbook
+# Pink Guy local development runbook
 
-Status: Current local cockpit and shared terminal client; Phase 1 complete
+Status: Current local cockpit and shared terminal client; P2-1 through P2-3 implemented
 
 The current application can be served locally for multi-project observability
 and durable project-orchestrator command delivery. The local-smoke profile
@@ -27,7 +27,7 @@ From this repository:
 ```sh
 npm start -- \
   --repo "$PWD" \
-  --state "$HOME/.local/share/boss-man/dev" \
+  --state "$HOME/.local/share/pink-guy/dev" \
   --port 4310 \
   --provider openai-codex \
   --model gpt-5.4-mini \
@@ -54,7 +54,7 @@ profile exists.
 Provider/model/thinking defaults and phase overrides live in
 `config/model-routes.json`. CLI provider/model/thinking flags override the
 configured default. Existing conversations change route through the
-custody-backed browser or `boss model`; task and phase controls pin their
+custody-backed browser or `pink model`; task and phase controls pin their
 resolved route independently.
 
 Useful checks:
@@ -78,7 +78,7 @@ Each project may hold one active orchestrator lease. The process can run directl
 npm run orchestrator:project -- \
   --api http://127.0.0.1:4310 \
   --repo "$PWD" \
-  --state-root "$HOME/.local/share/boss-man/dev" \
+  --state-root "$HOME/.local/share/pink-guy/dev" \
   --credential-source "$HOME/.pi/agent/auth.json"
 ```
 
@@ -103,12 +103,12 @@ while no other OAuth-backed provider run is active:
 ```sh
 npm run orchestrator:system -- \
   --api http://127.0.0.1:4310 \
-  --state-root "$HOME/.local/share/boss-man/dev" \
+  --state-root "$HOME/.local/share/pink-guy/dev" \
   --system-intake \
   --credential-source "$HOME/.pi/agent/auth.json"
 ```
 
-For cmux, create or select a tmux-backed workspace and run the same command there. cmux/tmux and SSH are attach and process-management transports; they do not own durable Boss Man state.
+For cmux, create or select a tmux-backed workspace and run the same command there. cmux/tmux and SSH are attach and process-management transports; they do not own durable Pink Guy state.
 
 ## Use the shared browser and terminal conversation
 
@@ -117,7 +117,7 @@ submit to the same persistent Pi conversation. Open the project conversation
 from a terminal or dedicated cmux pane:
 
 ```sh
-npm run boss -- chat --repo "$PWD"
+npm run pink -- chat --repo "$PWD"
 ```
 
 The client reuses the first active project topic, just like **Ask
@@ -137,17 +137,17 @@ returns with an explicit status.
 Useful commands:
 
 ```sh
-npm run boss -- status
-npm run boss -- topics
-npm run boss -- import --repo-url git@github.com:OWNER/REPOSITORY.git
-npm run boss -- delete-project --project PROJECT_ID \
+npm run pink -- status
+npm run pink -- topics
+npm run pink -- import --repo-url git@github.com:OWNER/REPOSITORY.git
+npm run pink -- delete-project --project PROJECT_ID \
   --confirm "Exact project name" --reason "Canceled unused import"
-npm run boss -- chat --topic TOPIC_ID
-npm run boss -- chat --repo "$PWD" --message "Refine the acceptance criteria."
-printf '%s\n' "Create a test task." | npm run boss -- chat --repo "$PWD"
-npm run boss -- profiles
-npm run boss -- profile --key review
-npm run boss -- model --topic TOPIC_ID --provider PROVIDER --model MODEL_ID --thinking medium
+npm run pink -- chat --topic TOPIC_ID
+npm run pink -- chat --repo "$PWD" --message "Refine the acceptance criteria."
+printf '%s\n' "Create a test task." | npm run pink -- chat --repo "$PWD"
+npm run pink -- profiles
+npm run pink -- profile --key review
+npm run pink -- model --topic TOPIC_ID --provider PROVIDER --model MODEL_ID --thinking medium
 ```
 
 Repository import creates a host-owned clone under the selected state root
@@ -163,12 +163,12 @@ lease blocks deletion.
 
 Prompt profile edits are append-only revisions. They apply when the matching
 Pi process next starts; running processes keep their pinned revision. Model
-switches have a different boundary: Boss Man verifies a conversation custody
+switches have a different boundary: Pink Guy verifies a conversation custody
 bundle and restarts Pi against the same native session before processing the
 next turn.
 
 For multiple repositories on this laptop, use one central-API pane and one
-`npm run orchestrator:project` pane per active repository. Add `boss chat`
+`npm run orchestrator:project` pane per active repository. Add `pink chat`
 panes only where terminal conversation is useful; the browser can open all
 topics and boards at once. Closing a chat pane does not stop Pi or lose
 history. Stopping an orchestrator pane releases that project's lease, while
@@ -266,19 +266,83 @@ service.
 To exercise the container path, first build the pinned image and then follow
 the [container test instructions](testing.md#container-tests).
 
+## Governed Git, cleanup, and retention
+
+New projects are prepare-only. Inspect policy and prepare a model-less
+integration plan:
+
+```sh
+npm run pink -- git-policy --project PROJECT_ID
+npm run pink -- integrate --task TASK_ID --action prepare
+```
+
+Only after owner policy permits local integration or pull-request publication
+can a prepared receipt execute. Force push is unsupported. Conflicts and
+uncertain publication appear in `pink attention`.
+
+Inspect state-root storage and preview cleanup before executing it:
+
+```sh
+npm run pink -- storage
+npm run pink -- cleanup --task TASK_ID
+npm run pink -- cleanup --task TASK_ID --execute \
+  --reason "Retire settled task resources"
+```
+
+Use a retention hold when audit or recovery evidence must remain:
+
+```sh
+npm run pink -- hold --project PROJECT_ID --scope-type task \
+  --scope-id TASK_ID --reason "Retain through audit"
+```
+
+Session artifact deletion is separate from runtime cleanup and requires a
+fresh preview, explicit execution flag, exact session ID, and reason. It
+retains a deletion manifest, receipt, and session tombstone.
+
+Optional storage thresholds are environment configuration:
+
+```sh
+PINK_GUY_STORAGE_WARN_BYTES=107374182400 \
+PINK_GUY_STORAGE_HARD_BYTES=118111600640 \
+npm start -- --repo "$PWD"
+```
+
+These values are examples, not current recommendations. P2-4 will select
+limits from measured disk growth. A configured hard threshold pauses automatic
+dispatch and never deletes evidence.
+
 ## Later remote connection
 
 The Phase 3 primary path remains:
 
 ```text
-remote browser -> HTTPS Boss Man subdomain -> home-server SWAG -> Boss Man Mac central API
+remote browser -> HTTPS Pink Guy subdomain -> home-server SWAG -> Pink Guy Mac central API
 ```
 
 The recovery path remains:
 
 ```text
-SSH client -> home-server port 315 -> ProxyJump over LAN -> Boss Man Mac -> tmux/cmux project process
+SSH client -> home-server port 315 -> ProxyJump over LAN -> Pink Guy Mac -> tmux/cmux project process
 ```
+
+For local execution recovery, browser and terminal use the same central
+attention projection:
+
+```sh
+npm run pink -- attention
+npm run pink -- recover --execution EXECUTION_ID --action pause \
+  --reason "Pause for owner inspection"
+npm run pink -- recover --execution EXECUTION_ID --action retry \
+  --reason "Retry from the authoritative revision"
+npm run pink -- candidate --candidate CANDIDATE_ID --action reject \
+  --reason "Checkpoint provenance is valid but the change is not wanted"
+```
+
+These actions require an execution/candidate version and idempotency key; the
+terminal client resolves the current version and generates the key. The
+cockpit prompts for the required reason. Recovery candidates are quarantined
+evidence and are never part of Ready scheduling.
 
 Phase 3 will require a locally configured server-side password verifier or API-key hash for requests through the remote profile. Password login should produce an HttpOnly session; browser `localStorage` is not the default place for a bearer key.
 

@@ -1,4 +1,4 @@
-# Boss Man v2 product specification
+# Pink Guy v2 product specification
 
 Status: Draft for owner review
 
@@ -6,15 +6,15 @@ Last updated: 2026-07-17
 
 ## Summary
 
-Boss Man v2 is a single-owner control plane for planning, running, observing, handing off, and resuming software-development work performed by Pi agents on an always-on Mac. Implementation is local-first; authenticated remote access is a later delivery phase.
+Pink Guy v2 is a single-owner control plane for planning, running, observing, handing off, and resuming software-development work performed by Pi agents on an always-on Mac. Implementation is local-first; authenticated remote access is a later delivery phase.
 
 The product is harness-specific and model-provider agnostic: Pi is the only supported agent harness, while each session may use any model provider supported by the configured Pi installation. The web dashboard is the primary interface. A scoped orchestrator conversation is the primary way to turn intent into structured work, while the board, task workspace, evidence, and attention state—not a conversation list—remain the application's organizing metaphor.
 
-The defining capability is lossless session custody. Boss Man preserves the complete Pi session and its artifacts without calling an LLM, including immediately before compaction. A user can resume the same session, fork a subagent with explicit context, or continue with another model after a limit or provider failure.
+The defining capability is lossless session custody. Pink Guy preserves the complete Pi session and its artifacts without calling an LLM, including immediately before compaction. A user can resume the same session, fork a subagent with explicit context, or continue with another model after a limit or provider failure.
 
 ## Problem
 
-The current Boss Man proves several useful ideas—SQL-backed task tracking, an agile board, containerized agents, and worktree-backed changes—but its product and runtime contracts are too implicit:
+The current Pink Guy proves several useful ideas—SQL-backed task tracking, an agile board, containerized agents, and worktree-backed changes—but its product and runtime contracts are too implicit:
 
 - The UI is organized around chat rather than work requiring attention.
 - Discovery always asks about eight fixed topics instead of resolving only material ambiguity.
@@ -24,7 +24,7 @@ The current Boss Man proves several useful ideas—SQL-backed task tracking, an 
 - Provider selection and subscription assumptions are mixed into the harness configuration.
 - Remote operation depends too heavily on terminal multiplexing and local client setup.
 
-Existing session managers solve much of the terminal-fleet problem. Boss Man v2 should focus on the unsolved intersection: Pi-native task authority, deterministic context portability, and a dashboard that exposes the state of work.
+Existing session managers solve much of the terminal-fleet problem. Pink Guy v2 should focus on the unsolved intersection: Pi-native task authority, deterministic context portability, and a dashboard that exposes the state of work.
 
 ## Goals
 
@@ -91,7 +91,7 @@ A task can have multiple sequential runs and sessions. A session may be attached
 
 1.9 The interface remains functional on a phone-sized viewport for checking attention items, reviewing a task summary or diff, answering a question, pausing a run, and opening a full-screen terminal. Dense multi-pane layouts collapse into navigable single-pane views rather than shrinking unreadably.
 
-1.10 When a configured browser IDE or external workspace client is available, the task workspace provides an explicit “Open workspace” action. Returning to Boss Man preserves the selected task and session.
+1.10 When a configured browser IDE or external workspace client is available, the task workspace provides an explicit “Open workspace” action. Returning to Pink Guy preserves the selected task and session.
 
 ### 2. Projects and readiness
 
@@ -152,7 +152,7 @@ generic external work-item snapshot.
 
 3.9 A human can override any task state, pause autonomous merging, or reopen completed work and can see when the new state conflicts with agent, reviewer, or validation evidence.
 
-3.10 One central Boss Man API manages every registered project. Each project can have at most one active orchestrator lease, whether its process is run as a daemon or in a tmux/cmux session.
+3.10 One central Pink Guy API manages every registered project. Each project can have at most one active orchestrator lease, whether its process is run as a daemon or in a tmux/cmux session.
 
 3.11 A project orchestrator may run multiple task subagents concurrently when policy and host capacity allow it. Each subagent run is scoped to one recorded phase—initially implementation, test, or review—so its permissions, expected output, and evidence are unambiguous.
 
@@ -312,17 +312,17 @@ authenticated remote profile.
 trusted proxy policy, not from arbitrary forwarded headers. Public wildcard
 binding is rejected unless the authenticated remote profile is configured.
 
-11.4 Authenticated remote access is a later phase. Its primary web service is served through the existing SWAG reverse proxy at a dedicated HTTPS subdomain, without exposing the Boss Man origin directly to the public internet.
+11.4 Authenticated remote access is a later phase. Its primary web service is served through the existing SWAG reverse proxy at a dedicated HTTPS subdomain, without exposing the Pink Guy origin directly to the public internet.
 
 11.5 The remote profile supports one human owner and requires either an owner session or API key for every request, including terminal, streaming, artifact, and mutation routes. SWAG Basic Auth may remain as an independent outer gate.
 
-11.6 Password mode stores an Argon2id verifier locally on the Boss Man host and issues Secure/HttpOnly/SameSite device sessions. API-key mode stores only a local key hash and accepts the raw key through the `Authorization` header. Secrets do not enter Git, task/context records, or logs.
+11.6 Password mode stores an Argon2id verifier locally on the Pink Guy host and issues Secure/HttpOnly/SameSite device sessions. API-key mode stores only a local key hash and accepts the raw key through the `Authorization` header. Secrets do not enter Git, task/context records, or logs.
 
 11.7 Browser `localStorage` is not the default credential store. Password login uses an HttpOnly cookie; API clients use an OS keychain, protected secret file/environment, or session-scoped memory. Persisting a bearer key in browser `localStorage` requires an explicit convenience/security choice.
 
 11.8 WebSockets, streaming responses, uploads, downloads, Host/Origin validation, CSRF protection where cookies are used, rate limiting, rotation/revocation, and reconnect behavior work through the remote proxy.
 
-11.9 SSH remains a separate operator recovery path. The existing public port 315 terminates on the home server and provides `ProxyJump` access to the Boss Man Mac over the LAN. The private key is never uploaded to Boss Man or copied into agent containers.
+11.9 SSH remains a separate operator recovery path. The existing public port 315 terminates on the home server and provides `ProxyJump` access to the Pink Guy Mac over the LAN. The private key is never uploaded to Pink Guy or copied into agent containers.
 
 11.10 A host restart restores the control plane, reconstructs run state, and marks processes that cannot be recovered instead of assuming they are still active.
 
@@ -335,7 +335,7 @@ binding is rejected unless the authenticated remote profile is configured.
 12.2 A project can define model policies by work type, budget, and availability rather than a single hard-coded model, even before automatic cross-provider fallback is enabled.
 
 12.3 Every orchestrator and task-subagent run records its resolved provider,
-model, and thinking policy before launch. Boss Man supplies that selection when
+model, and thinking policy before launch. Pink Guy supplies that selection when
 starting Pi; an agent cannot silently switch itself to a different route.
 
 12.4 The system shows whether credentials represent subscription use, direct API billing, prepaid gateway credit, or an unknown billing mode.

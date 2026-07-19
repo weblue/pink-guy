@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "../..");
 const fixture = process.argv[2];
-const image = process.argv[3] ?? "boss-man:pi-0.80.9-rtk-0.42.3";
+const image = process.argv[3] ?? "pink-guy:pi-0.80.9-rtk-0.42.3";
 if (!fixture?.startsWith("/")) {
   console.error("usage: probe-runtime-git-rtk.mjs /absolute/path/to/generated/fixture [local-image]");
   process.exit(64);

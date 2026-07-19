@@ -128,7 +128,7 @@ assert(inspection.imageId === run.image_id, "recorded image identity differs fro
 for (const forbidden of ["/var/run/docker.sock", "/root", "/host-home"]) {
   assert(!inspection.mounts.some((item) => item.destination === forbidden), `forbidden mount is present: ${forbidden}`);
 }
-const readonlyExtensions = inspection.mounts.find((item) => item.destination === "/boss-man/extensions");
+const readonlyExtensions = inspection.mounts.find((item) => item.destination === "/pink-guy/extensions");
 const readonlyCredential = inspection.mounts.find((item) => item.destination === "/run/secrets/pi-auth.json");
 assert(readonlyExtensions && !readonlyExtensions.readWrite, "Pi extension source is not mounted read-only");
 assert(readonlyCredential && !readonlyCredential.readWrite, "credential source is not mounted read-only");
@@ -164,7 +164,7 @@ const replay = await request("/api/tasks/phase0-task/git/checkpoint", {
 });
 assert(replay.status === 200 && replay.value.replayed && replay.value.operation.new_revision === checkpointRevision, "Git checkpoint replay was not idempotent");
 const commitBody = (await runHost("git", ["-C", managed.workspace.workspace_path, "show", "-s", "--format=%B", checkpointRevision])).stdout;
-assert(commitBody.includes(`Boss-Man-Run: ${run.id}`) && commitBody.includes("Boss-Man-Evidence: P0-DIRECT-RUNTIME-GIT-RTK"), "checkpoint provenance is incomplete");
+assert(commitBody.includes(`Pink-Guy-Run: ${run.id}`) && commitBody.includes("Pink-Guy-Evidence: P0-DIRECT-RUNTIME-GIT-RTK"), "checkpoint provenance is incomplete");
 
 const rtkCommand = `printf 'all:\\n\\t@echo INFO ordinary-output; echo ERROR ${rtkCanary}; exit 1\\n' > /tmp/BossMakefile; make -f /tmp/BossMakefile`;
 managed.credential.redactionValues.push(rtkCanary);
@@ -187,7 +187,7 @@ assert(artifacts.some((item) => item.kind === "rtk_receipt"), "RTK receipt was n
 assert(!(await contains([managed.artifactDirectory, managed.workspace.workspace_path], credentialCanary)), "credential canary persisted outside the authorized private auth copy");
 assert(!(await contains([managed.artifactDirectory, managed.workspace.workspace_path], rtkCanary)), "RTK canary persisted in durable artifacts or workspace");
 
-const remainingContainer = await runHost("docker", ["ps", "-aq", "--filter", `label=boss-man.run=${run.id}`]);
+const remainingContainer = await runHost("docker", ["ps", "-aq", "--filter", `label=pink-guy.run=${run.id}`]);
 assert(!remainingContainer.stdout.trim(), "task container was not removed after the run stopped");
 
 process.stdout.write(`${JSON.stringify({

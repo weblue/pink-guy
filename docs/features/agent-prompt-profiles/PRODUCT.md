@@ -18,7 +18,7 @@ panel patterns.
 
 ## Behavior
 
-1. Boss Man provides four built-in profiles: `orchestrator`,
+1. Pink Guy provides four built-in profiles: `orchestrator`,
    `implementation`, `test`, and `review`.
 2. The browser and terminal can list profiles, inspect the active revision and
    history, and create a new active revision.

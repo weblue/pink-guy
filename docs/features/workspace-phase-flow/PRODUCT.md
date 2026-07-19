@@ -8,7 +8,7 @@ Figma: none provided; extend the existing cockpit interaction and visual languag
 
 ## Summary
 
-Boss Man turns one task into an observable, fixed-revision workflow:
+Pink Guy turns one task into an observable, fixed-revision workflow:
 implementation creates a host-owned Git checkpoint, an independent test agent
 records validation against that revision, and an independent review agent
 submits a disposition against the same revision. The local owner can inspect

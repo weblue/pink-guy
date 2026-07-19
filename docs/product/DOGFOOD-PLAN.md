@@ -6,7 +6,7 @@ Last updated: 2026-07-18
 
 ## Objective
 
-Prove that Boss Man can replace a direct coding client for supervised,
+Prove that Pink Guy can replace a direct coding client for supervised,
 low-risk local work across multiple repositories using only the normal
 cockpit, project orchestrators, Pi task agents, and audited controls.
 
@@ -41,7 +41,7 @@ For each scenario:
 
 1. Attach or select the repository and provide an immutable request/source
    snapshot. For the prototype scenario, begin in system intake and use
-   **Snapshot + transfer** (or `boss bind`) after choosing the repository.
+   **Snapshot + transfer** (or `pink bind`) after choosing the repository.
 2. Converse with the project orchestrator until acceptance criteria and any
    decision gates are explicit.
 3. Let the orchestrator schedule implementation after refinement and observe
@@ -147,7 +147,7 @@ The run exposed four evidence-backed follow-ups:
 
 1. After system-intake binding, the resumed conversation initially retained
    the stale belief that it was unbound until explicitly told to refresh
-   authoritative Boss Man state.
+   authoritative Pink Guy state.
 2. The orchestrator can refine a task after requested changes but has no
    structured resume tool; the owner-only resume control was required.
 3. A post-checkpoint transport failure has no direct “accept proven
@@ -159,7 +159,7 @@ The run exposed four evidence-backed follow-ups:
 
 ## Maintenance-repository scenario result
 
-Boss Man imported the existing
+Pink Guy imported the existing
 `https://github.com/weblue/inspector-gadget.git` repository into a host-owned
 checkout and created its durable project topic. The owner supplied a bounded
 maintenance request to add a model-less Bash syntax regression check.
@@ -193,7 +193,7 @@ sub-agent dispatch.
 
 ## Automatic-release closure result
 
-The owner asked the live Boss Man orchestrator to refine the cockpit's lease
+The owner asked the live Pink Guy orchestrator to refine the cockpit's lease
 observability. The orchestrator created and released executable task
 `94613637-58af-4ba5-ae4e-b03503bf5a54` with automatic dispatch policy and
 priority 10.
@@ -232,7 +232,7 @@ Phase 1 can close when both scenarios have:
 - a human smoke result; and
 - documented defects classified as fixed, Phase 2, or explicitly deferred.
 
-All exit evidence is now satisfied. Boss Man is accepted as the preferred
+All exit evidence is now satisfied. Pink Guy is accepted as the preferred
 supervised local development path, with direct Pi/Codex retained as the
 recovery fallback until Phase 2 closes.
 

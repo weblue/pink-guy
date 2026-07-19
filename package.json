@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "bin": {
+    "pink": "./scripts/pink.mjs",
     "boss": "./scripts/boss.mjs"
   },
   "description": "Local-first Pi agent orchestration platform",
@@ -12,10 +13,14 @@
   },
   "scripts": {
     "start": "node ./scripts/serve.mjs",
+    "pink": "node ./scripts/pink.mjs",
     "boss": "node ./scripts/boss.mjs",
     "orchestrator:project": "node ./scripts/project-orchestrator.mjs",
     "orchestrator:system": "node ./scripts/system-orchestrator.mjs",
     "test": "node ./tests/run-core.mjs",
+    "test:recovery": "tmp=$(mktemp -d); ./tests/support/create-fixture.sh \"$tmp/fixture\" >/dev/null && node ./tests/probes/probe-phase2-execution-recovery.mjs \"$tmp/fixture\"; status=$?; rm -rf \"$tmp\"; exit $status",
+    "test:recovery:live": "node ./tests/probes/probe-phase2-live-late-checkpoint.mjs",
+    "test:git-retention": "node ./tests/probes/probe-phase2-git-retention.mjs",
     "test:baseline": "node ./tests/probes/probe-baseline.mjs",
     "test:workflow": "tmp=$(mktemp -d); ./tests/support/create-fixture.sh \"$tmp/fixture\" >/dev/null && node ./tests/probes/probe-phase1-workflow-observer.mjs \"$tmp/fixture\"; status=$?; rm -rf \"$tmp\"; exit $status"
   }

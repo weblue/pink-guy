@@ -48,8 +48,9 @@ async function atomicWrite(path: string, content: Buffer | string): Promise<void
 }
 
 async function snapshot(trigger: string, ctx: ExtensionContext): Promise<void> {
-  const outputDirectory = process.env.BOSS_MAN_PHASE0_LIFECYCLE_DIR;
-  if (!outputDirectory) throw new Error("BOSS_MAN_PHASE0_LIFECYCLE_DIR is required");
+  const outputDirectory =
+    process.env.PINK_GUY_LIFECYCLE_DIR ?? process.env.BOSS_MAN_PHASE0_LIFECYCLE_DIR;
+  if (!outputDirectory) throw new Error("PINK_GUY_LIFECYCLE_DIR is required");
   await mkdir(outputDirectory, { recursive: true, mode: 0o700 });
 
   const sessionManager = ctx.sessionManager;
@@ -144,8 +145,9 @@ function streamLocal(
   void (async () => {
     const output = emptyAssistant(model);
     try {
-      const outputDirectory = process.env.BOSS_MAN_PHASE0_LIFECYCLE_DIR;
-      if (!outputDirectory) throw new Error("BOSS_MAN_PHASE0_LIFECYCLE_DIR is required");
+      const outputDirectory =
+        process.env.PINK_GUY_LIFECYCLE_DIR ?? process.env.BOSS_MAN_PHASE0_LIFECYCLE_DIR;
+      if (!outputDirectory) throw new Error("PINK_GUY_LIFECYCLE_DIR is required");
       await appendFile(
         join(outputDirectory, "local-provider-invocations.jsonl"),
         `${JSON.stringify({ provider: model.provider, model: model.id, transport: "in-process" })}\n`,
@@ -194,7 +196,7 @@ function streamLocal(
 
 export default function lifecycleProbe(pi: ExtensionAPI): void {
   pi.registerProvider("boss-man-phase0", {
-    name: "Boss Man Phase 0 local provider",
+    name: "Pink Guy Phase 0 local provider",
     baseUrl: "http://127.0.0.1:9/phase0-no-network",
     apiKey: "phase0-local-provider",
     api: "openai-completions",

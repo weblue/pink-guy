@@ -1,6 +1,6 @@
-# Boss Man v2 developer cockpit
+# Pink Guy v2 developer cockpit
 
-Status: Phase 1 cockpit implemented; Phase 2 recovery-surface design active
+Status: Phase 1 cockpit plus P2-1 through P2-3 control surfaces implemented
 
 Last updated: 2026-07-18
 
@@ -17,8 +17,8 @@ options.
 | Candidate | Useful parts | Material mismatch | Disposition |
 |---|---|---|---|
 | [Lumbergh](https://github.com/voglster/lumbergh) | Clean web terminal, Git views, file browser, PWA, MIT, easy React/FastAPI codebase | Claude/tmux-centric, TinyDB, no container authority, manager chat emphasis, limited security story | UI reference and possible component source |
-| [Coder](https://coder.com/docs/user-guides/workspace-access) | Mature remote workspaces, web terminal, code-server, SSH, port forwarding | Adds a second heavyweight workspace/provisioning control plane and Postgres; no Pi task/context semantics | Optional external workspace integration, not Boss Man core |
-| [xterm.js](https://github.com/xtermjs/xterm.js) + code-server | Proven web terminal and full browser IDE; maximum semantic control | Requires Boss Man to build the session shell, reconnection, layout, auth, diff, and mobile UX | Fallback foundation |
+| [Coder](https://coder.com/docs/user-guides/workspace-access) | Mature remote workspaces, web terminal, code-server, SSH, port forwarding | Adds a second heavyweight workspace/provisioning control plane and Postgres; no Pi task/context semantics | Optional external workspace integration, not Pink Guy core |
+| [xterm.js](https://github.com/xtermjs/xterm.js) + code-server | Proven web terminal and full browser IDE; maximum semantic control | Requires Pink Guy to build the session shell, reconnection, layout, auth, diff, and mobile UX | Fallback foundation |
 | [Agent Deck](https://github.com/asheshgoplani/agent-deck) | Strong TUI/session fleet, remote SSH, worktrees, Docker, conductor | Terminal-first and tmux-oriented; web experience and Pi structured context are not the primary contract | Operational reference |
 | Ghostty | Excellent local terminal emulator and SSH client behavior | Not a web server, remote workspace dashboard, or session database | Supported client preference only |
 | cmux | Excellent macOS local workspace/session organization | macOS-only client and not remotely served through SWAG | Optional local operator workflow only |

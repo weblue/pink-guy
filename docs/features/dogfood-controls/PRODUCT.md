@@ -6,7 +6,7 @@ Last updated: 2026-07-17
 
 ## Summary
 
-The owner can bring an existing Git repository into Boss Man without startup
+The owner can bring an existing Git repository into Pink Guy without startup
 seed flags, attach immutable external-source context, edit authoritative task
 detail, resolve protected decisions, stop/resume a task run, and explicitly
 retry or reset a failed or uncertain orchestrator command.

@@ -2,7 +2,7 @@
 
 ## Core regression suite
 
-Run the 15 deterministic Phase 1 probes together:
+Run the 17 deterministic core probes together:
 
 ```sh
 npm test
@@ -15,7 +15,39 @@ mutations, plain-text prompt defaults, per-agent model routes,
 pre-compaction/scope-transfer custody, deterministic Ready scheduling, and the
 fixed-revision phase workflow, then deletes the fixture. The suite also
 fault-tests safe managed-project deletion, quarantine restoration, and cleanup
-retry. It makes no provider request and starts no task container.
+retry. The P2-1 probe adds concurrent execution acceptance, disconnect-safe
+settlement authority, generation fencing, late-checkpoint quarantine,
+candidate accept/reject, and restart recovery. It makes no provider request
+and starts no task container.
+
+The P2-2/P2-3 probe adds conservative Git-policy defaults,
+merge/squash/rebase integration, deterministic conflict and restart behavior,
+retention holds, safe workspace cleanup, explicit session-deletion manifests,
+and storage-pressure dispatch blocking:
+
+```sh
+npm run test:git-retention
+```
+
+Run only the P2-1 recovery matrix:
+
+```sh
+npm run test:recovery
+```
+
+The authenticated late-checkpoint drill is opt-in:
+
+```sh
+npm run test:recovery:live -- \
+  /absolute/disposable/git-fixture \
+  "$HOME/.pi/agent/auth.json" \
+  openai-codex \
+  gpt-5.4-mini
+```
+
+It pauses at the named `git_after_commit` boundary, fences and stops the live
+execution, verifies the checkpoint is quarantined, accepts it as the owner,
+then requires fresh test and independent review before completion.
 
 Watch the phase protocol as a standalone model-less baseline:
 
@@ -73,7 +105,7 @@ Build the image first:
 ```sh
 docker build \
   --platform linux/arm64 \
-  --tag boss-man:pi-0.80.9-rtk-0.42.3 \
+  --tag pink-guy:pi-0.80.9-rtk-0.42.3 \
   ./infra/container
 ```
 

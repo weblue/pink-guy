@@ -18,6 +18,13 @@ import {
 } from "./model-routes.mjs";
 import { composeAgentSystemPrompt, phaseKickoffPrompt } from "./prompt-profiles.mjs";
 import { PiRpcProcess, WorkspaceShell } from "./rpc.mjs";
+import {
+  canonicalSha256,
+  deleteDeclaredPaths,
+  inventoryStateRoot,
+  sessionDeletionPaths,
+  writeSessionDeletionManifest,
+} from "./resource-lifecycle.mjs";
 import { DockerTaskRuntime } from "./runtime.mjs";
 import { Phase0Store } from "./store.mjs";
 
@@ -228,13 +235,14 @@ const LEASE_VIEW_MODULE = await readFile(resolve(moduleDirectory, "../ui/lease-v
 export class DirectControlPlane {
   constructor({
     databasePath, stateRoot, fixturePath, environment = process.env,
-    runtimeImage = "boss-man:pi-0.80.9-rtk-0.42.3",
+    runtimeImage = "pink-guy:pi-0.80.9-rtk-0.42.3",
     dockerCommand = "docker", credentialProfile = null,
     runtimeProvider = "boss-man-phase0", runtimeModel = "complete", runtimeThinking = "medium",
     modelRoutePolicy = null,
     runtimeOffline = true,
     faultInjector = async () => undefined, enforceOrchestratorLease = false,
     schedulerProjectCapacity = 1, schedulerGlobalCapacity = 1,
+    storageWarningBytes = null, storageHardBytes = null,
   }) {
     this.store = new Phase0Store(databasePath);
     this.stateRoot = stateRoot;
@@ -255,11 +263,20 @@ export class DirectControlPlane {
     this.enforceOrchestratorLease = enforceOrchestratorLease;
     this.schedulerProjectCapacity = schedulerProjectCapacity;
     this.schedulerGlobalCapacity = schedulerGlobalCapacity;
+    const configuredWarning = storageWarningBytes
+      ?? Number(environment.PINK_GUY_STORAGE_WARN_BYTES || 0);
+    const configuredHard = storageHardBytes
+      ?? Number(environment.PINK_GUY_STORAGE_HARD_BYTES || 0);
+    this.storageWarningBytes = Number.isFinite(configuredWarning) && configuredWarning > 0
+      ? configuredWarning : null;
+    this.storageHardBytes = Number.isFinite(configuredHard) && configuredHard > 0
+      ? configuredHard : null;
     this.credentialVault = new RunCredentialVault({ stateRoot, profile: credentialProfile });
     this.gitServices = new Map();
     this.git = fixturePath ? this.gitService(fixturePath) : null;
     this.context = new ContextCustodyService({ store: this.store, stateRoot });
     this.sessions = new Map();
+    this.executionPromises = new Map();
     this.server = null;
     this.reconciledRunIds = [];
     this.recoveryResults = [];
@@ -273,7 +290,11 @@ export class DirectControlPlane {
 
   reconcileAutomaticPipelines(orchestratorToken) {
     const orchestrator = this.store.authorizeActiveProjectOrchestrator(orchestratorToken);
-    const directives = this.store.automaticPipelineDirectives(orchestrator.project_id);
+    return this.reconcileAutomaticProject(orchestrator.project_id);
+  }
+
+  reconcileAutomaticProject(projectId) {
+    const directives = this.store.automaticPipelineDirectives(projectId);
     const receipts = [];
     for (const directive of directives) {
       if (directive.action !== "schedule") {
@@ -308,12 +329,15 @@ export class DirectControlPlane {
     return receipts;
   }
 
-  reconcileReadyDispatch(orchestratorToken) {
+  async reconcileReadyDispatch(orchestratorToken) {
     const orchestrator = this.store.authorizeActiveProjectOrchestrator(orchestratorToken);
     return this.reconcileReadyProject(orchestrator.project_id);
   }
 
-  reconcileReadyProject(projectId) {
+  async reconcileReadyProject(projectId) {
+    if (this.storageWarningBytes || this.storageHardBytes) {
+      await this.storageInventory();
+    }
     return this.store.dispatchNextReadyTask({
       projectId,
       modelRoute: {
@@ -461,6 +485,477 @@ export class DirectControlPlane {
     return this.gitServices.get(path);
   }
 
+  async ensureProjectGitPolicy(projectId) {
+    const project = this.store.getProject(projectId);
+    if (!project) {
+      throw Object.assign(new Error(`unknown project: ${projectId}`), { code: "not_found" });
+    }
+    const existing = this.store.projectGitPolicy(projectId);
+    if (existing) return existing;
+    const identity = await this.gitService(project.repository_path).repositoryIdentity();
+    return this.store.ensureProjectGitPolicy({
+      projectId,
+      targetBranch: identity.defaultBranch,
+    });
+  }
+
+  async prepareGitIntegration({
+    taskId,
+    idempotencyKey,
+  }) {
+    if (!idempotencyKey?.trim()) {
+      throw Object.assign(new Error("Git integration idempotency key is required"), {
+        code: "invalid_request",
+      });
+    }
+    const replay = this.store.gitIntegrationPreparationByIdempotency({
+      taskId,
+      idempotencyKey,
+    });
+    if (replay) return { replayed: true, integration: replay };
+    const task = this.store.getTaskDetails(taskId);
+    if (!task) throw Object.assign(new Error(`unknown task: ${taskId}`), { code: "not_found" });
+    const policy = await this.ensureProjectGitPolicy(task.project_id);
+    const gates = this.store.integrationGateEvaluation(taskId);
+    if (!gates.allowed) {
+      throw Object.assign(
+        new Error(`integration blocked: ${gates.reasons.join(",")}`),
+        { code: "integration_blocked", reasons: gates.reasons },
+      );
+    }
+    const project = this.store.getProject(task.project_id);
+    const git = this.gitService(project.repository_path);
+    const identity = await git.repositoryIdentity();
+    const preview = await git.simulateIntegration({
+      integrationId: sha256(`${taskId}:${idempotencyKey}`).slice(0, 24),
+      sourceRevision: task.revision,
+      targetBranch: policy.target_branch,
+      historyPolicy: policy.history_policy,
+    });
+    return this.store.recordGitIntegrationPreparation({
+      taskId,
+      state: preview.clean ? "prepared" : "conflict",
+      sourceRevision: task.revision,
+      targetBranch: policy.target_branch,
+      targetRevision: preview.targetRevision,
+      plan: {
+        ...preview,
+        repositoryIdentity: identity,
+        policy,
+        forcePush: false,
+      },
+      idempotencyKey,
+    });
+  }
+
+  async actOnGitIntegration({
+    integrationId,
+    action,
+    expectedVersion,
+    reason,
+    idempotencyKey,
+  }) {
+    const current = this.store.gitIntegration(integrationId);
+    if (!current) {
+      throw Object.assign(new Error(`unknown Git integration: ${integrationId}`), {
+        code: "not_found",
+      });
+    }
+    if (
+      action === "cancel"
+      && !["prepared", "conflict", "failed", "reconciliation_required"].includes(current.state)
+    ) {
+      throw Object.assign(
+        new Error(`integration cannot be cancelled while ${current.state}`),
+        { code: "transition_denied" },
+      );
+    }
+    let gates = null;
+    let policy = null;
+    let task = null;
+    let git = null;
+    if (action === "execute") {
+      if (current.state !== "prepared") {
+        throw Object.assign(
+          new Error(`only a prepared integration can execute; current state is ${current.state}`),
+          { code: "transition_denied" },
+        );
+      }
+      gates = this.store.integrationGateEvaluation(current.task_id);
+      if (!gates.allowed) {
+        throw Object.assign(
+          new Error(`integration blocked: ${gates.reasons.join(",")}`),
+          { code: "integration_blocked", reasons: gates.reasons },
+        );
+      }
+      policy = await this.ensureProjectGitPolicy(current.project_id);
+      if (
+        policy.version !== current.policy_version
+        || policy.mode !== current.mode
+        || policy.history_policy !== current.history_policy
+        || policy.target_branch !== current.target_branch
+      ) {
+        throw Object.assign(new Error("integration policy changed after preparation"), {
+          code: "integration_stale",
+        });
+      }
+      if (policy.mode === "prepare_only") {
+        throw Object.assign(new Error("project policy is prepare-only"), {
+          code: "integration_execution_disabled",
+        });
+      }
+      task = gates.task;
+      const project = this.store.getProject(current.project_id);
+      git = this.gitService(project.repository_path);
+      const currentIdentity = await git.repositoryIdentity();
+      const preparedIdentity = current.plan?.repositoryIdentity;
+      if (
+        !preparedIdentity
+        || currentIdentity.repositorySha256 !== preparedIdentity.repositorySha256
+        || currentIdentity.defaultBranch !== preparedIdentity.defaultBranch
+        || currentIdentity.remoteUrl !== preparedIdentity.remoteUrl
+      ) {
+        throw Object.assign(new Error("repository identity changed after preparation"), {
+          code: "integration_stale",
+          preparedIdentity,
+          currentIdentity,
+        });
+      }
+      const currentTarget = await git.resolveRef(`refs/heads/${current.target_branch}`);
+      if (
+        currentTarget !== current.target_revision
+        || task.revision !== current.source_revision
+      ) {
+        throw Object.assign(new Error("integration evidence is stale"), {
+          code: "integration_stale",
+          expectedTargetRevision: current.target_revision,
+          currentTargetRevision: currentTarget,
+        });
+      }
+    }
+    const receipt = this.store.recordGitIntegrationAction({
+      integrationId,
+      action,
+      expectedVersion,
+      reason,
+      idempotencyKey,
+    });
+    if (receipt.replayed && (action !== "cancel" || receipt.integration.state === "cancelled")) {
+      return receipt;
+    }
+    let integration = receipt.integration;
+    if (action === "cancel") {
+      const project = this.store.getProject(current.project_id);
+      await this.gitService(project.repository_path).cleanupIntegration(integrationId);
+      integration = this.store.transitionGitIntegration({
+        integrationId,
+        expectedVersion: integration.version,
+        state: "cancelled",
+        result: { reason, actionReceiptId: receipt.receipt.id },
+      });
+      this.store.completeGitIntegrationAction(receipt.receipt.id, {
+        state: "cancelled",
+      });
+      return { ...receipt, integration };
+    }
+    integration = this.store.transitionGitIntegration({
+      integrationId,
+      expectedVersion: integration.version,
+      state: "integrating",
+      result: { actionReceiptId: receipt.receipt.id },
+    });
+    try {
+      const result = await git.createIntegrationResult({
+        integrationId,
+        sourceRevision: integration.source_revision,
+        targetBranch: integration.target_branch,
+        targetRevision: integration.target_revision,
+        historyPolicy: integration.history_policy,
+        taskId: integration.task_id,
+      });
+      let publication;
+      let finalState;
+      if (policy.mode === "local_integrate") {
+        publication = await git.publishLocalIntegration(result);
+        if (policy.allow_push) {
+          publication.push = await git.pushIntegration({
+            remoteName: policy.remote_name,
+            targetBranch: policy.target_branch,
+            expectedRemoteRevision: integration.plan?.remoteTargetRevision ?? null,
+          });
+          finalState = "published";
+        } else {
+          finalState = "integrated";
+        }
+      } else {
+        publication = await git.publishPullRequest({
+          branch: result.branch,
+          remoteName: policy.remote_name,
+          targetBranch: policy.target_branch,
+          title: task.title,
+          body: [
+            `Pink Guy task: ${task.id}`,
+            `Validated revision: ${task.revision}`,
+            `Integration receipt: ${integration.id}`,
+          ].join("\n\n"),
+        });
+        finalState = "published";
+      }
+      await git.cleanupIntegration(integrationId);
+      integration = this.store.transitionGitIntegration({
+        integrationId,
+        expectedVersion: integration.version,
+        state: finalState,
+        resultRevision: publication.publishedRevision ?? result.resultRevision,
+        result: { ...result, publication, actionReceiptId: receipt.receipt.id },
+      });
+      this.store.completeGitIntegrationAction(receipt.receipt.id, {
+        state: finalState,
+        resultRevision: integration.result_revision,
+      });
+      return { ...receipt, integration };
+    } catch (error) {
+      const state = error.code === "integration_conflict"
+        ? "conflict"
+        : ["integration_stale", "target_worktree_dirty"].includes(error.code)
+          ? "failed"
+          : "reconciliation_required";
+      integration = this.store.transitionGitIntegration({
+        integrationId,
+        expectedVersion: integration.version,
+        state,
+        failure: {
+          code: error.code ?? "git_operation_failed",
+          message: clippedText(error.message, 4_000),
+          conflicts: error.conflicts ?? [],
+          branch: error.branch ?? null,
+          path: error.path ?? null,
+        },
+      });
+      this.store.completeGitIntegrationAction(receipt.receipt.id, {
+        state,
+        failure: integration.failure,
+      });
+      return { ...receipt, integration };
+    }
+  }
+
+  async storageInventory() {
+    const inventory = await inventoryStateRoot({
+      stateRoot: this.stateRoot,
+      warningBytes: this.storageWarningBytes,
+      hardBytes: this.storageHardBytes,
+    });
+    this.store.setRuntimeFlag("storage_pressure", {
+      hardBlocked: inventory.hardBlocked,
+      warning: inventory.warning,
+      totalBytes: inventory.totalBytes,
+      hardBytes: inventory.limits.hardBytes,
+      warningBytes: inventory.limits.warningBytes,
+      measuredAt: inventory.generatedAt,
+    });
+    return inventory;
+  }
+
+  async taskCleanupPreview(taskId) {
+    const projection = this.store.resourceCleanupProjection(taskId);
+    const resources = [];
+    for (const workspace of projection.workspaces) {
+      const blockers = [...workspace.blockers];
+      let container = { state: "absent", id: workspace.container_id ?? null };
+      if (workspace.container_id) {
+        try {
+          const runtime = new DockerTaskRuntime({
+            dockerCommand: this.dockerCommand,
+            containerId: workspace.container_id,
+          });
+          const inspected = await runtime.inspect();
+          container = inspected
+            ? { state: inspected.running ? "running" : "stopped", id: inspected.id }
+            : { state: "absent", id: workspace.container_id };
+          if (inspected?.running) blockers.push("container_running");
+        } catch (error) {
+          container = {
+            state: "unknown",
+            id: workspace.container_id,
+            error: { code: error.code ?? "container_runtime_failed", message: error.message },
+          };
+          blockers.push("container_identity_unknown");
+        }
+      }
+      resources.push({
+        kind: "workspace_runtime",
+        workspaceId: workspace.id,
+        runId: workspace.run_id,
+        sessionId: workspace.session_id,
+        phase: workspace.phase,
+        path: workspace.workspace_path,
+        branch: workspace.branch,
+        container,
+        eligible: blockers.length === 0,
+        blockers: [...new Set(blockers)],
+      });
+    }
+    const canonical = {
+      projectId: projection.task.project_id,
+      taskId,
+      resources,
+    };
+    return {
+      ...canonical,
+      holds: projection.holds,
+      previewSha256: canonicalSha256(canonical),
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  async executeTaskCleanup({
+    taskId,
+    previewSha256,
+    reason,
+    idempotencyKey,
+  }) {
+    const prior = this.store.resourceCleanupByIdempotency(idempotencyKey);
+    const preview = await this.taskCleanupPreview(taskId);
+    if (!prior && preview.previewSha256 !== previewSha256) {
+      throw Object.assign(new Error("cleanup eligibility changed; review the fresh preview"), {
+        code: "preview_stale",
+        preview,
+      });
+    }
+    const selected = prior?.resources
+      ?? preview.resources.filter((resource) => resource.eligible);
+    const begun = this.store.beginResourceCleanup({
+      projectId: prior?.project_id ?? preview.projectId,
+      taskId,
+      previewSha256,
+      resources: selected,
+      reason,
+      idempotencyKey,
+    });
+    if (begun.replayed && begun.operation.state === "complete") return begun;
+    const results = [];
+    for (const resource of selected) {
+      const workspace = this.store.getWorkspace(resource.workspaceId);
+      if (workspace?.state === "retired") {
+        results.push({ ...resource, state: "retired", replayed: true });
+        continue;
+      }
+      const current = preview.resources.find(
+        (candidate) => candidate.workspaceId === resource.workspaceId,
+      );
+      if (!workspace || !current) {
+        results.push({
+          ...resource,
+          state: "failed",
+          error: { code: "cleanup_resource_missing", message: "workspace resource is missing" },
+        });
+        continue;
+      }
+      if (!current.eligible) {
+        results.push({
+          ...current,
+          state: "failed",
+          error: {
+            code: "cleanup_safety_changed",
+            message: `cleanup is now blocked: ${current.blockers.join(",")}`,
+          },
+        });
+        continue;
+      }
+      try {
+        if (current.container.state === "stopped") {
+          await new DockerTaskRuntime({
+            dockerCommand: this.dockerCommand,
+            containerId: current.container.id,
+          }).remove();
+        }
+        await this.gitService(workspace.repository_path).retireWorkspace(workspace);
+        this.store.markWorkspaceRetired(resource.workspaceId, { reason });
+        results.push({ ...current, state: "retired" });
+      } catch (error) {
+        results.push({
+          ...current,
+          state: "failed",
+          error: { code: error.code ?? "cleanup_failed", message: error.message },
+        });
+      }
+    }
+    const state = results.every((result) => result.state === "retired")
+      ? "complete" : "cleanup_pending";
+    const operation = this.store.completeResourceCleanup(begun.operation.id, {
+      state,
+      result: { results },
+    });
+    return { replayed: begun.replayed, operation };
+  }
+
+  async sessionDeletionPreview(sessionId) {
+    const projection = this.store.sessionDeletionProjection(sessionId);
+    const paths = sessionDeletionPaths(this.stateRoot, projection);
+    const canonical = {
+      sessionId,
+      taskId: projection.task.id,
+      eligible: projection.eligible,
+      blockers: projection.blockers,
+      paths,
+      artifacts: projection.artifacts.map((artifact) => ({
+        id: artifact.id,
+        path: artifact.path,
+        sha256: artifact.sha256,
+      })),
+      runIds: projection.runs.map((run) => run.id),
+    };
+    return {
+      ...canonical,
+      previewSha256: canonicalSha256(canonical),
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  async deleteSessionArtifacts({
+    sessionId,
+    confirmSessionId,
+    previewSha256,
+    reason,
+    idempotencyKey,
+  }) {
+    const prior = this.store.sessionDeletionByIdempotency(idempotencyKey);
+    const preview = prior?.preview ?? await this.sessionDeletionPreview(sessionId);
+    if (!prior && preview.previewSha256 !== previewSha256) {
+      throw Object.assign(new Error("session deletion preview changed"), {
+        code: "preview_stale",
+        preview,
+      });
+    }
+    const begun = this.store.beginSessionDeletion({
+      sessionId,
+      confirmSessionId,
+      previewSha256,
+      preview,
+      reason,
+      idempotencyKey,
+    });
+    if (begun.replayed && begun.receipt.state === "complete") return begun;
+    const declaredPreview = begun.receipt.preview;
+    const manifest = begun.receipt.manifest_path
+      ? { manifestPath: begun.receipt.manifest_path }
+      : await writeSessionDeletionManifest({
+        stateRoot: this.stateRoot,
+        receiptId: begun.receipt.id,
+        sessionId,
+        paths: declaredPreview.paths,
+        reason,
+      });
+    const cleanup = await deleteDeclaredPaths(this.stateRoot, declaredPreview.paths);
+    const receipt = this.store.settleSessionDeletion(begun.receipt.id, {
+      state: cleanup.complete ? "complete" : "cleanup_pending",
+      manifestPath: manifest.manifestPath,
+      result: cleanup,
+    });
+    return { replayed: begun.replayed, receipt };
+  }
+
   seed(options = {}) {
     const repositoryPath = options.repositoryPath ?? this.fixturePath;
     const revision = options.revision ?? execFileSync(
@@ -542,7 +1037,7 @@ export class DirectControlPlane {
         );
       }
       const dispatch = body.operation === "release"
-        ? this.reconcileReadyProject(task.project_id)
+        ? await this.reconcileReadyProject(task.project_id)
         : null;
       return {
         ...result,
@@ -576,6 +1071,8 @@ export class DirectControlPlane {
     orchestratorToken = null,
     phase = "implementation",
     modelRoute = null,
+    executionId = null,
+    executionGeneration = null,
   } = {}) {
     const task = this.store.getTask(taskId);
     if (!task) throw new Error(`unknown task: ${taskId}`);
@@ -591,9 +1088,26 @@ export class DirectControlPlane {
       throw new Error("task must be in the active state required by its agent phase");
     }
     const project = this.store.getProject(task.project_id);
-    const orchestrator = this.enforceOrchestratorLease || orchestratorToken
-      ? this.store.authorizeProjectOrchestrator(orchestratorToken, task.project_id)
+    const acceptedExecution = executionId
+      ? this.store.assertExecutionGeneration(executionId, executionGeneration)
       : null;
+    if (
+      acceptedExecution
+      && (
+        acceptedExecution.task_id !== taskId
+        || acceptedExecution.phase !== phase
+        || acceptedExecution.base_revision !== task.revision
+      )
+    ) {
+      throw Object.assign(new Error("accepted execution scope no longer matches the task"), {
+        code: "execution_scope_conflict",
+      });
+    }
+    const orchestrator = acceptedExecution
+      ? null
+      : this.enforceOrchestratorLease || orchestratorToken
+        ? this.store.authorizeProjectOrchestrator(orchestratorToken, task.project_id)
+        : null;
     const promptProfile = this.store.getAgentPromptProfile(phase);
     const capabilityRole = phase === "review" ? "reviewer" : phase === "test" ? "validator" : "worker";
     const resolvedModelRoute = this.resolveModelRoute(phase, modelRoute);
@@ -610,19 +1124,65 @@ export class DirectControlPlane {
       .map((path) => mkdir(path, { recursive: true, mode: 0o777 })));
     await copyFile(rtkConfiguration, join(rtkConfigDirectory, "config.toml"));
     await chmod(join(rtkConfigDirectory, "config.toml"), 0o644);
+    const acceptedCommand = acceptedExecution
+      ? this.store.orchestratorCommand(acceptedExecution.command_id)
+      : null;
+    const parentSession = acceptedCommand?.payload?.parentSessionId
+      ? this.store.getSession(acceptedCommand.payload.parentSessionId)
+      : null;
+    let resumedSessionFile = null;
+    if (parentSession) {
+      resumedSessionFile = join(sessionDirectory, basename(parentSession.native_path));
+      await copyFile(parentSession.native_path, resumedSessionFile);
+    }
 
     if (!this.internalOrigin) throw new Error("control plane must listen before starting Pi");
     const git = this.gitService(project.repository_path);
     const workspace = await git.createWorkspace({ taskId, runId });
+    if (acceptedExecution) {
+      try {
+        this.store.bindExecutionResources({
+          executionId,
+          generation: executionGeneration,
+          workspaceId: workspace.id,
+          runId,
+        });
+      } catch (error) {
+        this.store.attachExecutionEvidenceResources({
+          executionId,
+          runId,
+          workspaceId: workspace.id,
+          reason: "workspace_completed_after_fence",
+        });
+        throw Object.assign(error, {
+          code: "side_effect_uncertain",
+          workspaceId: workspace.id,
+          runId,
+        });
+      }
+    }
     const credential = await this.credentialVault.materialize(runId);
     this.store.recordCredentialRun({
       runId, profileId: credential.profileId, authType: credential.authType, billingMode: credential.billingMode,
     });
+    if (acceptedExecution) {
+      try {
+        this.store.assertExecutionGeneration(executionId, executionGeneration);
+      } catch (error) {
+        const canonicalUnchanged = await this.credentialVault.verifySourceUnchanged(credential)
+          .catch(() => false);
+        this.store.verifyCredentialRun(runId, canonicalUnchanged);
+        await this.credentialVault.release(runId);
+        throw error;
+      }
+    }
     const capability = this.store.issueCapability({
       role: capabilityRole,
       actorId: phase === "implementation" ? task.assigned_worker : `task-agent:${phase}:${runId}`,
       taskId,
       runId,
+      executionId,
+      executionGeneration,
       expiresAt: new Date(Date.parse(this.store.clock()) + 8 * 60 * 60 * 1000).toISOString(),
     });
     const containerEnvironment = {
@@ -635,16 +1195,24 @@ export class DirectControlPlane {
       PI_TELEMETRY: "0",
       RTK_TELEMETRY_DISABLED: "1",
       RTK_TEE_DIR: "/artifacts/rtk-tee",
+      PINK_GUY_LIFECYCLE_DIR: "/artifacts/snapshots",
+      PINK_GUY_API_URL: this.containerOrigin,
+      PINK_GUY_TASK_ID: taskId,
+      PINK_GUY_CAPABILITY_TOKEN: capability.token,
+      PINK_GUY_EXTENSION_EVIDENCE_PATH: "/artifacts/pink-guy-tools.json",
       BOSS_MAN_PHASE0_LIFECYCLE_DIR: "/artifacts/snapshots",
       BOSS_MAN_API_URL: this.containerOrigin,
       BOSS_MAN_TASK_ID: taskId,
       BOSS_MAN_CAPABILITY_TOKEN: capability.token,
-      BOSS_MAN_EXTENSION_EVIDENCE_PATH: "/artifacts/boss-man-tools.json",
+      BOSS_MAN_EXTENSION_EVIDENCE_PATH: "/artifacts/pink-guy-tools.json",
       ...(this.runtimeOffline ? { PI_OFFLINE: "1" } : {}),
     };
     let runtime = null;
     let containerEffect = null;
     try {
+      if (acceptedExecution) {
+        this.store.assertExecutionGeneration(executionId, executionGeneration);
+      }
       runtime = new DockerTaskRuntime({ image: this.runtimeImage, dockerCommand: this.dockerCommand });
       containerEffect = this.store.beginSideEffect({
         runId,
@@ -657,6 +1225,9 @@ export class DirectControlPlane {
         homePath: home, configPath: config, sessionPath: sessionDirectory,
         extensionPath: extensionDirectory, credentialPath: credential.path, environment: containerEnvironment,
       });
+      if (acceptedExecution) {
+        this.store.assertExecutionGeneration(executionId, executionGeneration);
+      }
       this.store.completeSideEffect(containerEffect.id, {
         containerId: runtimeState.containerId,
         imageId: runtimeState.imageId,
@@ -671,9 +1242,10 @@ export class DirectControlPlane {
       const rpc = new PiRpcProcess({
         child: runtime.spawn("pi", [
           "--mode", "rpc", "--session-dir", "/sessions",
-          "--extension", "/boss-man/extensions/lifecycle-probe.ts",
-          "--extension", "/boss-man/extensions/boss-man-extension.ts",
-          "--extension", "/boss-man/extensions/rtk-managed-extension.ts",
+          ...(resumedSessionFile ? ["--session", `/sessions/${basename(resumedSessionFile)}`] : []),
+          "--extension", "/pink-guy/extensions/lifecycle-probe.ts",
+          "--extension", "/pink-guy/extensions/boss-man-extension.ts",
+          "--extension", "/pink-guy/extensions/rtk-managed-extension.ts",
           "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-context-files", "--no-approve",
           ...(this.runtimeOffline ? ["--offline"] : []),
           "--provider", resolvedModelRoute.provider, "--model", resolvedModelRoute.model,
@@ -684,6 +1256,11 @@ export class DirectControlPlane {
           const projected = sanitizePiTaskEvent(event);
           if (!projected) return;
           const safeEvent = sanitize(projected);
+          if (acceptedExecution) {
+            this.store.touchExecution(executionId, executionGeneration, {
+              type: safeEvent.type ?? "unknown",
+            });
+          }
           if (active) {
             active.sequence += 1;
             this.store.appendRunEvent(
@@ -715,6 +1292,9 @@ export class DirectControlPlane {
         nativePath,
         provider: state.model?.provider,
         model: state.model?.id,
+        parentSessionId: parentSession && parentSession.id !== state.sessionId
+          ? parentSession.id
+          : null,
       });
       const run = this.store.createRun({
         id: runId,
@@ -727,6 +1307,7 @@ export class DirectControlPlane {
         credentialProfile: credential.profileId,
         orchestratorId: orchestrator?.id ?? null,
         phase,
+        executionId,
         promptProfileKey: promptProfile.profile_key,
         promptProfileVersion: promptProfile.active_version,
         promptSha256: promptProfile.prompt_sha256,
@@ -736,6 +1317,15 @@ export class DirectControlPlane {
         modelPolicySource: resolvedModelRoute.policySource,
         billingClass: resolvedModelRoute.billingClass,
       });
+      if (acceptedExecution) {
+        this.store.bindExecutionResources({
+          executionId,
+          generation: executionGeneration,
+          sessionId: state.sessionId,
+          runId: run.id,
+          workspaceId: workspace.id,
+        });
+      }
       active = { runId: run.id, sequence: 0 };
       for (const event of pending) {
         active.sequence += 1;
@@ -754,7 +1344,8 @@ export class DirectControlPlane {
         taskId, state, run, rpc, shell, runtime, runtimeState, workspace, credential, git,
         artifactDirectory, snapshotDirectory, configDirectory: config, active, capability, artifacts, sanitize,
         promptProfile, modelRoute: resolvedModelRoute,
-        extensionEvidencePath: join(artifactDirectory, "boss-man-tools.json"),
+        executionId, executionGeneration,
+        extensionEvidencePath: join(artifactDirectory, "pink-guy-tools.json"),
       };
       this.sessions.set(state.sessionId, managed);
       return { session: this.store.getSession(state.sessionId), run };
@@ -823,8 +1414,20 @@ export class DirectControlPlane {
     return phaseKickoffPrompt(phase);
   }
 
-  async executeTaskPhase(taskId, { orchestratorToken, phase, modelRoute = null }) {
-    const started = await this.startTask(taskId, { orchestratorToken, phase, modelRoute });
+  async executeTaskPhase(taskId, {
+    orchestratorToken = null,
+    phase,
+    modelRoute = null,
+    executionId = null,
+    executionGeneration = null,
+  }) {
+    const started = await this.startTask(taskId, {
+      orchestratorToken,
+      phase,
+      modelRoute,
+      executionId,
+      executionGeneration,
+    });
     try {
       const execution = await this.prompt(started.session.id, this.phaseKickoff(phase));
       const phaseOutcome = this.store.taskPhaseOutcome(taskId, phase);
@@ -840,14 +1443,20 @@ export class DirectControlPlane {
       }
       let completion = null;
       const evaluation = this.store.evaluateCompletion(taskId);
-      if (phase === "review" && evaluation.allowed && orchestratorToken) {
+      if (phase === "review" && evaluation.allowed && (orchestratorToken || executionId)) {
         const task = this.store.getTask(taskId);
-        const orchestrator = this.store.authorizeProjectOrchestrator(orchestratorToken, task.project_id);
+        const orchestrator = orchestratorToken
+          ? this.store.authorizeProjectOrchestrator(orchestratorToken, task.project_id)
+          : null;
         const capability = this.store.issueCapability({
           role: "orchestrator",
-          actorId: `project-orchestrator:${orchestrator.id}`,
+          actorId: orchestrator
+            ? `project-orchestrator:${orchestrator.id}`
+            : `control-plane:${executionId}`,
           taskId,
           runId: started.run.id,
+          executionId,
+          executionGeneration,
           expiresAt: new Date(Date.parse(this.store.clock()) + 60_000).toISOString(),
         });
         try {
@@ -871,8 +1480,235 @@ export class DirectControlPlane {
         task: this.store.getTaskDetails(taskId),
       };
     } finally {
-      await this.stopSession(started.session.id);
+      if (!executionId) await this.stopSession(started.session.id);
     }
+  }
+
+  classifyExecutionFailure(error) {
+    if (error?.code === "owner_stop") return "owner_stop";
+    if (error?.code === "side_effect_uncertain") return "side_effect_uncertain";
+    if (error?.code === "phase_protocol_violation") return "phase_protocol_violation";
+    if (error?.code === "provider_rejected") return "provider_rejected";
+    if (error?.code === "protocol_error") return "protocol_error";
+    if (error?.code === "rpc_inactive") return "rpc_inactive";
+    if (error?.code === "hard_deadline") return "hard_deadline";
+    if (/without RPC activity/.test(error?.message ?? "")) return "rpc_inactive";
+    if (/Pi RPC exited/.test(error?.message ?? "")) return "pi_process_exited";
+    return "setup_failed";
+  }
+
+  launchCommandExecution(executionId) {
+    if (this.executionPromises.has(executionId)) return this.executionPromises.get(executionId);
+    const promise = this.runCommandExecution(executionId)
+      .catch((error) => {
+        process.stderr.write(
+          `execution ${executionId} settlement failed: ${error.stack ?? error.message}\n`,
+        );
+      })
+      .finally(() => this.executionPromises.delete(executionId));
+    this.executionPromises.set(executionId, promise);
+    return promise;
+  }
+
+  async runCommandExecution(executionId) {
+    let execution = this.store.commandExecution(executionId);
+    if (!execution || !["starting", "running"].includes(execution.state)) return execution;
+    const generation = execution.generation;
+    let started = null;
+    let result = null;
+    let failure = null;
+    let desiredState = "succeeded";
+    try {
+      result = await this.executeTaskPhase(execution.task_id, {
+        phase: execution.phase,
+        modelRoute: execution.model_route,
+        executionId,
+        executionGeneration: generation,
+      });
+      started = result;
+    } catch (error) {
+      failure = error;
+      desiredState = error?.code === "side_effect_uncertain"
+        ? "reconciliation_required"
+        : "failed";
+    }
+
+    execution = this.store.commandExecution(executionId);
+    const priorAction = this.store.database.prepare(`SELECT action,reason FROM execution_action_receipts
+      WHERE execution_id=? ORDER BY created_at DESC,id DESC LIMIT 1`).get(executionId);
+    if (execution && ["starting", "running"].includes(execution.state)) {
+      this.store.fenceExecution({
+        executionId,
+        expectedVersion: execution.version,
+        reason: failure ? "execution_failure" : "phase_outcome_recorded",
+        failureClass: failure ? this.classifyExecutionFailure(failure) : null,
+        failure: failure ? {
+          code: failure.code ?? null,
+          message: clippedText(failure.message, 2_000),
+        } : null,
+      });
+    }
+    execution = this.store.commandExecution(executionId);
+    if (priorAction?.action === "pause" && desiredState !== "reconciliation_required") {
+      desiredState = "paused";
+    } else if (priorAction?.action === "cancel" && desiredState !== "reconciliation_required") {
+      desiredState = "cancelled";
+    }
+    else if (priorAction?.action === "stop" && !failure) {
+      desiredState = "failed";
+      failure = Object.assign(new Error(priorAction.reason), { code: "owner_stop" });
+    }
+
+    let cleanupFailure = null;
+    const sessionId = execution?.session_id ?? started?.session?.id ?? null;
+    if (sessionId) {
+      try {
+        const stopped = await this.stopSession(sessionId);
+        if (!stopped.stopped) {
+          throw Object.assign(new Error("managed runtime identity was unavailable during stop"), {
+            code: "side_effect_uncertain",
+          });
+        }
+      } catch (error) {
+        cleanupFailure = error;
+      }
+    }
+    if (cleanupFailure) {
+      desiredState = "reconciliation_required";
+      failure = cleanupFailure;
+    }
+    const unsettledSideEffects = execution?.run_id
+      ? this.store.sideEffectsForRun(execution.run_id).filter((effect) =>
+        effect.state !== "completed"
+      )
+      : [];
+    if (unsettledSideEffects.length) {
+      desiredState = "reconciliation_required";
+      failure = Object.assign(
+        new Error(`${unsettledSideEffects.length} side effect(s) require reconciliation`),
+        {
+          code: "side_effect_uncertain",
+          sideEffectIds: unsettledSideEffects.map((effect) => effect.id),
+        },
+      );
+    }
+    const failureClass = failure
+      ? cleanupFailure || unsettledSideEffects.length
+        ? "side_effect_uncertain"
+        : this.classifyExecutionFailure(failure)
+      : null;
+    const settled = this.store.settleExecution({
+      executionId,
+      state: desiredState,
+      failureClass,
+      failure: failure ? {
+        code: failure.code ?? null,
+        message: clippedText(failure.message, 2_000),
+      } : null,
+      result: result ? {
+        sessionId: result.session.id,
+        runId: result.run.id,
+        phaseOutcome: result.phaseOutcome,
+        taskVersion: result.task.version,
+        revision: result.task.revision,
+      } : {},
+    });
+    if (desiredState === "succeeded") {
+      this.reconcileAutomaticProject(settled.execution.project_id);
+      await this.reconcileReadyProject(settled.execution.project_id);
+    }
+    return settled.execution;
+  }
+
+  async actOnExecution({
+    executionId,
+    action,
+    expectedVersion,
+    reason,
+    idempotencyKey,
+    modelRoute = null,
+  }) {
+    if (["retry", "resume"].includes(action)) {
+      return this.store.queueExecutionReplacement({
+        executionId,
+        action,
+        expectedVersion,
+        reason,
+        idempotencyKey,
+        modelRoute,
+      });
+    }
+    if (!["stop", "pause", "cancel"].includes(action)) {
+      throw Object.assign(new Error(`unsupported execution action: ${action}`), {
+        code: "invalid_request",
+      });
+    }
+    const execution = this.store.commandExecution(executionId);
+    if (!execution) {
+      throw Object.assign(new Error(`unknown execution: ${executionId}`), { code: "not_found" });
+    }
+    if (!this.store.allowedExecutionActions(execution).includes(action)) {
+      throw Object.assign(
+        new Error(`${action} is not valid while execution is ${execution.state}`),
+        { code: "transition_denied" },
+      );
+    }
+    const receipt = this.store.recordExecutionAction({
+      executionId,
+      action,
+      expectedVersion,
+      reason,
+      idempotencyKey,
+      result: { requestedState: action === "pause" ? "paused" : action === "cancel" ? "cancelled" : "failed" },
+    });
+    if (receipt.replayed) return receipt;
+    if (receipt.execution.state === "cancelled") {
+      return receipt;
+    }
+    const fenced = { execution: receipt.execution };
+    const activePromise = this.executionPromises.get(executionId);
+    if (activePromise) {
+      const managed = fenced.execution.session_id
+        ? this.sessions.get(fenced.execution.session_id)
+        : null;
+      if (managed) {
+        await Promise.allSettled([managed.rpc.terminate(), managed.shell.terminate()]);
+      }
+      await activePromise;
+      return {
+        ...receipt,
+        execution: this.store.commandExecution(executionId),
+      };
+    }
+    let cleanupError = null;
+    if (fenced.execution.session_id) {
+      try {
+        const stopped = await this.stopSession(fenced.execution.session_id);
+        if (!stopped.stopped) {
+          throw Object.assign(new Error("managed runtime identity was unavailable during owner stop"), {
+            code: "side_effect_uncertain",
+          });
+        }
+      } catch (error) {
+        cleanupError = error;
+      }
+    }
+    const state = cleanupError
+      ? "reconciliation_required"
+      : action === "pause" ? "paused" : action === "cancel" ? "cancelled" : "failed";
+    const settled = this.store.settleExecution({
+      executionId,
+      state,
+      failureClass: cleanupError ? "side_effect_uncertain" : action === "stop" ? "owner_stop" : null,
+      failure: cleanupError
+        ? { message: clippedText(cleanupError.message, 2_000) }
+        : action === "stop" ? { message: reason } : null,
+      result: { ownerAction: action, actionReceiptId: receipt.receipt.id },
+    });
+    return {
+      ...receipt,
+      execution: settled.execution,
+    };
   }
 
   async shell(sessionId, command, { rtkFilter = null } = {}) {
@@ -995,7 +1831,7 @@ export class DirectControlPlane {
 
   async stopSession(sessionId, { record = true } = {}) {
     const managed = this.sessions.get(sessionId);
-    if (!managed) return;
+    if (!managed) return { stopped: false, reason: "not_managed" };
     await Promise.all([managed.rpc.terminate(), managed.shell.terminate()]);
     const journal = this.store.beginSideEffect({
       runId: managed.run.id,
@@ -1012,11 +1848,21 @@ export class DirectControlPlane {
     this.store.revokeCapability(managed.capability.id);
     if (record) this.store.finishRun(managed.run.id, "stopped");
     this.sessions.delete(sessionId);
+    return { stopped: true, sessionId, runId: managed.run.id };
   }
 
   async close({ record = true } = {}) {
     await Promise.all([...this.sessions.keys()].map((id) => this.stopSession(id, { record })));
-    if (this.server) await new Promise((resolvePromise) => this.server.close(resolvePromise));
+    await Promise.allSettled([...this.executionPromises.values()]);
+    if (this.server) {
+      const server = this.server;
+      await new Promise((resolvePromise, rejectPromise) => {
+        server.close((error) => error ? rejectPromise(error) : resolvePromise());
+        server.closeIdleConnections?.();
+        const force = setTimeout(() => server.closeAllConnections?.(), 250);
+        force.unref();
+      });
+    }
     this.store.close();
   }
 
@@ -1034,6 +1880,19 @@ export class DirectControlPlane {
   async reconcileAfterRestart() {
     if (this.recoveryChecked) return [];
     const results = [];
+    const interruptedIntegrations = this.store.reconcileGitIntegrationsAfterRestart();
+    const legacyCommands = this.store.reconcileLegacyClaimedCommands();
+    const restartingExecutions = this.store.commandExecutions({ nonterminalOnly: true });
+    for (const prior of restartingExecutions) {
+      if (!["starting", "running"].includes(prior.state)) continue;
+      this.store.fenceExecution({
+        executionId: prior.id,
+        expectedVersion: prior.version,
+        reason: "control_plane_restart",
+        failureClass: "control_plane_restart",
+        failure: { automaticReplay: false },
+      });
+    }
     for (const run of this.store.runningRuns()) {
       const runtime = new DockerTaskRuntime({
         image: this.runtimeImage,
@@ -1051,7 +1910,10 @@ export class DirectControlPlane {
         inspection?.running
         && inspection.id === run.container_id
         && inspection.imageId === run.image_id
-        && inspection.labels?.["boss-man.run"] === run.id,
+        && (
+          inspection.labels?.["pink-guy.run"] === run.id
+          || inspection.labels?.["boss-man.run"] === run.id
+        ),
       );
       const effects = this.store.sideEffectsForRun(run.id);
       const stoppedContainerProven = !inspection && !inspectionError
@@ -1124,6 +1986,48 @@ export class DirectControlPlane {
         sideEffects: reconciledEffects,
       });
     }
+    for (const prior of restartingExecutions) {
+      let execution = this.store.commandExecution(prior.id);
+      const run = execution.run_id ? this.store.getRun(execution.run_id) : null;
+      const terminalState = !run
+        ? "failed"
+        : run.state === "paused"
+          ? "paused"
+          : "reconciliation_required";
+      const settled = this.store.settleExecution({
+        executionId: execution.id,
+        state: terminalState,
+        failureClass: terminalState === "paused"
+          ? "control_plane_restart"
+          : run ? "side_effect_uncertain" : "control_plane_restart",
+        failure: {
+          automaticReplay: false,
+          runState: run?.state ?? null,
+          custodyRetained: Boolean(execution.session_id),
+        },
+        result: { restartReconciled: true },
+      });
+      results.push({
+        executionId: execution.id,
+        runId: execution.run_id,
+        state: settled.execution.state,
+        automaticReplay: false,
+      });
+    }
+    if (legacyCommands.length) {
+      results.push({
+        legacyClaimedCommands: legacyCommands,
+        state: "reconciliation_required",
+        automaticReplay: false,
+      });
+    }
+    for (const integrationId of interruptedIntegrations) {
+      results.push({
+        integrationId,
+        state: "reconciliation_required",
+        automaticReplay: false,
+      });
+    }
     this.recoveryResults = results;
     this.recoveryChecked = true;
     return results;
@@ -1158,6 +2062,7 @@ export class DirectControlPlane {
 
   async listen(port = 0, host = "127.0.0.1") {
     await this.reconcileAfterRestart();
+    await this.storageInventory();
     this.server = createServer((request, response) => this.route(request, response));
     await new Promise((resolvePromise, rejectPromise) => {
       this.server.once("error", rejectPromise);
@@ -1184,7 +2089,8 @@ export class DirectControlPlane {
       if (request.method === "GET" && url.pathname === "/api/health") {
         return json(response, 200, {
           ok: true,
-          authority: "boss_man_central_api",
+          authority: "pink_guy_central_api",
+          compatibility_authority: "boss_man_central_api",
           exposure: "localhost_only",
           orchestrator_policy: "one_active_lease_per_project",
         });
@@ -1268,6 +2174,71 @@ export class DirectControlPlane {
         });
         return json(response, result.replayed ? 200 : 201, result);
       }
+      const projectGitPolicy = url.pathname.match(/^\/api\/projects\/([^/]+)\/git-policy$/);
+      if (request.method === "GET" && projectGitPolicy) {
+        this.assertLocalOwnerProfile();
+        return json(response, 200, {
+          policy: await this.ensureProjectGitPolicy(projectGitPolicy[1]),
+        });
+      }
+      if (request.method === "PUT" && projectGitPolicy) {
+        this.assertLocalOwnerProfile();
+        await this.ensureProjectGitPolicy(projectGitPolicy[1]);
+        const body = await readBody(request);
+        const result = this.store.updateProjectGitPolicy({
+          projectId: projectGitPolicy[1],
+          mode: body.mode,
+          historyPolicy: body.historyPolicy,
+          targetBranch: body.targetBranch,
+          remoteName: body.remoteName ?? "origin",
+          allowPush: Boolean(body.allowPush),
+          allowPullRequest: Boolean(body.allowPullRequest),
+          allowedTargetBranches: body.allowedTargetBranches ?? [],
+          expectedVersion: body.expectedVersion,
+          reason: body.reason,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+      if (request.method === "GET" && url.pathname === "/api/storage") {
+        this.assertLocalOwnerProfile();
+        return json(response, 200, { inventory: await this.storageInventory() });
+      }
+      if (request.method === "GET" && url.pathname === "/api/retention/holds") {
+        this.assertLocalOwnerProfile();
+        const projectId = url.searchParams.get("projectId");
+        if (!projectId) {
+          throw Object.assign(new Error("projectId is required"), { code: "invalid_request" });
+        }
+        return json(response, 200, {
+          holds: this.store.retentionHolds(projectId, {
+            activeOnly: url.searchParams.get("active") !== "false",
+          }),
+        });
+      }
+      if (request.method === "POST" && url.pathname === "/api/retention/holds") {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.createRetentionHold({
+          projectId: body.projectId,
+          scopeType: body.scopeType,
+          scopeId: body.scopeId,
+          reason: body.reason,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+      const releaseHold = url.pathname.match(/^\/api\/retention\/holds\/([^/]+)\/release$/);
+      if (request.method === "POST" && releaseHold) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.releaseRetentionHold({
+          holdId: releaseHold[1],
+          reason: body.reason,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
       if (request.method === "GET" && url.pathname === "/api/agent-profiles") {
         return json(response, 200, { profiles: this.store.agentPromptProfiles() });
       }
@@ -1345,6 +2316,100 @@ export class DirectControlPlane {
         return json(response, 200, {
           command,
           events: this.store.orchestratorCommandEvents(command.id),
+          execution: this.store.commandExecutionForCommand(command.id),
+        });
+      }
+      if (request.method === "GET" && url.pathname === "/api/recovery/attention") {
+        this.assertLocalOwnerProfile();
+        return json(response, 200, {
+          attention: this.store.recoveryAttention({
+            projectId: url.searchParams.get("projectId"),
+          }),
+        });
+      }
+      if (request.method === "GET" && url.pathname === "/api/integrations/attention") {
+        this.assertLocalOwnerProfile();
+        return json(response, 200, {
+          attention: this.store.integrationAttention(url.searchParams.get("projectId")),
+        });
+      }
+      const integrationDetail = url.pathname.match(/^\/api\/integrations\/([^/]+)$/);
+      if (request.method === "GET" && integrationDetail) {
+        this.assertLocalOwnerProfile();
+        const integration = this.store.gitIntegration(integrationDetail[1]);
+        if (!integration) {
+          throw Object.assign(
+            new Error(`unknown Git integration: ${integrationDetail[1]}`),
+            { code: "not_found" },
+          );
+        }
+        return json(response, 200, { integration });
+      }
+      const integrationAction = url.pathname.match(/^\/api\/integrations\/([^/]+)\/actions\/(execute|cancel)$/);
+      if (request.method === "POST" && integrationAction) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = await this.actOnGitIntegration({
+          integrationId: integrationAction[1],
+          action: integrationAction[2],
+          expectedVersion: body.expectedVersion,
+          reason: body.reason,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+      const executionDetail = url.pathname.match(/^\/api\/executions\/([^/]+)$/);
+      if (request.method === "GET" && executionDetail) {
+        this.assertLocalOwnerProfile();
+        const execution = this.store.commandExecution(executionDetail[1]);
+        if (!execution) {
+          throw Object.assign(new Error(`unknown execution: ${executionDetail[1]}`), {
+            code: "not_found",
+          });
+        }
+        return json(response, 200, {
+          execution,
+          events: this.store.executionEvents(execution.id),
+          attention: this.store.recoveryAttention()
+            .find((item) => item.execution.id === execution.id) ?? null,
+        });
+      }
+      const executionAction = url.pathname.match(/^\/api\/executions\/([^/]+)\/actions$/);
+      if (request.method === "POST" && executionAction) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = await this.actOnExecution({
+          executionId: executionAction[1],
+          action: body.action,
+          expectedVersion: body.expectedVersion,
+          reason: body.reason,
+          idempotencyKey: request.headers["idempotency-key"],
+          modelRoute: body.modelRoute ?? null,
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+      const candidateAction = url.pathname.match(
+        /^\/api\/recovery-candidates\/([^/]+)\/actions$/,
+      );
+      if (request.method === "POST" && candidateAction) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = this.store.resolveRecoveryCandidate({
+          candidateId: candidateAction[1],
+          action: body.action,
+          expectedVersion: body.expectedVersion,
+          reason: body.reason,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        const candidate = result.candidate;
+        const continuation = !result.replayed && body.action === "accept"
+          ? this.reconcileAutomaticProject(
+            this.store.getTask(candidate.task_id).project_id,
+          )
+          : [];
+        return json(response, result.replayed ? 200 : 201, {
+          ...result,
+          continuation,
         });
       }
       const reconcileCommand = url.pathname.match(/^\/api\/commands\/([^/]+)\/reconcile$/);
@@ -1560,13 +2625,26 @@ export class DirectControlPlane {
       if (request.method === "POST" && url.pathname === "/api/orchestrators/commands/claim") {
         const token = bearerToken(request);
         this.reconcileAutomaticPipelines(token);
-        this.reconcileReadyDispatch(token);
+        await this.reconcileReadyDispatch(token);
         const command = this.store.claimOrchestratorCommand(token);
         if (!command) {
           response.writeHead(204);
           return response.end();
         }
         return json(response, 200, { command });
+      }
+
+      const acceptExecution = url.pathname.match(
+        /^\/api\/orchestrators\/commands\/([^/]+)\/executions$/,
+      );
+      if (request.method === "POST" && acceptExecution) {
+        const result = this.store.acceptCommandExecution({
+          token: bearerToken(request),
+          commandId: acceptExecution[1],
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        this.launchCommandExecution(result.execution.id);
+        return json(response, 202, result);
       }
 
       const completeCommand = url.pathname.match(/^\/api\/orchestrators\/commands\/([^/]+)\/complete$/);
@@ -1583,7 +2661,7 @@ export class DirectControlPlane {
           ? this.reconcileAutomaticPipelines(token)
           : [];
         const readyDispatch = body.state === "succeeded"
-          ? this.reconcileReadyDispatch(token)
+          ? await this.reconcileReadyDispatch(token)
           : { scheduled: false, reason: "prior_command_failed" };
         return json(response, 200, {
           command,
@@ -1798,7 +2876,7 @@ export class DirectControlPlane {
           idempotencyKey: request.headers["idempotency-key"],
         });
         const dispatch = body.operation === "release"
-          ? this.reconcileReadyProject(task.project_id)
+          ? await this.reconcileReadyProject(task.project_id)
           : null;
         return json(response, result.replayed ? 200 : 201, {
           ...result,
@@ -1825,6 +2903,63 @@ export class DirectControlPlane {
           idempotencyKey: request.headers["idempotency-key"],
         });
         return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const taskIntegration = url.pathname.match(/^\/api\/tasks\/([^/]+)\/integrations$/);
+      if (request.method === "POST" && taskIntegration) {
+        this.assertLocalOwnerProfile();
+        const result = await this.prepareGitIntegration({
+          taskId: taskIntegration[1],
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const taskCleanup = url.pathname.match(/^\/api\/tasks\/([^/]+)\/cleanup$/);
+      if (request.method === "GET" && taskCleanup) {
+        this.assertLocalOwnerProfile();
+        return json(response, 200, {
+          preview: await this.taskCleanupPreview(taskCleanup[1]),
+        });
+      }
+      if (request.method === "POST" && taskCleanup) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = await this.executeTaskCleanup({
+          taskId: taskCleanup[1],
+          previewSha256: body.previewSha256,
+          reason: body.reason,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(
+          response,
+          result.operation.state === "cleanup_pending" ? 202 : result.replayed ? 200 : 201,
+          result,
+        );
+      }
+
+      const sessionDeletion = url.pathname.match(/^\/api\/sessions\/([^/]+)\/artifacts$/);
+      if (request.method === "GET" && sessionDeletion) {
+        this.assertLocalOwnerProfile();
+        return json(response, 200, {
+          preview: await this.sessionDeletionPreview(sessionDeletion[1]),
+        });
+      }
+      if (request.method === "DELETE" && sessionDeletion) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = await this.deleteSessionArtifacts({
+          sessionId: sessionDeletion[1],
+          confirmSessionId: body.confirmSessionId,
+          previewSha256: body.previewSha256,
+          reason: body.reason,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        return json(
+          response,
+          result.receipt.state === "cleanup_pending" ? 202 : result.replayed ? 200 : 201,
+          result,
+        );
       }
 
       const taskDetail = url.pathname.match(/^\/api\/tasks\/([^/]+)$/);
@@ -1988,7 +3123,12 @@ export class DirectControlPlane {
         if (!this.store.getSession(stopSession[1])) {
           throw Object.assign(new Error(`unknown session: ${stopSession[1]}`), { code: "not_found" });
         }
-        await this.stopSession(stopSession[1]);
+        const stopped = await this.stopSession(stopSession[1]);
+        if (!stopped.stopped) {
+          throw Object.assign(new Error("session has no active managed runtime"), {
+            code: "transition_denied",
+          });
+        }
         return json(response, 200, { stopped: true, sessionId: stopSession[1] });
       }
 
@@ -2031,7 +3171,7 @@ export class DirectControlPlane {
     } catch (error) {
       const status = error.code === "not_found" ? 404
         : ["capability_denied", "self_approval_denied", "orchestrator_denied", "local_operator_denied"].includes(error.code) ? 403
-          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict", "project_required", "custody_required", "confirmation_mismatch", "deletion_blocked", "reconciliation_required"].includes(error.code) ? 409
+          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict", "project_required", "custody_required", "confirmation_mismatch", "deletion_blocked", "reconciliation_required", "execution_managed", "execution_fenced", "execution_scope_conflict", "revision_required"].includes(error.code) ? 409
             : 400;
       return json(response, status, { error: error.code ?? "request_failed", message: error.message });
     }

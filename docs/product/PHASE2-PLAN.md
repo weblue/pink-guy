@@ -1,16 +1,17 @@
 # Phase 2 delivery plan
 
-Status: Active — P2-1 recovery contract approved for implementation
+Status: Active — P2-1 through P2-3 implemented; P2-4 calibration next
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 ## Objective
 
-Move Boss Man from a supervised local development tool to a dependable
-full-time local coding environment. Phase 2 closes when routine work survives
-process/provider/host interruption, Git integration and cleanup are governed,
-resource policies are measured, and retained work can be backed up and moved
-to another clean ARM64 host without direct SQLite repair.
+Move Pink Guy from a supervised local development tool to a dependable
+candidate for sustained dogfood. Phase 2 closes when routine work survives
+process/provider interruption, Git integration and cleanup are governed,
+resource policies are measured, and retained work can be exported and restored
+into an isolated state root without direct SQLite repair. Phase 2D then proves
+the workflow and Phase 2U accepts its usability before the full-time switch.
 
 Phase 1 is the entry gate and is complete. Authenticated SWAG exposure remains
 Phase 3.
@@ -30,16 +31,17 @@ Phase 3.
 
 | Slice | Objective | Depends on | Exit evidence |
 |---|---|---|---|
-| **P2-1 Execution custody and recovery** | Remove split command/run authority; add fencing, paused/reconciliation states, fast failure classification, restart reconciliation, and late-evidence actions. | Phase 1 | Model-less fault matrix plus two live failure/recovery drills complete without duplicate work or SQLite edits. |
-| **P2-2 Governed Git integration** | Prepare and optionally execute merge/rebase/push/PR under project/branch policy, with conflict and rollback attention. | P2-1 settlement/fencing | Two repositories complete clean integration; one deterministic conflict stops safely; no agent writes protected Git state directly. |
-| **P2-3 Runtime lifecycle and retention operations** | Retire settled worktrees/containers safely, implement explicit session/project artifact deletion, quotas, storage-pressure visibility, and restore-friendly manifests. | P2-1; coordinates with P2-2 worktree custody | Cleanup cannot remove active/unmerged/recovery evidence; deletion is previewed, audited, idempotent, and restore tests preserve retained work. |
+| **P2-1 Execution custody and recovery — complete** | Remove split command/run authority; add fencing, paused/reconciliation states, fast failure classification, restart reconciliation, and late-evidence actions. | Phase 1 | Model-less fault matrix plus two live failure/recovery drills completed without duplicate work or SQLite edits. |
+| **P2-2 Governed Git integration — implemented** | Prepare and optionally execute merge/rebase/push/PR under project/branch policy, with conflict and reconciliation attention. | P2-1 settlement/fencing | Model-less merge/squash/rebase and conflict probes pass. Remote push/PR remains an owner-credential live drill in P2-4. |
+| **P2-3 Runtime lifecycle and retention operations — implemented** | Retire settled worktrees/containers safely, implement explicit session artifact deletion, quotas, storage-pressure visibility, and restore-friendly manifests. | P2-1; coordinates with P2-2 worktree custody | Holds, cleanup, deletion manifests, idempotent retry, and storage-pressure dispatch blocking pass model-less acceptance. |
 | **P2-4 Capacity, credentials, and provider resilience** | Measure host/provider limits, widen concurrency only where safe, exercise model switching and local routes, and classify provider exhaustion/failure. | P2-1; P2-3 quotas useful | Sustained mixed-project run stays within measured CPU/RAM/Docker/provider budgets; provider loss pauses or reroutes only under explicit policy. |
-| **P2-5 Backup, migration, and second-host reproduction** | Back up canonical state/custody/artifacts, restore atomically, rehearse migration, and reproduce on a clean ARM64 host. | P2-1 through P2-4 storage/config contracts | Fresh host restores projects, task history, native sessions, prompts/routes, artifacts, Git custody, and audit checksums; recovery run succeeds. |
+| **P2-5 Continuity export and restore** | Export canonical state/custody/artifacts without a model and restore into an isolated state root. | P2-1 through P2-4 storage/config contracts | Same-host isolated restore recovers tasks, native sessions, prompts/routes, artifacts, Git custody, and audit checksums; one retained task resumes. |
 
-P2-2 and the design portion of P2-3 may proceed in parallel after P2-1's
-execution/settlement schema is fixed. P2-4 measurement can begin early, but
-policy changes wait for P2-1 and storage-pressure visibility. P2-5 is the
-integration gate and remains last.
+P2-1 through P2-3 now fix the authority, Git, and retention contracts needed
+for measurement. P2-4 is deliberately collaborative: the owner selects the
+acceptable host/provider envelope from observed data instead of receiving an
+invented concurrency limit. P2-5 is then a bounded continuity proof rather
+than a general-purpose backup product.
 
 ## P2-1 — execution custody and recovery
 
@@ -50,39 +52,39 @@ Canonical specs:
 
 Implementation increments:
 
-1. **Execution identity and async acceptance**
+1. **Execution identity and async acceptance — implemented**
    - durable command-execution record;
    - one idempotent accepted execution per command;
    - short project-daemon start request;
    - central settlement authority.
-2. **Fence, stop, and failure taxonomy**
+2. **Fence, stop, and failure taxonomy — implemented**
    - capability/generation fence;
    - immediate process/protocol detection;
    - activity-aware inactivity and hard deadline;
    - idempotent cleanup receipts;
    - explicit Paused, Failed, Cancelled, and Needs reconciliation projection.
-3. **Restart reconciliation**
+3. **Restart reconciliation — implemented**
    - reconcile nonterminal executions before new dispatch;
    - no automatic replay;
    - safe-stop + native/context custody rather than unproven live reattach.
-4. **Late-evidence recovery**
+4. **Late-evidence recovery — implemented**
    - verified checkpoint candidates;
    - owner accept/reject with consequence preview;
    - stale-task protection;
    - fresh validation/review after acceptance.
-5. **Attention UX and live acceptance**
+5. **Attention UX and live acceptance — complete**
    - cockpit and `boss` parity;
    - replace broad reset with valid state-aware actions;
    - controlled observer-loss and late-checkpoint drills.
 
-P2-1 is intentionally first. Automatic merge, more concurrency, and aggressive
-cleanup would amplify the Phase 1 race if built on the current split authority.
+The model-less recovery matrix and both authenticated live drills are green.
+P2-1 is complete.
 
 ## P2-2 — governed Git integration
 
 Use accepted D-007, D-009, D-028, and D-045 as the boundary:
 
-- Boss Man—not the task agent—owns merge/rebase/push/PR side effects.
+- Pink Guy—not the task agent—owns merge/rebase/push/PR side effects.
 - Default policy is prepare-only.
 - A project may opt into automatic clean integration for named branches only
   after validation, independent approval, no unresolved decision/recovery
@@ -92,14 +94,25 @@ Use accepted D-007, D-009, D-028, and D-045 as the boundary:
 - Push authorization, remote identity, target branch, history policy, and
   force-push prohibition are explicit configuration.
 
-Design questions for owner approval before implementation:
+Implemented behavior:
 
-- merge commit, squash, or rebase default for Boss Man-owned repositories;
-- whether the first implementation may push/create PRs automatically or only
-  prepare an integration receipt;
-- which repositories/branches may opt into automatic integration;
-- whether an independently reviewed conflict-resolution task may later resume
-  the original integration command.
+- every project begins in `prepare_only` mode with merge-commit history,
+  `origin`, its detected default branch, no remote writes, and no force push;
+- an owner can select prepare-only, local integration, or pull-request mode,
+  plus merge, squash, or rebase history;
+- execution rechecks completion, current validation, independent approval,
+  unresolved decisions/dependencies/recovery, policy version, source revision,
+  and target revision;
+- Pink Guy creates integration results in isolated worktrees and updates a
+  local target only with compare-and-swap semantics;
+- conflicts and interrupted side effects remain visible and are never
+  automatically replayed;
+- push and `gh pr create` adapters exist only behind explicit project policy.
+
+The model-less acceptance probe exercises two clean repository contexts, all
+three history policies, a deterministic conflict, source-revision retention,
+and restart reconciliation. A real remote push/PR drill is intentionally
+paired with P2-4 credential calibration.
 
 ## P2-3 — runtime lifecycle and retention
 
@@ -115,6 +128,21 @@ Separate logical retention from physical cleanup:
   evidence.
 - Automatic age-based deletion remains out of scope unless separately
   approved, preserving D-017.
+
+Implemented behavior:
+
+- retention holds can target a project, task, session, run, or workspace;
+- cleanup previews block active executions, recovery candidates, unsettled
+  side effects, unintegrated implementation work, running containers, and
+  holds;
+- owner-confirmed cleanup retires only eligible managed workspaces/containers,
+  records a durable intent first, and safely resumes a partial retry;
+- explicit session deletion requires a fresh preview and typed session ID,
+  writes a checksummed manifest, removes only declared state-root paths, and
+  retains a tombstone and receipt;
+- state-root inventory is grouped by resource class; configured warning/hard
+  limits are visible, and a hard limit pauses new dispatch rather than
+  deleting retained evidence.
 
 ## P2-4 — capacity, credentials, and providers
 
@@ -132,22 +160,92 @@ Start with measurement, not optimistic limits:
 - add LiteLLM/OpenRouter only if a concrete Pi compatibility, accounting, or
   policy gap remains after direct-route drills.
 
-## P2-5 — backup and portability
+### Owner calibration worksheet
 
-The backup contract covers:
+The next session should answer these questions from measurements on the target
+M1 Max:
 
-- central SQLite database and migration version;
-- Pi-native session JSONL;
-- context/custody manifests and checksums;
-- prompts, model-route configuration references, and redacted secret contract;
-- artifacts and raw/filtered command evidence;
-- Git repository/worktree/branch/revision provenance;
-- recovery candidates, decisions, reviews, validations, and audit events.
+1. How many simultaneous project orchestrators, task containers, and
+   host-managed Pi processes preserve comfortable interactive headroom?
+2. Should OAuth-backed runs remain globally serialized, or does a controlled
+   two-run refresh/auth test prove a safe higher limit?
+3. Which provider/model routes may pause, retry, or switch after exhaustion?
+   Silent fallback remains prohibited.
+4. Which local Pi-compatible model route is worth keeping as an outage lane,
+   and what quality/task restrictions should apply?
+5. What observed disk-growth rate justifies warning and hard storage limits?
+6. Should normal remote publication use SSH Git, `gh`, or remain prepare-only
+   until the post-Phase-2 dogfood gate?
 
-Real credentials are not included. Restore validates checksums and paths before
-making the recovered state active. The second-host rehearsal uses a clean
-supported ARM64 Mac, a compatible Docker engine, owner-supplied Pi login, and
-no copied transient containers or credential material.
+Pink Guy already exposes storage totals and accepts explicit warning/hard
+limits through `PINK_GUY_STORAGE_WARN_BYTES` and
+`PINK_GUY_STORAGE_HARD_BYTES`. Resource concurrency defaults will not change
+until this worksheet has live evidence.
+
+## P2-5 — continuity export and restore
+
+Codex currently provides excellent synced access and long-running task UX, but
+it is not Pink Guy's portable backup format. Pink Guy only needs enough P2-5
+work to prove that its own durable authority is recoverable:
+
+1. produce a model-less, checksummed export containing a consistent SQLite
+   snapshot, Pi-native session JSONL, custody/context manifests, artifacts,
+   prompt/model-route references, and Git revision provenance;
+2. exclude credentials and ephemeral containers;
+3. restore into an isolated state root on the same Mac and verify tasks,
+   sessions, artifacts, Git custody, and audit hashes before activation;
+4. run one resumed task from the restored root;
+5. defer a second-physical-Mac rehearsal and cloud-backup destination until
+   the same-host restore proves an actual need and format stability.
+
+This scope creates real portability and recovery value without building
+encryption, scheduling, cloud retention, or cross-platform migration before
+dogfood produces a requirement.
+
+## Phase 2D — sustained dogfood and long-turn parity
+
+Phase 2 completion starts another dogfood phase; it does not immediately
+trigger a full switch from Codex. The proposed acceptance set is:
+
+- complete meaningful work in at least three repositories, including one
+  maintenance import and one new-project topic;
+- complete at least ten executable tasks through deterministic dispatch,
+  fixed-revision test/review, governed Git preparation/integration, and
+  lifecycle cleanup;
+- sustain multiple long orchestrator conversations across browser reconnect,
+  compaction/custody, model changes, and control-plane restart without
+  transcript resend or direct SQLite repair;
+- exercise provider exhaustion, a Git conflict, paused owner audit, late
+  evidence, retention hold, cleanup retry, and continuity restore;
+- record every occasion where direct Codex or Pi was needed and classify it as
+  missing capability, UX friction, reliability failure, or preference.
+
+The exact duration and numeric long-turn threshold are P2-4 calibration
+decisions. Phase 2D closes when direct Codex is an optional fallback for the
+measured dogfood window, not a routine repair path, and its UX-friction log is
+complete enough to drive the Phase 2U owner review.
+
+## Phase 2U — dogfood-informed UX review
+
+This short post-dogfood slice begins with an owner interview and a mockup built
+from the existing cockpit rather than a speculative replacement. It will:
+
+- reproduce and classify orchestrator-chat scroll bouncebacks;
+- identify populated panels whose internal or page-level scrolling grows
+  without a useful bound;
+- inventory visual elements the owner cannot readily interpret and determine
+  whether each needs clearer language, hierarchy, progressive disclosure, or
+  removal;
+- map the most common dogfood journeys across conversation, board, task
+  evidence, attention, Git integration, and cleanup;
+- validate the revised mockup with the owner before implementation;
+- add focused regression coverage for accepted scrolling and navigation
+  behavior.
+
+The dogfood evidence log supplies frequency and context, but known scrolling
+defects may still receive bounded fixes earlier if they materially obstruct
+Phase 2D. Full-time replacement waits for the accepted Phase 2U usability
+baseline.
 
 ## Explicitly deferred from Phase 2
 
@@ -180,11 +278,12 @@ Phase 2 is complete only when:
    visibly.
 7. A provider/model interruption can be resumed or retried from custody under
    explicit policy.
-8. A complete backup restores on a clean second ARM64 host and successfully
-   resumes a retained task.
-9. The owner can operate the normal workflow from cockpit or `boss` and keep a
-   direct Pi/Codex session only as an emergency tool, not a routine repair
-   path.
+8. A complete model-less continuity export restores into a clean isolated
+   state root and successfully resumes a retained task.
+9. The owner can operate the normal workflow from cockpit or `pink`; sustained
+   Phase 2D dogfood and the Phase 2U owner-reviewed usability baseline—not
+   Phase 2 implementation alone—decide when Codex becomes an optional
+   fallback.
 
 ## Accepted P2-1 authority decisions
 
@@ -198,5 +297,5 @@ Phase 2 is complete only when:
   candidate, and acceptance invalidates stale validation/review and requires
   fresh gates.
 
-The owner approved D-047 through D-049 on 2026-07-18. P2-1 implementation may
-begin from the checked-in product and technical contracts.
+The owner approved D-047 through D-049 on 2026-07-18. Their implementation,
+model-less fault coverage, and authenticated live acceptance are complete.

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "image": "boss-man:pi-0.80.9-rtk-0.42.3",
+  "image": "pink-guy:pi-0.80.9-rtk-0.42.3",
   "base_image": "node:24-trixie-slim@sha256:ae91dcc111a68c9d2d81ff2a17bda61be126426176fde6fe7d08ab13b7f50573",
   "platform": "linux/arm64",
   "user": "65532:65532",

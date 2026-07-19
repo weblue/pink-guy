@@ -5,13 +5,16 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 type JsonObject = Record<string, unknown>;
 
-const apiUrl = process.env.BOSS_MAN_API_URL;
-const taskId = process.env.BOSS_MAN_TASK_ID;
-const capabilityToken = process.env.BOSS_MAN_CAPABILITY_TOKEN;
+const apiUrl = process.env.PINK_GUY_API_URL ?? process.env.BOSS_MAN_API_URL;
+const taskId = process.env.PINK_GUY_TASK_ID ?? process.env.BOSS_MAN_TASK_ID;
+const capabilityToken =
+  process.env.PINK_GUY_CAPABILITY_TOKEN ?? process.env.BOSS_MAN_CAPABILITY_TOKEN;
 
 function configured(): { apiUrl: string; taskId: string; capabilityToken: string } {
   if (!apiUrl || !taskId || !capabilityToken) {
-    throw new Error("Boss Man task tools require BOSS_MAN_API_URL, BOSS_MAN_TASK_ID, and BOSS_MAN_CAPABILITY_TOKEN");
+    throw new Error(
+      "Pink Guy task tools require PINK_GUY_API_URL, PINK_GUY_TASK_ID, and PINK_GUY_CAPABILITY_TOKEN",
+    );
   }
   return { apiUrl, taskId, capabilityToken };
 }
@@ -22,7 +25,7 @@ async function request(path: string, options: RequestInit = {}): Promise<JsonObj
   const body = await response.json() as JsonObject;
   if (!response.ok) {
     const code = typeof body.error === "string" ? body.error : "request_failed";
-    const message = typeof body.message === "string" ? body.message : `Boss Man request failed with HTTP ${response.status}`;
+    const message = typeof body.message === "string" ? body.message : `Pink Guy request failed with HTTP ${response.status}`;
     throw new Error(`${code}: ${message}`);
   }
   return body;
@@ -88,10 +91,10 @@ function result(value: JsonObject) {
 export default function bossManExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "boss_task_get",
-    label: "Get assigned Boss Man task",
+    label: "Get assigned Pink Guy task",
     description: "Read the authoritative assigned task, policy state, reviews, validations, and decision gates.",
     promptSnippet: "Read the authoritative assigned task and its current policy state",
-    promptGuidelines: ["Use boss_task_get before planning a task transition or when a Boss Man mutation reports a conflict."],
+    promptGuidelines: ["Use boss_task_get before planning a task transition or when a Pink Guy mutation reports a conflict."],
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, signal) {
       return result(await task(signal));
@@ -100,7 +103,7 @@ export default function bossManExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_task_claim",
-    label: "Claim assigned Boss Man task",
+    label: "Claim assigned Pink Guy task",
     description: "Claim the capability-scoped task. Identity and assignment are derived by the server.",
     promptSnippet: "Claim the capability-scoped assigned task",
     parameters: Type.Object({}),
@@ -111,7 +114,7 @@ export default function bossManExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_task_progress",
-    label: "Record Boss Man task progress",
+    label: "Record Pink Guy task progress",
     description: "Append concise progress and evidence to the assigned task's authoritative audit stream.",
     promptSnippet: "Record meaningful progress on the assigned task",
     parameters: Type.Object({ text: Type.String({ minLength: 1 }) }),
@@ -122,7 +125,7 @@ export default function bossManExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_task_block",
-    label: "Block Boss Man task",
+    label: "Block Pink Guy task",
     description: "Mark the assigned task blocked with an explicit reason.",
     promptSnippet: "Block the assigned task with an explicit reason",
     parameters: Type.Object({ reason: Type.String({ minLength: 1 }) }),
@@ -133,7 +136,7 @@ export default function bossManExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_task_create_child",
-    label: "Create scoped Boss Man child task",
+    label: "Create scoped Pink Guy child task",
     description: "Create a child task within the assigned task's project and scope.",
     promptSnippet: "Create a scoped child task when independent follow-up work is discovered",
     parameters: Type.Object({ id: Type.String({ minLength: 1 }), title: Type.String({ minLength: 1 }) }),
@@ -144,7 +147,7 @@ export default function bossManExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_task_request_review",
-    label: "Request Boss Man review",
+    label: "Request Pink Guy review",
     description: "Request an independent review of the task's current fixed revision.",
     promptSnippet: "Request independent review after validation evidence is ready",
     parameters: Type.Object({ revision: Type.String({ minLength: 1 }) }),
@@ -155,7 +158,7 @@ export default function bossManExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_task_propose_complete",
-    label: "Propose Boss Man task completion",
+    label: "Propose Pink Guy task completion",
     description: "Record that implementation is ready; this does not approve, complete, commit, or merge the task.",
     promptSnippet: "Propose completion without self-approving or merging",
     parameters: Type.Object({ summary: Type.String({ minLength: 1 }) }),
@@ -166,7 +169,7 @@ export default function bossManExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_review_submit",
-    label: "Submit Boss Man fixed-revision review",
+    label: "Submit Pink Guy fixed-revision review",
     description: "Submit an independent structured review. The server rejects implementer self-review and stale revisions.",
     promptSnippet: "Submit an independent fixed-revision review",
     parameters: Type.Object({
@@ -185,7 +188,7 @@ export default function bossManExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_test_record_validation",
-    label: "Record Boss Man fixed-revision validation",
+    label: "Record Pink Guy fixed-revision validation",
     description: "Record independent pass/fail test evidence for the task's current fixed revision. Only a test-phase capability may use this tool.",
     promptSnippet: "Record exact test evidence against the current fixed revision",
     parameters: Type.Object({
@@ -204,7 +207,7 @@ export default function bossManExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_git_status",
-    label: "Inspect Boss Man workspace status",
+    label: "Inspect Pink Guy workspace status",
     description: "Read host-authoritative Git status for this run without granting writable Git metadata to the container.",
     promptSnippet: "Inspect the assigned workspace through the host Git service",
     parameters: Type.Object({}),
@@ -215,7 +218,7 @@ export default function bossManExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_git_diff",
-    label: "Inspect Boss Man workspace diff",
+    label: "Inspect Pink Guy workspace diff",
     description: "Read the complete host-generated workspace diff for the current revision.",
     promptSnippet: "Inspect the assigned workspace diff through the host Git service",
     parameters: Type.Object({}),
@@ -226,7 +229,7 @@ export default function bossManExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_git_checkpoint_request",
-    label: "Request Boss Man Git checkpoint",
+    label: "Request Pink Guy Git checkpoint",
     description: "Ask the host Git service to stage assigned-workspace changes and create a provenance-linked checkpoint.",
     promptSnippet: "Request a host-owned checkpoint after a coherent implementation increment",
     parameters: Type.Object({
@@ -240,7 +243,7 @@ export default function bossManExtension(pi: ExtensionAPI): void {
 
   pi.registerTool({
     name: "boss_git_commit_request",
-    label: "Request Boss Man Git commit",
+    label: "Request Pink Guy Git commit",
     description: "Ask the host Git service to create a provenance-linked commit; the agent never receives commit or merge authority.",
     promptSnippet: "Request a host-owned commit after validation",
     parameters: Type.Object({
@@ -253,7 +256,9 @@ export default function bossManExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("session_start", async () => {
-    const path = process.env.BOSS_MAN_EXTENSION_EVIDENCE_PATH;
+    const path =
+      process.env.PINK_GUY_EXTENSION_EVIDENCE_PATH
+      ?? process.env.BOSS_MAN_EXTENSION_EVIDENCE_PATH;
     if (!path) return;
     const names = pi.getAllTools().map((tool) => tool.name).filter((name) => name.startsWith("boss_")).sort();
     await writeFile(path, `${JSON.stringify({ schema_version: "1.0.0", tools: names }, null, 2)}\n`, { mode: 0o600 });

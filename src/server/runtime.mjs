@@ -21,7 +21,7 @@ function mount(source, destination, readOnly = false) {
 
 export class DockerTaskRuntime {
   constructor({
-    image = "boss-man:pi-0.80.9-rtk-0.42.3",
+    image = "pink-guy:pi-0.80.9-rtk-0.42.3",
     dockerCommand = "docker",
     network = "bridge",
     policy = {},
@@ -55,10 +55,10 @@ export class DockerTaskRuntime {
 
   async start({ runId, workspacePath, artifactPath, homePath, configPath, sessionPath, extensionPath, credentialPath, environment }) {
     const image = await this.inspectImage();
-    const name = `boss-man-${runId.replace(/[^a-zA-Z0-9_.-]/g, "-").slice(0, 48)}`;
+    const name = `pink-guy-${runId.replace(/[^a-zA-Z0-9_.-]/g, "-").slice(0, 48)}`;
     const args = [
       "create", "--name", name,
-      "--label", `boss-man.run=${runId}`,
+      "--label", `pink-guy.run=${runId}`,
       "--entrypoint", "sh",
       "--user", this.policy.user,
       "--read-only",
@@ -76,7 +76,7 @@ export class DockerTaskRuntime {
       "--mount", mount(homePath, "/home/bossman"),
       "--mount", mount(configPath, "/config"),
       "--mount", mount(sessionPath, "/sessions"),
-      "--mount", mount(extensionPath, "/boss-man/extensions", true),
+      "--mount", mount(extensionPath, "/pink-guy/extensions", true),
       ...(credentialPath ? ["--mount", mount(credentialPath, "/run/secrets/pi-auth.json", true)] : []),
       ...Object.entries(environment).flatMap(([key, value]) => ["--env", `${key}=${value}`]),
       this.image,
@@ -136,13 +136,31 @@ export class DockerTaskRuntime {
 
   async stop() {
     if (!this.containerId) return;
-    await runFile(this.dockerCommand, ["stop", "--time", "2", this.containerId]);
+    const result = await runFile(
+      this.dockerCommand,
+      ["stop", "--time", "2", this.containerId],
+    );
+    if (
+      result.code !== 0
+      && !/No such (object|container)/i.test(`${result.stderr}\n${result.stdout}`)
+    ) {
+      throw dockerError("docker stop", result);
+    }
     await this.remove();
   }
 
   async remove() {
     if (!this.containerId) return;
-    await runFile(this.dockerCommand, ["rm", "--force", this.containerId]);
+    const result = await runFile(
+      this.dockerCommand,
+      ["rm", "--force", this.containerId],
+    );
+    if (
+      result.code !== 0
+      && !/No such (object|container)/i.test(`${result.stderr}\n${result.stdout}`)
+    ) {
+      throw dockerError("docker rm", result);
+    }
     this.containerId = null;
   }
 }

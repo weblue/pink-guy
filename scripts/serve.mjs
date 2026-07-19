@@ -2,7 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { access, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,7 +26,10 @@ function identifier(prefix, value) {
 }
 
 const repositories = [];
-let stateRoot = join(homedir(), ".local", "share", "boss-man", "dev");
+const pinkStateRoot = join(homedir(), ".local", "share", "pink-guy", "dev");
+const legacyStateRoot = join(homedir(), ".local", "share", "boss-man", "dev");
+let stateRoot = pinkStateRoot;
+let stateExplicit = false;
 let port = 4310;
 let modelConfig = resolve(moduleDirectory, "../config/model-routes.json");
 let runtimeProvider;
@@ -36,7 +39,10 @@ let credentialSource;
 for (let index = 2; index < process.argv.length; index += 1) {
   const argument = process.argv[index];
   if (argument === "--repo") repositories.push(resolve(process.argv[++index] ?? usage()));
-  else if (argument === "--state") stateRoot = resolve(process.argv[++index] ?? usage());
+  else if (argument === "--state") {
+    stateRoot = resolve(process.argv[++index] ?? usage());
+    stateExplicit = true;
+  }
   else if (argument === "--port") port = Number(process.argv[++index] ?? usage());
   else if (argument === "--model-config") modelConfig = resolve(process.argv[++index] ?? usage());
   else if (argument === "--provider") runtimeProvider = process.argv[++index] ?? usage();
@@ -49,6 +55,20 @@ if (
   repositories.length === 0 || !Number.isInteger(port) || port < 1 || port > 65535
   || (runtimeThinking && !["off", "minimal", "low", "medium", "high", "xhigh"].includes(runtimeThinking))
 ) usage();
+if (!stateExplicit) {
+  const pathExists = async (path) => {
+    try {
+      await access(path);
+      return true;
+    } catch (error) {
+      if (error?.code === "ENOENT") return false;
+      throw error;
+    }
+  };
+  if (!(await pathExists(pinkStateRoot)) && await pathExists(legacyStateRoot)) {
+    stateRoot = legacyStateRoot;
+  }
+}
 const modelRoutePolicy = await loadModelRoutePolicy(modelConfig, {
   provider: runtimeProvider,
   model: runtimeModel,
@@ -64,8 +84,15 @@ for (const repository of repositories) {
 }
 
 await mkdir(stateRoot, { recursive: true, mode: 0o700 });
+let databaseName = "pink-guy.sqlite";
+try {
+  await access(join(stateRoot, "boss-man.sqlite"));
+  databaseName = "boss-man.sqlite";
+} catch (error) {
+  if (error?.code !== "ENOENT") throw error;
+}
 const authority = new DirectControlPlane({
-  databasePath: join(stateRoot, "boss-man.sqlite"),
+  databasePath: join(stateRoot, databaseName),
   stateRoot,
   fixturePath: repositories[0],
   enforceOrchestratorLease: true,
@@ -103,7 +130,7 @@ for (const repositoryPath of repositories) {
 
 const address = await authority.listen(port, "127.0.0.1");
 const url = `http://127.0.0.1:${address.port}`;
-process.stdout.write(`Boss Man central API is serving at ${url}
+process.stdout.write(`Pink Guy central API is serving at ${url}
 State: ${stateRoot}
 Projects: ${repositories.length}
 Default model: ${configuredRoutes.default.provider}/${configuredRoutes.default.model} (${configuredRoutes.default.thinking})
@@ -118,7 +145,7 @@ let closing = false;
 async function close(signal) {
   if (closing) return;
   closing = true;
-  process.stdout.write(`Received ${signal}; closing Boss Man.\n`);
+  process.stdout.write(`Received ${signal}; closing Pink Guy.\n`);
   await authority.close();
   process.exit(0);
 }

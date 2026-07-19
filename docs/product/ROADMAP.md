@@ -1,8 +1,8 @@
-# Boss Man v2 delivery roadmap
+# Pink Guy v2 delivery roadmap
 
 Status: Active
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 This is the canonical phase sequence. Phase 0 research artifacts remain useful evidence, but they no longer make remote authentication or second-host reproduction prerequisites for local product development.
 
@@ -10,7 +10,7 @@ This is the canonical phase sequence. Phase 0 research artifacts remain useful e
 
 | Profile | Intended access | Listener | Application authentication |
 |---|---|---|---|
-| Local smoke | Browser and tools on the Boss Man Mac | Loopback only | None |
+| Local smoke | Browser and tools on the Pink Guy Mac | Loopback only | None |
 | Remote | SWAG HTTPS subdomain or another explicitly approved remote edge | Private upstream reachable only from the trusted proxy/LAN | Required |
 
 The application must select a profile explicitly at startup. It must not decide that a request is “local” merely from an untrusted `X-Forwarded-For` header. Enabling remote exposure is a human-approved deployment change.
@@ -37,7 +37,7 @@ Phase 0 does not require application authentication because its runnable profile
 
 Status: Complete — accepted for supervised local development on 2026-07-18
 
-Purpose: make Boss Man useful for supervised daily development on its host.
+Purpose: make Pink Guy useful for supervised daily development on its host.
 
 The completed local control-loop slice is
 [`../features/local-control-loop/PRODUCT.md`](../features/local-control-loop/PRODUCT.md)
@@ -47,7 +47,7 @@ began this phase.
 The completed local task-control slice is
 [`../features/local-task-controls/PRODUCT.md`](../features/local-task-controls/PRODUCT.md)
 and [`../features/local-task-controls/TECH.md`](../features/local-task-controls/TECH.md).
-The active conversation slice is
+The completed conversation slice is
 [`../features/orchestrator-conversations/PRODUCT.md`](../features/orchestrator-conversations/PRODUCT.md)
 and
 [`../features/orchestrator-conversations/TECH.md`](../features/orchestrator-conversations/TECH.md);
@@ -108,21 +108,32 @@ review workflow from the local cockpit without editing SQLite or calling
 internal probe helpers. The workflow is proven on two real repositories and
 orchestrator context is captured before compaction.
 
-Adoption result: this is the earliest point where Boss Man should be preferred
+Adoption result: this is the earliest point where Pink Guy should be preferred
 for supervised local coding. Manual merge/recovery may remain acceptable, but
 the full workflow must be dogfooded across multiple real repositories and a
 direct coding client remains the emergency fallback.
 
 ## Phase 2 — autonomy, recovery, and portability
 
-Status: Active — P2-1 execution recovery contract approved
+Status: Active — P2-1 through P2-3 implemented; P2-4 calibration next
 
 Purpose: make unattended local operation dependable before adding a public edge.
 
 The delivery order and closure evidence are defined in
-[`PHASE2-PLAN.md`](PHASE2-PLAN.md). The first blocking slice is the approved
-execution recovery [product contract](../features/execution-recovery/PRODUCT.md)
-and [technical design](../features/execution-recovery/TECH.md).
+[`PHASE2-PLAN.md`](PHASE2-PLAN.md). The first blocking slice, P2-1 execution
+recovery, is implemented and accepted; its
+[product contract](../features/execution-recovery/PRODUCT.md),
+[technical design](../features/execution-recovery/TECH.md), and
+[acceptance results](../features/execution-recovery/RESULTS.md) are retained
+as the governing record.
+
+Governed Git integration and explicit runtime/session retention operations are
+also implemented with model-less acceptance. Project policy now defaults to
+prepare-only, supports merge/squash/rebase under owner policy, refuses force
+push, and retains conflicts or interrupted publication for attention. Holds,
+safe cleanup, deletion manifests/tombstones, storage inventory, and
+storage-pressure dispatch blocking are available through the cockpit and
+`pink` client.
 
 Scope:
 
@@ -137,12 +148,62 @@ Scope:
 - security review of artifact, capability, optional workspace-shell, and
   network boundaries.
 
-Exit: local operation survives application/host restarts, preserves audit/context custody, and has measured resource and recovery policies.
+Exit: local operation survives application/host restarts, preserves
+audit/context custody, has measured resource and recovery policies, and can
+restore a model-less continuity export into an isolated state root.
 
-Adoption result: this is the threshold for using Boss Man as the full-time
-local coding environment instead of Codex. Routine work must not depend on
-direct SQLite repair, manual artifact recovery, or a single irreplaceable
-OAuth process.
+Adoption result: Phase 2 opens the sustained dogfood gate. It does not by
+itself authorize the full switch from Codex.
+
+## Phase 2D — sustained dogfood and long-turn parity
+
+Status: Planned after P2-5
+
+Purpose: prove the completed local platform through meaningful work before
+making it the default coding environment.
+
+Scope:
+
+- multiple repositories and both new-topic and maintenance-import intake;
+- at least ten executable tasks through deterministic dispatch, fixed-revision
+  validation/review, governed Git, and lifecycle cleanup;
+- long orchestrator turns across reconnect, compaction/custody, model switch,
+  restart, provider exhaustion, conflict, pause, and recovery;
+- a restored continuity export;
+- a friction log for every direct Codex/Pi fallback.
+
+Exit: for an owner-approved measured window, normal coding needs no direct
+SQLite repair, manual artifact reconstruction, or routine escape to another
+client. The evidence log also captures UX friction by journey and frequency
+for the owner interview.
+
+Adoption result: enter the dogfood-informed UX review with reliability and
+workflow evidence rather than redesigning from intuition.
+
+## Phase 2U — dogfood-informed UX review
+
+Status: Planned after Phase 2D
+
+Purpose: turn real dogfood friction into an owner-approved cockpit mockup and
+bounded usability improvements before the full-time switch.
+
+Scope:
+
+- interview the owner using the Phase 2D journey/friction log;
+- build from the existing cockpit rather than starting a disconnected UI;
+- resolve chat scroll bounceback and unbounded populated-panel/page scrolling;
+- clarify or progressively disclose visual information the owner cannot
+  interpret;
+- validate conversation, board, task evidence, attention, Git, and retention
+  journeys in the mockup before implementation;
+- add regression coverage for accepted scrolling and navigation behavior.
+
+Exit: the owner accepts the mockup and the implemented high-frequency
+usability fixes; long orchestrator work remains stable and understandable.
+
+Adoption result: this is the threshold for preferring Pink Guy as the full-time
+local coding environment. Phase 3 may then add remote access without changing
+the durable workflow.
 
 ## Phase 3 — authenticated remote access
 
@@ -164,7 +225,7 @@ Raw passwords and API keys are never checked into Git, stored in SQLite task/con
 Exit: all requests through the remote profile require a valid owner session
 or API key, while loopback remains independently operational.
 
-Adoption result: Boss Man is ready for its intended remote-first use through
+Adoption result: Pink Guy is ready for its intended remote-first use through
 the home-server SWAG edge.
 
 ## Deferred beyond Phase 3

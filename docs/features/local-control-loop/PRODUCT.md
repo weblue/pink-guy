@@ -10,7 +10,7 @@ direction.
 
 ## Goal
 
-Give the local Boss Man owner a durable, observable path for sending
+Give the local Pink Guy owner a durable, observable path for sending
 phase-scoped work to the one active orchestrator for a project. This is the
 first Phase 1 slice; it establishes the control loop before task editing,
 persistent terminals, and the full task workspace are added.
@@ -29,7 +29,7 @@ persistent terminals, and the full task workspace are added.
 5. The orchestrator reports either success or failure with structured,
    durable result information. A terminal command is never offered again.
 6. If the owning orchestrator lease expires or is released while a command is
-   claimed, the command becomes `reconciliation_required`. Boss Man does not
+   claimed, the command becomes `reconciliation_required`. Pink Guy does not
    automatically replay it.
 7. The local cockpit shows recent command state alongside projects,
    orchestrator leases, tasks, and sessions. Command observability is not

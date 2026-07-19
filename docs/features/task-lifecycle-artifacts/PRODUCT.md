@@ -8,7 +8,7 @@ Figma: none provided; extend the existing cockpit controls and visual language.
 
 ## Summary
 
-Boss Man distinguishes executable tasks from umbrella and intake artifacts,
+Pink Guy distinguishes executable tasks from umbrella and intake artifacts,
 supports lightweight task tags, and lets owners or orchestrators archive
 settled records without deleting their history or pretending they completed
 implementation.
