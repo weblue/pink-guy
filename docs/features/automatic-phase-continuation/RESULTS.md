@@ -1,6 +1,6 @@
 # Automatic phase continuation results
 
-Status: Model-less implementation verified; live services running
+Status: Model-less implementation and historical live acceptance verified
 
 Last updated: 2026-07-18
 

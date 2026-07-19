@@ -65,4 +65,3 @@ route as an explicitly unverified option so custody/recovery remains possible.
 `probe-phase2-provider-catalog.mjs` uses a fake Pi command and temporary
 auth/config files to verify discovery, grouping, credential redaction, refresh,
 failure behavior, API projection, and cockpit selector/auth guidance.
-

@@ -1429,7 +1429,19 @@
       renderProviderCatalog();
       document.querySelector("#model-route-form").dataset.version = "";
       if (app.topicDetail) renderWorkspace();
-      renderTaskDetail();
+      const taskProvider = document.querySelector("#schedule-model-provider");
+      if (taskProvider) {
+        const taskModel = document.querySelector("#schedule-model-id");
+        const selectedProvider = taskProvider.value;
+        const selectedModel = taskModel.value;
+        taskProvider.innerHTML = providerOptions(selectedProvider);
+        taskModel.innerHTML = modelOptions(selectedProvider, selectedModel);
+        syncThinkingForModel(
+          taskProvider,
+          taskModel,
+          document.querySelector("#schedule-model-thinking"),
+        );
+      }
     } catch (error) {
       providerCatalogStatus(error.message, true);
     } finally {

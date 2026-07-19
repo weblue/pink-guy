@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { basename, dirname } from "node:path";
+import { dirname } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -14,18 +14,22 @@ function clippedMessage(error) {
     ? "Pi executable was not found on the Pink Guy host."
     : error?.killed || error?.signal === "SIGTERM"
       ? "Pi model discovery timed out."
-      : "Pi could not list the configured models.";
+      : error?.code === "catalog_format_changed"
+        ? "Pi returned an unrecognized model catalog format. Update the Pink Guy adapter before retrying."
+        : "Pi could not list the configured models.";
   return {
     code: error?.code === "ENOENT"
       ? "pi_not_found"
       : error?.killed || error?.signal === "SIGTERM"
         ? "discovery_timeout"
-        : "discovery_failed",
+        : error?.code === "catalog_format_changed"
+          ? "catalog_format_changed"
+          : "discovery_failed",
     message,
   };
 }
 
-export function parsePiModelList(stdout) {
+function parsePiModelOutput(stdout) {
   const lines = String(stdout ?? "")
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
@@ -33,7 +37,12 @@ export function parsePiModelList(stdout) {
   const headerIndex = lines.findIndex((line) =>
     /^provider\s{2,}model\s{2,}context\s{2,}max-out\s{2,}thinking\s{2,}images\s*$/.test(line)
   );
-  if (headerIndex === -1) return [];
+  if (headerIndex === -1) {
+    return {
+      recognized: /no (configured |available )?models/i.test(lines.join(" ")),
+      models: [],
+    };
+  }
   const models = [];
   for (const line of lines.slice(headerIndex + 1)) {
     const columns = line.trim().split(/\s{2,}/);
@@ -49,7 +58,11 @@ export function parsePiModelList(stdout) {
       supports_images: images === "yes",
     });
   }
-  return models;
+  return { recognized: true, models };
+}
+
+export function parsePiModelList(stdout) {
+  return parsePiModelOutput(stdout).models;
 }
 
 async function credentialSummary(sourcePath) {
@@ -95,6 +108,7 @@ export class PiProviderCatalog {
     this.now = now;
     this.cached = null;
     this.cachedAt = 0;
+    this.inFlight = null;
   }
 
   authenticationInstructions() {
@@ -125,12 +139,16 @@ export class PiProviderCatalog {
     if (!refresh && this.cached && timestamp - this.cachedAt < this.cacheMs) {
       return { ...this.cached, cache: "hit" };
     }
-    const credentials = await credentialSummary(this.credentialSource);
-    const environment = {
-      ...this.environment,
-      ...(this.credentialSource ? { PI_CODING_AGENT_DIR: dirname(this.credentialSource) } : {}),
-    };
-    try {
+    if (this.inFlight) {
+      return { ...await this.inFlight, cache: "shared" };
+    }
+    this.inFlight = (async () => {
+      const credentials = await credentialSummary(this.credentialSource);
+      const environment = {
+        ...this.environment,
+        ...(this.credentialSource ? { PI_CODING_AGENT_DIR: dirname(this.credentialSource) } : {}),
+      };
+      try {
       const [{ stdout }, versionResult] = await Promise.all([
         this.execute(this.piCommand, ["--list-models"], {
           env: environment,
@@ -143,7 +161,13 @@ export class PiProviderCatalog {
           maxBuffer: 64 * 1024,
         }).catch(() => ({ stdout: null })),
       ]);
-      const models = parsePiModelList(stdout);
+      const parsed = parsePiModelOutput(stdout);
+      if (!parsed.recognized) {
+        throw Object.assign(new Error("unrecognized Pi model catalog output"), {
+          code: "catalog_format_changed",
+        });
+      }
+      const models = parsed.models;
       const authenticated = new Map(
         credentials.providers.map((provider) => [provider.provider, provider.auth_type]),
       );
@@ -170,9 +194,9 @@ export class PiProviderCatalog {
       };
       this.cached = result;
       this.cachedAt = timestamp;
-      return result;
-    } catch (error) {
-      const result = {
+        return result;
+      } catch (error) {
+        const result = {
         schema_version: "1.0.0",
         status: "unavailable",
         pi_version: null,
@@ -189,10 +213,15 @@ export class PiProviderCatalog {
         error: clippedMessage(error),
         cache: "miss",
       };
-      this.cached = result;
-      this.cachedAt = timestamp;
-      return result;
+        this.cached = result;
+        this.cachedAt = timestamp;
+        return result;
+      }
+    })();
+    try {
+      return await this.inFlight;
+    } finally {
+      this.inFlight = null;
     }
   }
 }
-

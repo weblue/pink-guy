@@ -71,6 +71,12 @@ assert.equal(listCalls, 1, "cached discovery executed Pi again");
 const refreshed = await catalog.discover({ refresh: true });
 assert.equal(refreshed.models.length, 3);
 assert.equal(listCalls, 2, "explicit refresh did not execute Pi");
+const concurrent = await Promise.all([
+  catalog.discover({ refresh: true }),
+  catalog.discover({ refresh: true }),
+]);
+assert.equal(concurrent[1].cache, "shared");
+assert.equal(listCalls, 3, "concurrent discovery was not coalesced");
 
 const unavailable = await new PiProviderCatalog({
   credentialSource: authPath,
@@ -82,11 +88,20 @@ const unavailable = await new PiProviderCatalog({
 assert.equal(unavailable.status, "unavailable");
 assert.equal(unavailable.error.code, "pi_not_found");
 assert(!JSON.stringify(unavailable).includes(canary), "discovery error exposed command detail");
+const malformed = await new PiProviderCatalog({
+  credentialSource: authPath,
+  now: () => new Date("2026-07-19T20:02:00.000Z"),
+  execute: async (_command, args) => args[0] === "--version"
+    ? { stdout: "0.80.9\n", stderr: "" }
+    : { stdout: "diagnostic output with no model table\n", stderr: "" },
+}).discover();
+assert.equal(malformed.status, "unavailable");
+assert.equal(malformed.error.code, "catalog_format_changed");
 
-let apiRefresh = false;
+const apiRefreshCalls = [];
 const providerCatalog = {
   async discover({ refresh = false } = {}) {
-    apiRefresh ||= refresh;
+    apiRefreshCalls.push(refresh);
     return refresh ? refreshed : discovered;
   },
 };
@@ -111,11 +126,13 @@ const base = `http://127.0.0.1:${address.port}`;
 const apiCatalog = await fetch(`${base}/api/provider-catalog`).then((response) => response.json());
 assert.equal(apiCatalog.models.length, 2);
 assert.equal(apiCatalog.configured_routes.default.provider, "boss-man-phase0");
+await fetch(`${base}/api/provider-catalog?refresh=true`);
+assert.deepEqual(apiRefreshCalls, [false, false], "GET query bypassed the provider cache");
 const refreshedApi = await fetch(`${base}/api/provider-catalog/refresh`, {
   method: "POST",
 }).then((response) => response.json());
 assert.equal(refreshedApi.models.length, 3);
-assert.equal(apiRefresh, true);
+assert.equal(apiRefreshCalls.at(-1), true);
 const clientCatalog = await new PinkGuyClient({ api: base }).providerCatalog();
 assert.equal(clientCatalog.models.length, 2);
 
@@ -129,6 +146,11 @@ assert.doesNotMatch(cockpit, /<input id="model-id"/);
 assert.match(cockpit, /Add a subscription or API-key provider through Pi on this host/);
 assert.match(cockpit, /Pink Guy never receives the secret/);
 assert.match(cockpit, /\/api\/provider-catalog\/refresh/);
+const refreshHandler = cockpit.slice(
+  cockpit.indexOf('document.querySelector("#refresh-provider-catalog")'),
+  cockpit.indexOf('document.querySelector("#create-task")'),
+);
+assert.doesNotMatch(refreshHandler, /renderTaskDetail\(\)/);
 
 await authority.close();
 await rm(temporaryRoot, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 # Pink Guy v2 technical design
 
-Status: Direct-Pi foundation; Phase 1 complete; Phase 2 active through P2-3
+Status: Direct-Pi foundation; Phase 1 complete; Phase 2 active through P2-4
 
 Last updated: 2026-07-19
 
@@ -12,7 +12,12 @@ This design is based on the following upstream revisions:
 - [`weblue/inspector-gadget@3df3938`](https://github.com/weblue/inspector-gadget/tree/3df39382ceb147aa411f9c578ef4131fc91912f2)
 - [`earendil-works/pi@v0.80.9`](https://github.com/earendil-works/pi/tree/2d16f92973230a7e095aa984f150ba8702784f50)
 
-The current Pink Guy already has a useful SQLite task graph and event history, an SSE-backed web UI, Docker/Sandcastle execution, and worktree-based runs. Its continuation mechanism starts a fresh harness process from a prompt assembled from a rolling LLM summary, recent turns, tasks, and memories. The raw events remain available, but they are not treated as a portable, versioned session artifact.
+The pre-v2 Pink Guy baseline had a useful SQLite task graph and event history,
+an SSE-backed web UI, Docker/Sandcastle execution, and worktree-based runs. Its
+continuation mechanism started a fresh harness process from a prompt assembled
+from a rolling LLM summary, recent turns, tasks, and memories. The raw events
+remained available, but were not treated as a portable, versioned session
+artifact.
 
 The existing MCP endpoint grants task mutation to the orchestrator while intentionally limiting worker sessions to a read-only prime operation. The v2 problem is therefore not simply “add update”; it is to add server-enforced, capability-scoped worker mutations and audit them.
 

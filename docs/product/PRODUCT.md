@@ -1,8 +1,8 @@
 # Pink Guy v2 product specification
 
-Status: Draft for owner review
+Status: Current product contract; Phase 1 accepted and Phase 2 active
 
-Last updated: 2026-07-17
+Last updated: 2026-07-19
 
 ## Summary
 

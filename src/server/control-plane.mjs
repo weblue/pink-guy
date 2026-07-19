@@ -2252,9 +2252,7 @@ export class DirectControlPlane {
         return json(response, 200, publicModelRoutePolicy(this.modelRoutePolicy));
       }
       if (request.method === "GET" && url.pathname === "/api/provider-catalog") {
-        const catalog = await this.providerCatalog.discover({
-          refresh: url.searchParams.get("refresh") === "true",
-        });
+        const catalog = await this.providerCatalog.discover();
         return json(response, 200, {
           ...catalog,
           configured_routes: publicModelRoutePolicy(this.modelRoutePolicy),

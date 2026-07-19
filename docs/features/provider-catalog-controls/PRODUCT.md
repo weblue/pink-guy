@@ -57,4 +57,3 @@ host.
 - The cockpit contains no provider/model free-text inputs for conversation
   switching or manual phase scheduling.
 - Existing model-switch custody and phase-route provenance remain intact.
-

@@ -1,6 +1,6 @@
 # Deterministic Ready scheduler — technical specification
 
-Status: Implemented; live automatic-release dogfood pending
+Status: Implemented; live automatic-release dogfood passed
 
 Last updated: 2026-07-18
 
