@@ -15,6 +15,11 @@ evidence inspectors, deterministic Ready scheduling, managed
 worktrees/containers, and model-less context custody.
 Authenticated remote access is a later phase.
 
+Phase 2 is now in design, beginning with the
+[execution recovery contract](docs/features/execution-recovery/PRODUCT.md) and
+[delivery map](docs/product/PHASE2-PLAN.md). Runtime behavior remains Phase 1
+until those proposed decisions are approved and implemented.
+
 ## Objectives
 
 - Turn a conversation, repository, or refined work item into observable tasks.

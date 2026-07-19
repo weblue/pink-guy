@@ -559,7 +559,7 @@ failed UI tests.
 - Central multi-project API, exclusive project-orchestrator leases, phase-scoped task runs, localhost runbook, and browser smoke.
 - No application authentication; the runnable listener is loopback-only.
 
-### Phase 1: useful local-first developer cockpit
+### Phase 1: useful local-first developer cockpit — complete
 
 - Project-orchestrator command queue and task-agent scheduling.
 - Multi-project board, task workspace, attention queue, decisions, tests, review, diffs, artifacts, and context inspector.
@@ -569,11 +569,19 @@ failed UI tests.
 
 ### Phase 2: autonomy, recovery, and portability
 
+- Central accepted-execution settlement, mutation fencing, fast failure
+  classification, paused/reconciliation attention, late-evidence recovery, and
+  restart reconciliation.
 - Policy-governed merge/rebase/push, conflict handling, and cleanup.
 - Recovery/resume UX, retention/deletion/quotas, backup/restore, and storage pressure.
 - Provider failure drills and custody-backed switch recovery.
 - Measured concurrency/resource limits on the target Mac.
 - Second clean ARM64 reproduction and migration rehearsal.
+
+The dependency order and exit evidence live in
+[`../product/PHASE2-PLAN.md`](../product/PHASE2-PLAN.md). Execution recovery is
+the blocking first contract because greater autonomy, concurrency, or cleanup
+would amplify the current command/run settlement race.
 
 ### Phase 3: authenticated remote access
 
@@ -584,15 +592,20 @@ failed UI tests.
 
 ## Parallelization
 
-Within Phase 1, cockpit surfaces can proceed against versioned API contracts while one integration owner controls central schema and orchestrator-command changes. Phase 2 reliability work follows the executable local workflow. Phase 3 remote/auth work is deliberately isolated so it does not slow local product iteration.
+P2-1 begins with one integration owner because store migration, execution
+states, daemon protocol, control-plane lifecycle, and the fault probe share one
+authority boundary. After that schema and state machine are green, two bounded
+tracks may use separate worktrees and land in the same recovery PR:
 
-After the foundation and schemas are fixed, three bounded tracks can run in parallel in separate worktrees and land as a coordinated PR series:
+| Track | Suggested worktree/branch | Ownership |
+|---|---|---|
+| Recovery authority | `../worktrees/boss-man-recovery` / `codex/p2-execution-recovery` | Store, API, daemon protocol, fencing, restart reconciliation, late-checkpoint verifier, model-less probe |
+| Recovery surfaces | `../worktrees/boss-man-recovery-ui` / `codex/p2-recovery-ui` | Cockpit and `boss` attention projection, state-aware actions, UI regression coverage after the API contract is fixed |
 
-| Agent role | Mode and worktree | Branch | Ownership and landing |
-|---|---|---|---|
-| Pi context/runtime | Local, `/Users/ND139178/Documents/worktrees/boss-man-pi-runtime` | `codex/bmv2-pi-runtime` | Pi extension, snapshot exporter, RTK ingestion, RPC/ACP adapter tests; lands first after shared schemas |
-| Task/Git policy | Local, `/Users/ND139178/Documents/worktrees/boss-man-task-policy` | `codex/bmv2-task-policy` | task events, capabilities, reviewer workflow, validation and merge policy, host Git service |
-| Cockpit/SWAG | Local, `/Users/ND139178/Documents/worktrees/boss-man-cockpit` | `codex/bmv2-cockpit` | board/task workspace/terminal UI, reverse-proxy deployment, Playwright tests; consumes mocked schemas until runtime lands |
+After P2-1, governed Git integration and retention design may proceed in
+parallel because both consume the settled execution contract. Capacity policy
+waits for measurements; second-host restore is the final integration gate.
+Phase 3 remote/auth remains isolated from these local reliability tracks.
 
 The main integration agent owns schema definitions, migrations, shared generated clients, final merges, and end-to-end validation. Each track avoids editing shared schema files without first messaging the integration agent. Prefer one PR per track followed by a small integration PR rather than three agents committing to one branch.
 

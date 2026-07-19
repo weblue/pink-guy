@@ -187,12 +187,15 @@ The durable evidence manifest is the checked-in claim; a disposable path in a ma
 
 ## Next steps
 
-The executable checklist is
+The active delivery map is
+[`PHASE2-PLAN.md`](PHASE2-PLAN.md). Phase 1 dogfood evidence remains in
 [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
 1. **Make command/run settlement atomic and observable.** A failed command
    must cancel or quarantine its live Pi run, and late checkpoints must enter
    an explicit accept/discard reconciliation flow instead of racing reset.
+   Approve or amend proposed D-047 through D-049, then implement the
+   [execution recovery contract](../features/execution-recovery/PRODUCT.md).
 2. **Finish host-owned Git integration.** Add policy-governed
    merge/rebase/push, conflict handling, and settled worktree cleanup.
 3. **Measure concurrency and pressure.** Replace conservative one-command
@@ -244,10 +247,11 @@ Still open, but assigned to explicit gates rather than blocking current work:
   measure overlapping orchestrator/task provider turns during dogfooding
   before changing the policy.
 - **Recovery UX and reattachment:** the closure smoke proved that command
-  failure can race a still-running Pi session and late checkpoint. Phase 2
-  must define cancellation/quarantine plus explicit late-evidence
-  accept/discard semantics, then decide whether true in-flight process
-  reattachment is worth its operational complexity.
+  failure can race a still-running Pi session and late checkpoint. Proposed
+  D-047 through D-049 define central settlement, mutation fencing, and
+  owner-only late-checkpoint resolution. The first implementation deliberately
+  safe-stops and resumes from custody; true in-flight process reattachment
+  remains optional unless later measurement justifies its complexity.
 - **Optional workspace shell:** D-043 rejects a browser PTY as a Phase 1
   requirement. Add a durable interactive shell only if dogfooding exposes work
   that cannot be performed through Pi RPC, cockpit controls, or tmux/SSH.

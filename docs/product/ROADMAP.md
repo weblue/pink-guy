@@ -115,12 +115,20 @@ direct coding client remains the emergency fallback.
 
 ## Phase 2 — autonomy, recovery, and portability
 
+Status: Designing — execution recovery contract proposed
+
 Purpose: make unattended local operation dependable before adding a public edge.
+
+The delivery order and closure evidence are defined in
+[`PHASE2-PLAN.md`](PHASE2-PLAN.md). The first blocking slice is the proposed
+execution recovery [product contract](../features/execution-recovery/PRODUCT.md)
+and [technical design](../features/execution-recovery/TECH.md).
 
 Scope:
 
 - policy-governed merge/rebase/push, conflict handling, and worktree cleanup;
-- orchestrator restart recovery, paused-session resume, and uncertain-effect resolution UX;
+- central ownership of accepted execution settlement, mutation fencing,
+  paused-session resume, late-evidence resolution, and restart recovery;
 - retention deletion, quotas, backup/restore, encryption expectations, and storage-pressure behavior;
 - provider failure drills and switch recovery across configured direct Pi
   routes;

@@ -10,6 +10,8 @@ and retained history.
 - [Current state](product/CURRENT-STATE.md) — implemented capabilities, stored
   artifacts, known gaps, and the next delivery slices.
 - [Roadmap](product/ROADMAP.md) — canonical phase and exposure sequence.
+- [Phase 2 delivery plan](product/PHASE2-PLAN.md) — recovery-first sequence,
+  dependencies, exit evidence, and deferred work.
 - [Phase 1 dogfood plan](product/DOGFOOD-PLAN.md) — entry gates, two real-work
   scenarios, evidence, and explicit non-requirements.
 - [Decision log](architecture/DECISIONS.md) — owner-approved, proposed, and
@@ -45,6 +47,12 @@ model-less automatic test/review continuation, workspace inspector, and
 observer baseline and deterministic initial Ready dispatch. A live
 orchestrator-release task passed implementation, fixed-revision validation,
 independent review, and completion, so Phase 1 is complete.
+
+## Proposed Phase 2 feature contracts
+
+- [Execution recovery and late evidence](features/execution-recovery/) —
+  central accepted-execution settlement, mutation fencing, paused/recovery
+  states, and owner-governed checkpoint recovery.
 
 ## Adoption checkpoints
 
