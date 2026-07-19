@@ -115,7 +115,7 @@ direct coding client remains the emergency fallback.
 
 ## Phase 2 — autonomy, recovery, and portability
 
-Status: Active — P2-1 through P2-3 implemented; P2-4 calibration next
+Status: Active — P2-1 through P2-3 merged; P2-4 calibration in progress
 
 Purpose: make unattended local operation dependable before adding a public edge.
 

@@ -2,7 +2,7 @@
 
 Status: Active decision log
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 This file separates owner direction, accepted working decisions, technical hypotheses that require spikes, and the remaining implementation questions.
 
@@ -60,6 +60,7 @@ This file separates owner direction, accepted working decisions, technical hypot
 | D-053 | Completing Phase 2 starts a sustained Phase 2D dogfood gate before Pink Guy replaces Codex as the default coding environment. Long-turn parity, multi-repository work, recovery drills, and direct-client escape frequency determine adoption. | Direction given | Requested by the owner on 2026-07-19. Feature completion alone does not prove the Codex-like long-turn experience that motivates the platform. |
 | D-054 | Keep P2-5 to a model-less continuity export and isolated same-host restore first; defer cloud backup, encryption scheduling, and a second physical host until the format and need are proven. | Accepted | Approved by the owner on 2026-07-19. Produces real portability/backup value beyond Codex sync without turning Phase 2 into a general backup product. |
 | D-055 | Run a dogfood-informed UX review after the Phase 2D evidence window and before the full-time switch. Begin with an owner interview and a mockup built from the existing cockpit; prioritize observed friction instead of replacing the established information architecture speculatively. | Direction given | The owner reports orchestrator-chat scroll bouncebacks, populated regions that grow/scroll indefinitely, and high information density with unclear meaning. Dogfood will expose frequency and context before redesign decisions harden. |
+| D-056 | Pink Guy discovers available providers/models through the configured Pi installation and exposes provider authentication as an explicit host-TTY `/login` handoff. The cockpit does not accept raw OAuth tokens or API keys; it shows non-secret auth metadata, the exact cmux/tmux/SSH command, and a catalog refresh action. | Validated Phase 2 decision | Requested during P2-4 on 2026-07-19. This removes model-name memorization and makes provider setup discoverable without creating a second browser credential store or expanding Pink Guy's secret-custody boundary. |
 
 ## Recorded deployment assumptions
 

@@ -238,8 +238,8 @@
       <details>
         <summary id="model-route-summary">Conversation model</summary>
         <form id="model-route-form" class="controls" data-testid="model-route-editor">
-          <input id="model-provider" required maxlength="200" placeholder="Provider" aria-label="Provider">
-          <input id="model-id" required maxlength="500" placeholder="Model ID" aria-label="Model ID">
+          <select id="model-provider" required aria-label="Provider"></select>
+          <select id="model-id" required aria-label="Model"></select>
           <select id="model-thinking" aria-label="Thinking level">
             <option>off</option><option>minimal</option><option>low</option>
             <option>medium</option><option>high</option><option>xhigh</option>
@@ -317,6 +317,17 @@
       <h2>Storage</h2>
       <div id="storage-inventory"></div>
     </section>
+    <details class="panel" data-testid="provider-catalog">
+      <summary>Models + provider authentication</summary>
+      <div id="provider-catalog-summary"></div>
+      <p class="muted">Add a subscription or API-key provider through Pi on this host. Pink Guy never receives the secret.</p>
+      <code id="provider-auth-command"></code>
+      <div class="controls">
+        <button id="copy-provider-auth" type="button" class="secondary">Copy TTY command</button>
+        <button id="refresh-provider-catalog" type="button">Refresh models</button>
+      </div>
+      <div id="provider-catalog-status" class="status muted" aria-live="polite"></div>
+    </details>
     <section class="panel">
       <h2>Session attach</h2>
       <p>Browser and terminal use the same durable Pi conversation.</p>
@@ -350,6 +361,7 @@
     leases: [],
     promptProfiles: [],
     modelRoutes: null,
+    providerCatalog: null,
     selectedPromptProfileKey: "orchestrator",
     custodySnapshots: [],
     recoveryAttention: [],
@@ -394,6 +406,97 @@
     target.textContent = message;
     target.className = "status " + (error ? "error" : "good");
   };
+
+  const providerCatalogStatus = (message, error = false) => {
+    const target = document.querySelector("#provider-catalog-status");
+    target.textContent = message;
+    target.className = "status " + (error ? "error" : "good");
+  };
+
+  function catalogProviders(currentProvider = null) {
+    return [...new Set([
+      ...(app.providerCatalog?.providers || []).map((provider) => provider.id),
+      ...(app.providerCatalog?.models || []).map((model) => model.provider),
+      ...(currentProvider ? [currentProvider] : []),
+    ])].filter(Boolean).sort();
+  }
+
+  function catalogModels(provider) {
+    return (app.providerCatalog?.models || []).filter((model) => model.provider === provider);
+  }
+
+  function providerOptions(currentProvider) {
+    return catalogProviders(currentProvider).map((provider) =>
+      "<option value=\"" + esc(provider) + "\"" + (provider === currentProvider ? " selected" : "") + ">"
+      + esc(provider) + "</option>"
+    ).join("");
+  }
+
+  function modelOptions(provider, currentModel = null) {
+    const models = catalogModels(provider);
+    const ids = new Set(models.map((model) => model.id));
+    const options = models.map((model) =>
+      "<option value=\"" + esc(model.id) + "\"" + (model.id === currentModel ? " selected" : "") + ">"
+      + esc(model.id) + " · " + esc(model.context_window) + " context"
+      + (model.supports_thinking ? " · thinking" : "") + "</option>"
+    );
+    if (currentModel && !ids.has(currentModel)) {
+      options.unshift("<option value=\"" + esc(currentModel) + "\" selected>"
+        + esc(currentModel) + " · current, availability unverified</option>");
+    }
+    return options.join("");
+  }
+
+  function setModelPicker(providerElement, modelElement, provider, model) {
+    providerElement.innerHTML = providerOptions(provider);
+    providerElement.value = provider;
+    modelElement.innerHTML = modelOptions(provider, model);
+    modelElement.value = model;
+  }
+
+  function syncThinkingForModel(providerElement, modelElement, thinkingElement) {
+    const selected = catalogModels(providerElement.value)
+      .find((model) => model.id === modelElement.value);
+    const unsupported = selected && !selected.supports_thinking;
+    if (unsupported) thinkingElement.value = "off";
+    thinkingElement.disabled = Boolean(unsupported);
+    thinkingElement.title = unsupported
+      ? "This Pi model does not support thinking levels."
+      : "";
+  }
+
+  function renderProviderCatalog() {
+    const catalog = app.providerCatalog;
+    const target = document.querySelector("#provider-catalog-summary");
+    const command = document.querySelector("#provider-auth-command");
+    if (!catalog) {
+      target.innerHTML = "<p class=\"muted\">Model discovery has not run.</p>";
+      command.textContent = "pi";
+      return;
+    }
+    const authTypes = Object.fromEntries(
+      (catalog.authenticated_providers || []).map((provider) => [provider.provider, provider.auth_type])
+    );
+    target.innerHTML = (catalog.providers || []).map((provider) =>
+      row(
+        provider.id,
+        provider.model_count + " models · "
+          + (authTypes[provider.id] || provider.auth_type || "ambient/custom authentication")
+      )
+    ).join("") || "<p class=\"muted\">No authenticated Pi models were discovered.</p>";
+    command.textContent = (catalog.authentication?.command || "pi") + "\n/login";
+    if (catalog.status === "unavailable") {
+      providerCatalogStatus(catalog.error?.message
+        + " Open the host TTY, authenticate with /login, then refresh.", true);
+    } else if (catalog.status === "empty") {
+      providerCatalogStatus("Pi returned no configured models. Use /login in the host TTY, then refresh.", true);
+    } else {
+      providerCatalogStatus(
+        catalog.models.length + " models discovered with Pi "
+        + (catalog.pi_version || "unknown version") + "."
+      );
+    }
+  }
 
   function renderPromptProfiles() {
     const select = document.querySelector("#agent-prompt-profile");
@@ -631,10 +734,10 @@
     const phaseControls = (workspace?.allowed_phases || []).length
       ? "<div class=\"controls\"><select id=\"schedule-task-phase\">"
         + workspace.allowed_phases.map((phase) => "<option>" + esc(phase) + "</option>").join("")
-        + "</select><input id=\"schedule-model-provider\" aria-label=\"Task provider\" value=\""
-        + esc(defaultRoute?.provider || "") + "\" placeholder=\"Provider\">"
-        + "<input id=\"schedule-model-id\" aria-label=\"Task model\" value=\""
-        + esc(defaultRoute?.model || "") + "\" placeholder=\"Model\">"
+        + "</select><select id=\"schedule-model-provider\" aria-label=\"Task provider\">"
+        + providerOptions(defaultRoute?.provider || "") + "</select>"
+        + "<select id=\"schedule-model-id\" aria-label=\"Task model\">"
+        + modelOptions(defaultRoute?.provider || "", defaultRoute?.model || "") + "</select>"
         + "<select id=\"schedule-model-thinking\" aria-label=\"Task thinking level\">"
         + ["off", "minimal", "low", "medium", "high", "xhigh"].map((thinking) =>
           "<option" + (thinking === defaultRoute?.thinking ? " selected" : "") + ">" + thinking + "</option>"
@@ -775,6 +878,14 @@
       + "<h3>Phase timeline and workspaces</h3>" + runs
       + "<h3>Source snapshots</h3>" + sources
       + "<h3>Recent activity</h3>" + activity;
+    const taskProvider = document.querySelector("#schedule-model-provider");
+    if (taskProvider) {
+      syncThinkingForModel(
+        taskProvider,
+        document.querySelector("#schedule-model-id"),
+        document.querySelector("#schedule-model-thinking"),
+      );
+    }
   }
 
   async function loadTask(taskId) {
@@ -821,11 +932,22 @@
       + detail.conversation.model_id + " · " + detail.conversation.thinking_level
       + " · v" + detail.conversation.version;
     const modelForm = document.querySelector("#model-route-form");
-    if (modelForm.dataset.version !== String(detail.conversation.version)) {
-      document.querySelector("#model-provider").value = detail.conversation.model_provider;
-      document.querySelector("#model-id").value = detail.conversation.model_id;
+    const modelFormIdentity = detail.conversation.version + ":"
+      + (app.providerCatalog?.discovered_at || "no-catalog");
+    if (modelForm.dataset.version !== modelFormIdentity) {
+      setModelPicker(
+        document.querySelector("#model-provider"),
+        document.querySelector("#model-id"),
+        detail.conversation.model_provider,
+        detail.conversation.model_id,
+      );
       document.querySelector("#model-thinking").value = detail.conversation.thinking_level;
-      modelForm.dataset.version = String(detail.conversation.version);
+      syncThinkingForModel(
+        document.querySelector("#model-provider"),
+        document.querySelector("#model-id"),
+        document.querySelector("#model-thinking"),
+      );
+      modelForm.dataset.version = modelFormIdentity;
     }
     document.querySelector("#workspace-terminal").textContent =
       "npm run pink -- chat --topic " + detail.topic.id;
@@ -910,7 +1032,7 @@
   }
 
   async function refresh() {
-    const [projects, topics, orchestrators, leases, sessions, board, commands, promptProfiles, modelRoutes, recovery, integrations, storage] = await Promise.all([
+    const [projects, topics, orchestrators, leases, sessions, board, commands, promptProfiles, modelRoutes, providerCatalog, recovery, integrations, storage] = await Promise.all([
       request("/api/projects"),
       request("/api/topics"),
       request("/api/orchestrators"),
@@ -920,6 +1042,7 @@
       request("/api/commands?limit=20"),
       request("/api/agent-profiles"),
       request("/api/model-routes"),
+      request("/api/provider-catalog"),
       request("/api/recovery/attention"),
       request("/api/integrations/attention"),
       request("/api/storage"),
@@ -938,6 +1061,7 @@
     app.board = board;
     app.promptProfiles = promptProfiles.profiles;
     app.modelRoutes = modelRoutes;
+    app.providerCatalog = providerCatalog;
     app.recoveryAttention = recovery.attention;
     app.integrationAttention = integrations.attention;
     app.gitPolicies = Object.fromEntries(policies.map((result) => [
@@ -950,6 +1074,7 @@
     renderTopics();
     renderBoard();
     renderPromptProfiles();
+    renderProviderCatalog();
     renderRecoveryAttention();
     renderStorage();
     document.querySelector("#orchestrators").innerHTML = renderOrchestratorLeasesPanel({
@@ -1271,6 +1396,47 @@
     }
   });
 
+  document.querySelector("#model-provider").addEventListener("change", (event) => {
+    const models = catalogModels(event.target.value);
+    const model = document.querySelector("#model-id");
+    model.innerHTML = modelOptions(event.target.value, models[0]?.id || null);
+    syncThinkingForModel(event.target, model, document.querySelector("#model-thinking"));
+  });
+
+  document.querySelector("#model-id").addEventListener("change", () => {
+    syncThinkingForModel(
+      document.querySelector("#model-provider"),
+      document.querySelector("#model-id"),
+      document.querySelector("#model-thinking"),
+    );
+  });
+
+  document.querySelector("#copy-provider-auth").addEventListener("click", async () => {
+    const value = document.querySelector("#provider-auth-command").textContent;
+    try {
+      await navigator.clipboard.writeText(value);
+      providerCatalogStatus("TTY authentication command copied.");
+    } catch {
+      providerCatalogStatus("Copy was unavailable; select the command above.", true);
+    }
+  });
+
+  document.querySelector("#refresh-provider-catalog").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      app.providerCatalog = await request("/api/provider-catalog/refresh", { method: "POST" });
+      renderProviderCatalog();
+      document.querySelector("#model-route-form").dataset.version = "";
+      if (app.topicDetail) renderWorkspace();
+      renderTaskDetail();
+    } catch (error) {
+      providerCatalogStatus(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   document.querySelector("#create-task").addEventListener("submit", async (event) => {
     event.preventDefault();
     const button = event.submitter;
@@ -1370,12 +1536,43 @@
   });
 
   document.querySelector("#task-detail").addEventListener("change", (event) => {
-    if (event.target.id !== "schedule-task-phase") return;
-    const route = app.modelRoutes?.phases?.[event.target.value];
-    if (!route) return;
-    document.querySelector("#schedule-model-provider").value = route.provider;
-    document.querySelector("#schedule-model-id").value = route.model;
-    document.querySelector("#schedule-model-thinking").value = route.thinking;
+    if (event.target.id === "schedule-model-provider") {
+      const models = catalogModels(event.target.value);
+      document.querySelector("#schedule-model-id").innerHTML = modelOptions(
+        event.target.value,
+        models[0]?.id || null,
+      );
+      syncThinkingForModel(
+        event.target,
+        document.querySelector("#schedule-model-id"),
+        document.querySelector("#schedule-model-thinking"),
+      );
+      return;
+    }
+    if (event.target.id === "schedule-model-id") {
+      syncThinkingForModel(
+        document.querySelector("#schedule-model-provider"),
+        event.target,
+        document.querySelector("#schedule-model-thinking"),
+      );
+      return;
+    }
+    if (event.target.id === "schedule-task-phase") {
+      const route = app.modelRoutes?.phases?.[event.target.value];
+      if (!route) return;
+      setModelPicker(
+        document.querySelector("#schedule-model-provider"),
+        document.querySelector("#schedule-model-id"),
+        route.provider,
+        route.model,
+      );
+      document.querySelector("#schedule-model-thinking").value = route.thinking;
+      syncThinkingForModel(
+        document.querySelector("#schedule-model-provider"),
+        document.querySelector("#schedule-model-id"),
+        document.querySelector("#schedule-model-thinking"),
+      );
+    }
   });
 
   document.querySelector("#task-detail").addEventListener("click", async (event) => {

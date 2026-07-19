@@ -1,6 +1,6 @@
 # Phase 2 closure and adoption plan
 
-Status: Active — execute after PR #17 merges
+Status: Active — PR #17 merged; P2-4 in progress
 
 Last updated: 2026-07-19
 
@@ -13,11 +13,11 @@ order, evidence, and stop conditions for closure, dogfood, and UX acceptance.
 
 ## Current gate
 
-[PR #17](https://github.com/weblue/pink-guy/pull/17) contains P2-1 execution
-recovery, P2-2 governed Git, P2-3 runtime retention, and their documentation.
-Merge it before collecting calibration or dogfood evidence so results refer to
-one mainline revision. Then update the local checkout, run `npm test`, start
-the normal loopback stack, and retain the tested revision in the evidence log.
+[PR #17](https://github.com/weblue/pink-guy/pull/17) is merged. P2-4 began from
+merge revision `760b43d`. Its first increment adds Pi-backed model discovery,
+provider/model selectors, non-secret authentication state, and a host-TTY
+`/login` handoff. Capacity/resource measurement and the remaining live
+side-effect drills are next.
 
 ## 1. Close P2-4 — measured operating policy
 

@@ -54,8 +54,7 @@ independent review, and completion, so Phase 1 is complete.
 
 ## Active Phase 2 features
 
-These features are implemented on the current Phase 2 branch and await merge
-in [PR #17](https://github.com/weblue/pink-guy/pull/17).
+These features are merged on `main`.
 
 - [Execution recovery and late evidence](features/execution-recovery/) —
   central accepted-execution settlement, mutation fencing, paused/recovery
@@ -67,6 +66,9 @@ in [PR #17](https://github.com/weblue/pink-guy/pull/17).
 - [Runtime retention](features/runtime-retention/) — retention holds, safe
   worktree/container cleanup, session deletion manifests/tombstones, storage
   inventory, and hard-pressure dispatch blocking are implemented.
+- [Provider catalog and authentication guidance](features/provider-catalog-controls/)
+  — the first P2-4 increment discovers Pi models, replaces model-ID text
+  fields with selectors, and exposes a secret-safe host-TTY `/login` handoff.
 
 ## Adoption checkpoints
 

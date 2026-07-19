@@ -15,9 +15,8 @@ evidence inspectors, deterministic Ready scheduling, managed
 worktrees/containers, and model-less context custody.
 Authenticated remote access is a later phase.
 
-Phase 2 is active. P2-1 through P2-3 are implemented on the current Phase 2
-branch and are awaiting merge in
-[PR #17](https://github.com/weblue/pink-guy/pull/17). Recovery now provides
+Phase 2 is active. P2-1 through P2-3 are merged and P2-4 calibration is in
+progress. Recovery now provides
 durable command execution identity, central asynchronous settlement, mutation
 fencing, restart reconciliation, explicit pause/retry/cancel actions, and
 owner-only late-checkpoint recovery. Governed Git adds prepare-only defaults,
@@ -137,6 +136,8 @@ npm run pink -- hold --project PROJECT_ID --scope-type task \
 npm run pink -- delete-session --session SESSION_ID
 npm run pink -- bind --topic TOPIC_ID --project PROJECT_ID
 npm run pink -- profiles
+npm run pink -- models
+npm run pink -- models --refresh
 ```
 
 A practical cmux layout is one central-API pane, one orchestrator pane per
@@ -185,6 +186,12 @@ List models available to the authenticated Pi installation:
 ```sh
 pi --list-models
 ```
+
+The cockpit and `pink models` discover this catalog directly through Pi.
+Provider and model choices are dropdowns; they do not require memorizing model
+IDs. To add a subscription or API-key provider, expand **Models + provider
+authentication** in the cockpit and follow its copyable host-TTY `/login`
+instructions. Pink Guy never accepts or stores the secret through the browser.
 
 A local model uses the same provider/model fields when it is exposed by the
 configured Pi installation; Pink Guy does not require a separate routing

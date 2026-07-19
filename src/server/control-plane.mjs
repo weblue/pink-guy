@@ -17,6 +17,7 @@ import {
   resolveModelRoute,
 } from "./model-routes.mjs";
 import { composeAgentSystemPrompt, phaseKickoffPrompt } from "./prompt-profiles.mjs";
+import { PiProviderCatalog } from "./provider-catalog.mjs";
 import { PiRpcProcess, WorkspaceShell } from "./rpc.mjs";
 import {
   canonicalSha256,
@@ -243,6 +244,7 @@ export class DirectControlPlane {
     faultInjector = async () => undefined, enforceOrchestratorLease = false,
     schedulerProjectCapacity = 1, schedulerGlobalCapacity = 1,
     storageWarningBytes = null, storageHardBytes = null,
+    providerCatalog = null,
   }) {
     this.store = new Phase0Store(databasePath);
     this.stateRoot = stateRoot;
@@ -271,6 +273,10 @@ export class DirectControlPlane {
       ? configuredWarning : null;
     this.storageHardBytes = Number.isFinite(configuredHard) && configuredHard > 0
       ? configuredHard : null;
+    this.providerCatalog = providerCatalog ?? new PiProviderCatalog({
+      credentialSource: credentialProfile?.sourcePath ?? null,
+      environment,
+    });
     this.credentialVault = new RunCredentialVault({ stateRoot, profile: credentialProfile });
     this.gitServices = new Map();
     this.git = fixturePath ? this.gitService(fixturePath) : null;
@@ -2244,6 +2250,22 @@ export class DirectControlPlane {
       }
       if (request.method === "GET" && url.pathname === "/api/model-routes") {
         return json(response, 200, publicModelRoutePolicy(this.modelRoutePolicy));
+      }
+      if (request.method === "GET" && url.pathname === "/api/provider-catalog") {
+        const catalog = await this.providerCatalog.discover({
+          refresh: url.searchParams.get("refresh") === "true",
+        });
+        return json(response, 200, {
+          ...catalog,
+          configured_routes: publicModelRoutePolicy(this.modelRoutePolicy),
+        });
+      }
+      if (request.method === "POST" && url.pathname === "/api/provider-catalog/refresh") {
+        this.assertLocalOwnerProfile();
+        return json(response, 200, {
+          ...await this.providerCatalog.discover({ refresh: true }),
+          configured_routes: publicModelRoutePolicy(this.modelRoutePolicy),
+        });
       }
       const agentPromptProfile = url.pathname.match(/^\/api\/agent-profiles\/([^/]+)$/);
       if (request.method === "GET" && agentPromptProfile) {

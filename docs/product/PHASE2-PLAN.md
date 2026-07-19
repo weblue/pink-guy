@@ -1,6 +1,6 @@
 # Phase 2 delivery plan
 
-Status: Active — P2-1 through P2-3 implemented in PR #17; P2-4 calibration next
+Status: Active — P2-1 through P2-3 merged; P2-4 calibration in progress
 
 Last updated: 2026-07-19
 
@@ -150,6 +150,17 @@ Implemented behavior:
 ## P2-4 — capacity, credentials, and providers
 
 Start with measurement, not optimistic limits:
+
+The first increment is implemented on the active P2-4 branch:
+
+- discover the authenticated model catalog through `pi --list-models`;
+- expose non-secret provider/authentication metadata;
+- replace conversation and manual phase provider/model text fields with
+  catalog selectors;
+- hand provider authentication to Pi's host-TTY `/login` flow and refresh the
+  catalog without restarting Pink Guy;
+- retain automatic dispatch's configured-route boundary and serialized OAuth
+  default.
 
 - record per-run peak RSS/CPU, container count, disk growth, duration, model
   route, provider wait/failure class, and OAuth/API-key/local-route class;

@@ -198,6 +198,12 @@ Known hypotheses—not yet accepted redesign requirements—are:
 - task, execution, evidence, Git, retention, and recovery details compete for
   attention without enough explanation or progressive disclosure.
 
+The P2-4 model-selector observation is resolved ahead of Phase 2D because it
+directly blocked ordinary use: conversation and manual phase model fields now
+use Pi-discovered provider/model selectors. The same surface explains how to
+run Pi `/login` in a host TTY for subscription or API-key authentication and
+refresh the catalog. Raw secrets are never entered into the cockpit.
+
 The executable evidence and interview sequence live in
 [`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md). Phase 2U begins with an owner
 interview, produces a mockup based on the existing cockpit, and requires owner

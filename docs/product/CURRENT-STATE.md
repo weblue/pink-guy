@@ -1,6 +1,6 @@
 # Pink Guy v2 current state
 
-Status: Phase 2 active — P2-1 through P2-3 implemented in PR #17
+Status: Phase 2 active — P2-1 through P2-3 merged; P2-4 in progress
 
 Last updated: 2026-07-19
 
@@ -200,22 +200,20 @@ The active delivery map is
 sequence is [`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md). Phase 1 dogfood evidence
 remains in [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
-1. **Merge PR #17 and verify main.** Run the complete model-less suite and
-   local cockpit smoke against one recorded mainline revision.
-2. **Calibrate P2-4 together.** Measure host, Docker, provider, credential, and
+1. **Calibrate P2-4 together.** Measure host, Docker, provider, credential, and
    local-model behavior before changing concurrency/fallback policy.
-3. **Run the remaining live side-effect drills.** Exercise one explicitly authorized
+2. **Run the remaining live side-effect drills.** Exercise one explicitly authorized
    normal push or pull-request publication without widening default policy.
    Verify cleanup against a settled disposable Docker task.
-4. **Build the bounded P2-5 continuity proof.** Export and restore into an
+3. **Build the bounded P2-5 continuity proof.** Export and restore into an
    isolated state root on this Mac, excluding credentials and containers.
-5. **Enter Phase 2D dogfood.** Exercise long conversations and at least ten
+4. **Enter Phase 2D dogfood.** Exercise long conversations and at least ten
    tasks across multiple repositories while logging every direct-client exit
    and recurring UX friction.
-6. **Run Phase 2U UX review.** Interview the owner, mock up changes from the
+5. **Run Phase 2U UX review.** Interview the owner, mock up changes from the
    existing cockpit, and fix accepted high-frequency scrolling,
    comprehension, and navigation problems.
-7. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
+6. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
    configured password verifier or API-key hash after the local product is
    mature.
 

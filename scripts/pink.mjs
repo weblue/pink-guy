@@ -16,6 +16,7 @@ function usage(message) {
   pink status [--api URL] [--json]
   pink topics [--api URL] [--json]
   pink profiles [--api URL] [--json]
+  pink models [--refresh] [--api URL] [--json]
   pink profile --key KEY [--prompt TEXT | --prompt-file PATH]
     [--expected-version N] [--api URL] [--json]
   pink model --topic ID --provider PROVIDER --model MODEL_ID --thinking LEVEL
@@ -59,7 +60,7 @@ function parseArguments(argv) {
   if (command === "--help" || command === "-h") usage();
   if (
     !command
-    || !["status", "topics", "profiles", "profile", "model", "bind", "import", "delete-project", "dispatch", "attention", "recover", "candidate", "git-policy", "integrate", "storage", "cleanup", "hold", "delete-session", "chat"].includes(command)
+    || !["status", "topics", "profiles", "models", "profile", "model", "bind", "import", "delete-project", "dispatch", "attention", "recover", "candidate", "git-policy", "integrate", "storage", "cleanup", "hold", "delete-session", "chat"].includes(command)
   ) {
     usage(command ? `unknown command: ${command}` : null);
   }
@@ -110,6 +111,7 @@ function parseArguments(argv) {
     else if (argument === "--allow-push") options.allowPush = true;
     else if (argument === "--allow-pr") options.allowPullRequest = true;
     else if (argument === "--execute") options.execute = true;
+    else if (argument === "--refresh") options.refresh = true;
     else if (argument === "--no-wait") options.noWait = true;
     else if (argument === "--poll-ms") options.pollMs = Number(value());
     else if (argument === "--timeout-seconds") options.timeoutMs = Number(value()) * 1_000;
@@ -242,6 +244,33 @@ function writeProfiles(profiles) {
       + ` · ${profile.prompt_sha256.slice(0, 12)}…\n`,
     );
   }
+}
+
+function writeModels(catalog) {
+  if (catalog.status !== "available") {
+    process.stdout.write(
+      `Model catalog: ${catalog.status}\n`
+      + `${catalog.error?.message || "No configured models were discovered."}\n`,
+    );
+  }
+  for (const provider of catalog.providers) {
+    process.stdout.write(
+      `${provider.id} · ${provider.model_count} models · ${provider.auth_type}\n`,
+    );
+    for (const model of catalog.models.filter((item) => item.provider === provider.id)) {
+      process.stdout.write(
+        `  ${model.id} · ${model.context_window} context · ${model.max_output} max output`
+        + `${model.supports_thinking ? " · thinking" : ""}`
+        + `${model.supports_images ? " · images" : ""}\n`,
+      );
+    }
+  }
+  process.stdout.write(
+    `\nTo add a subscription or API-key provider on the Pink Guy host:\n`
+    + `  ${catalog.authentication.command}\n`
+    + "  /login\n"
+    + "Then run: npm run pink -- models --refresh\n",
+  );
 }
 
 function writeProfile(profile) {
@@ -760,6 +789,10 @@ try {
     const profiles = await client.agentProfiles();
     if (options.json) writeJson({ profiles });
     else writeProfiles(profiles);
+  } else if (options.command === "models") {
+    const catalog = await client.providerCatalog({ refresh: Boolean(options.refresh) });
+    if (options.json) writeJson(catalog);
+    else writeModels(catalog);
   } else if (options.command === "profile") {
     await runProfile(client, options);
   } else if (options.command === "model") {
