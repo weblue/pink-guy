@@ -2,7 +2,7 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width">
-<title>Boss Man cockpit</title>
+<title>Pink Guy cockpit</title>
 <style>
   :root {
     color-scheme: dark;
@@ -168,7 +168,7 @@
   }
 </style>
 <header>
-  <div><h1>Boss Man <span class="tag">Phase 1 local cockpit</span></h1></div>
+  <div><h1>Pink Guy <span class="tag">Phase 2 local cockpit</span></h1></div>
   <span class="warn">localhost only · no auth in local smoke profile</span>
 </header>
 <main>
@@ -246,7 +246,7 @@
           </select>
           <button type="submit">Snapshot + switch</button>
         </form>
-        <p class="muted">Boss Man verifies a model-less custody snapshot, then restarts the durable Pi session before the next turn.</p>
+        <p class="muted">Pink Guy verifies a model-less custody snapshot, then restarts the durable Pi session before the next turn.</p>
         <div id="model-route-status" class="status muted" aria-live="polite"></div>
       </details>
       <details id="topic-bind-panel">
@@ -255,7 +255,7 @@
           <select id="topic-bind-project" required aria-label="Project for topic"></select>
           <button type="submit">Snapshot + transfer</button>
         </form>
-        <p class="muted">Boss Man verifies a model-less custody bundle before the project orchestrator resumes the same native Pi session.</p>
+        <p class="muted">Pink Guy verifies a model-less custody bundle before the project orchestrator resumes the same native Pi session.</p>
       </details>
       <details id="source-snapshot-panel">
         <summary>Attach source snapshot</summary>
@@ -265,7 +265,7 @@
           <textarea id="source-content" required maxlength="50000" placeholder="Immutable work-item or request snapshot"></textarea>
           <button type="submit">Attach to project</button>
         </form>
-        <p class="muted">Snapshots are read-only context. Boss Man does not synchronize or write back to the source system.</p>
+        <p class="muted">Snapshots are read-only context. Pink Guy does not synchronize or write back to the source system.</p>
       </details>
       <div id="conversation" class="conversation" data-testid="conversation-stream"></div>
       <form id="conversation-form" class="composer" data-testid="conversation-form">
@@ -309,6 +309,14 @@
       <h2>Recent commands</h2>
       <div id="commands"></div>
     </section>
+    <section class="panel" data-testid="recovery-attention">
+      <h2>Execution + Git attention</h2>
+      <div id="recovery-attention"></div>
+    </section>
+    <section class="panel" data-testid="storage-inventory">
+      <h2>Storage</h2>
+      <div id="storage-inventory"></div>
+    </section>
     <section class="panel">
       <h2>Session attach</h2>
       <p>Browser and terminal use the same durable Pi conversation.</p>
@@ -344,6 +352,11 @@
     modelRoutes: null,
     selectedPromptProfileKey: "orchestrator",
     custodySnapshots: [],
+    recoveryAttention: [],
+    integrationAttention: [],
+    gitPolicies: {},
+    retentionHolds: [],
+    storage: null,
     selectedTask: null,
     selectedTaskWorkspace: null,
     poll: null,
@@ -405,13 +418,101 @@
       : "No prompt profiles loaded.";
   }
 
+  function renderRecoveryAttention() {
+    const target = document.querySelector("#recovery-attention");
+    const executions = app.recoveryAttention.map((item) => {
+      const execution = item.execution;
+      const actions = item.allowed_actions.map((action) =>
+        "<button " + (["stop", "cancel"].includes(action) ? "class=\"secondary\" " : "")
+        + "data-execution-action=\"" + esc(action) + "\" data-execution-id=\""
+        + esc(execution.id) + "\" data-execution-version=\"" + esc(execution.version) + "\">"
+        + esc(action.replaceAll("_", " ")) + "</button>"
+      ).join("");
+      const candidates = item.recovery_candidates.map((candidate) =>
+        "<div class=\"row\"><strong>Late checkpoint · " + esc(candidate.state) + "</strong>"
+        + "<div class=\"muted\">" + esc(candidate.revision.slice(0, 12)) + " from "
+        + esc(candidate.base_revision.slice(0, 12)) + "</div>"
+        + (candidate.state === "pending"
+          ? "<div class=\"controls\"><button data-candidate-action=\"accept\" data-candidate-id=\""
+            + esc(candidate.id) + "\" data-candidate-version=\"" + esc(candidate.version)
+            + "\">Accept + retest</button><button class=\"secondary\" data-candidate-action=\"reject\" "
+            + "data-candidate-id=\"" + esc(candidate.id) + "\" data-candidate-version=\""
+            + esc(candidate.version) + "\">Reject</button></div>"
+          : "")
+        + "</div>"
+      ).join("");
+      return "<div class=\"row\"><strong>" + esc(item.task?.title || execution.task_id)
+        + "</strong><div><span class=\"state\">" + esc(execution.state.replaceAll("_", " "))
+        + "</span> · " + esc(execution.phase) + "</div>"
+        + "<div class=\"muted\">execution " + esc(execution.id) + " · last activity "
+        + esc(execution.last_activity_at) + (execution.failure_class
+          ? " · " + esc(execution.failure_class.replaceAll("_", " ")) : "") + "</div>"
+        + (item.uncertain_side_effects.length
+          ? "<div class=\"error\">" + esc(item.uncertain_side_effects.length)
+            + " uncertain side effect(s)</div>" : "")
+        + (actions ? "<div class=\"controls\">" + actions + "</div>" : "")
+        + candidates + "</div>";
+    }).join("");
+    const integrations = app.integrationAttention.map((item) => {
+      const integration = item.integration;
+      const actions = item.allowed_actions.map((action) =>
+        "<button class=\"secondary\" data-integration-action=\"" + esc(action)
+        + "\" data-integration-id=\"" + esc(integration.id)
+        + "\" data-integration-version=\"" + esc(integration.version) + "\">"
+        + esc(action) + "</button>"
+      ).join("");
+      return "<div class=\"row\"><strong>" + esc(item.task?.title || integration.task_id)
+        + "</strong><div><span class=\"state\">Git "
+        + esc(integration.state.replaceAll("_", " ")) + "</span> · "
+        + esc(integration.history_policy.replaceAll("_", " ")) + "</div>"
+        + "<div class=\"muted\">" + esc(integration.target_branch) + "@"
+        + esc(integration.target_revision.slice(0, 12)) + " · " + esc(integration.id) + "</div>"
+        + (integration.failure
+          ? "<div class=\"error\">" + esc(integration.failure.message || integration.failure.code) + "</div>"
+          : "")
+        + (item.gate_evaluation?.reasons?.length
+          ? "<div class=\"error\">Current blockers · "
+            + esc(item.gate_evaluation.reasons.join(", ").replaceAll("_", " ")) + "</div>"
+          : "")
+        + "<div class=\"muted\">" + esc(item.action_receipts?.length || 0)
+        + " accepted action receipt(s)</div>"
+        + (actions ? "<div class=\"controls\">" + actions + "</div>" : "") + "</div>";
+    }).join("");
+    target.innerHTML = executions + integrations
+      || "<p class=\"muted\">No execution or Git integration requires attention.</p>";
+  }
+
+  function renderStorage() {
+    const target = document.querySelector("#storage-inventory");
+    const inventory = app.storage;
+    if (!inventory) {
+      target.innerHTML = "<p class=\"muted\">Storage inventory unavailable.</p>";
+      return;
+    }
+    const categories = Object.entries(inventory.categories).map(([name, bytes]) =>
+      "<div class=\"muted\">" + esc(name.replaceAll("_", " ")) + " · " + esc(bytes) + " bytes</div>"
+    ).join("");
+    target.innerHTML = "<div><strong>" + esc(inventory.totalBytes) + " bytes</strong> · "
+      + esc(inventory.fileCount) + " files</div>"
+      + "<div class=\"" + (inventory.hardBlocked ? "error" : inventory.warning ? "warn" : "good") + "\">"
+      + (inventory.hardBlocked ? "Hard limit · automatic dispatch paused"
+        : inventory.warning ? "Storage warning" : "Normal") + "</div>"
+      + categories;
+  }
+
   function renderProjects() {
     document.querySelector("#projects").innerHTML = app.projects.map((project) =>
       "<div class=\"row project-row\"><strong>" + esc(project.name) + "</strong>"
       + "<div class=\"muted\">" + esc(project.task_count) + " total tasks · "
         + esc(project.archived_task_count || 0) + " archived · " + esc(project.repository_path) + "</div>"
+      + (app.gitPolicies[project.id]
+        ? "<div class=\"muted\">Git · " + esc(app.gitPolicies[project.id].mode.replaceAll("_", " "))
+          + " · " + esc(app.gitPolicies[project.id].history_policy.replaceAll("_", " "))
+          + " → " + esc(app.gitPolicies[project.id].target_branch) + "</div>"
+        : "")
       + "<div class=\"project-actions\"><button class=\"ghost\" data-ask-project=\"" + esc(project.id)
       + "\">Ask orchestrator</button>"
+      + " <button class=\"ghost\" data-edit-git-policy=\"" + esc(project.id) + "\">Git policy</button>"
       + (project.deletion_eligible
         ? " <button class=\"ghost\" data-delete-project=\"" + esc(project.id) + "\">Delete import</button>"
         : "")
@@ -547,6 +648,43 @@
         ? "<div class=\"good\">Completion gates passed · merge requested</div>"
         : "<div class=\"muted\">Completion gates: "
           + esc((workspace?.completion_evaluation?.reasons || []).join(", ") || "not evaluated") + "</div>";
+    const integrations = (task.git_integrations || []).slice().reverse().map((integration) =>
+      "<div class=\"row\"><strong>" + esc(integration.state.replaceAll("_", " "))
+      + " · " + esc(integration.history_policy.replaceAll("_", " ")) + "</strong>"
+      + "<div class=\"muted\">" + esc(integration.target_branch) + "@"
+      + esc(integration.target_revision.slice(0, 12))
+      + (integration.result_revision ? " → " + esc(integration.result_revision.slice(0, 12)) : "")
+      + "</div>"
+      + (integration.failure
+        ? "<div class=\"error\">" + esc(integration.failure.message || integration.failure.code) + "</div>"
+        : "")
+      + (integration.state === "prepared" && integration.mode !== "prepare_only"
+        ? "<button data-integration-action=\"execute\" data-integration-id=\"" + esc(integration.id)
+          + "\" data-integration-version=\"" + esc(integration.version) + "\">Execute governed integration</button>"
+        : "")
+      + (["prepared", "conflict", "failed", "reconciliation_required"].includes(integration.state)
+        ? "<button class=\"secondary\" data-integration-action=\"cancel\" data-integration-id=\""
+          + esc(integration.id) + "\" data-integration-version=\"" + esc(integration.version)
+          + "\">Cancel + retain evidence</button>"
+        : "") + "</div>"
+    ).join("") || "<p class=\"muted\">No integration plan yet.</p>";
+    const integrationControl = task.status === "done" && task.merge_requested
+      ? "<button data-prepare-integration=\"" + esc(task.id) + "\">Prepare model-less integration plan</button>"
+      : "";
+    const taskHolds = app.retentionHolds.filter((hold) =>
+      (hold.scope_type === "project" && hold.scope_id === task.project_id)
+      || (hold.scope_type === "task" && hold.scope_id === task.id)
+    );
+    const holdControls = taskHolds.map((hold) =>
+      "<div class=\"row\"><strong>Hold · " + esc(hold.scope_type) + "</strong>"
+      + "<div class=\"muted\">" + esc(hold.reason) + "</div>"
+      + "<button class=\"secondary\" data-release-hold=\"" + esc(hold.id) + "\">Release hold</button></div>"
+    ).join("") + "<button class=\"ghost\" data-create-task-hold=\"" + esc(task.id)
+      + "\">Hold task resources</button>";
+    const cleanupControl = (workspace?.runs || []).length
+      ? "<button class=\"secondary\" data-cleanup-task=\"" + esc(task.id)
+        + "\">Preview runtime cleanup</button>"
+      : "";
     const lifecycleControl = task.archived
       ? "<div class=\"controls\"><input id=\"task-restore-reason\" maxlength=\"2000\" placeholder=\"Restore note (optional)\">"
         + "<button data-restore-task=\"" + esc(task.id) + "\">Restore to "
@@ -627,6 +765,9 @@
           + " · higher priority runs first; ties use release time then task ID.</div>"
         : "")
       + lifecycleControl + phaseControls + completionControl
+      + "<h3>Governed Git integration</h3>" + integrationControl + integrations
+      + "<h3>Runtime retention</h3>" + holdControls + cleanupControl
+      + "<div class=\"muted\">Cleanup retires eligible containers and worktrees; session evidence remains retained.</div>"
       + "<h3>Dependencies</h3><ul>" + dependencies + "</ul>"
       + "<h3>Decisions</h3>" + decisions
       + "<h3>Validation</h3>" + validations
@@ -687,7 +828,7 @@
       modelForm.dataset.version = String(detail.conversation.version);
     }
     document.querySelector("#workspace-terminal").textContent =
-      "npm run boss -- chat --topic " + detail.topic.id;
+      "npm run pink -- chat --topic " + detail.topic.id;
     const conversation = document.querySelector("#conversation");
     conversation.innerHTML = detail.turns.map((turn) => {
       const assistantText = turn.result?.assistantText || streamedText(turn.id);
@@ -769,7 +910,7 @@
   }
 
   async function refresh() {
-    const [projects, topics, orchestrators, leases, sessions, board, commands, promptProfiles, modelRoutes] = await Promise.all([
+    const [projects, topics, orchestrators, leases, sessions, board, commands, promptProfiles, modelRoutes, recovery, integrations, storage] = await Promise.all([
       request("/api/projects"),
       request("/api/topics"),
       request("/api/orchestrators"),
@@ -779,6 +920,17 @@
       request("/api/commands?limit=20"),
       request("/api/agent-profiles"),
       request("/api/model-routes"),
+      request("/api/recovery/attention"),
+      request("/api/integrations/attention"),
+      request("/api/storage"),
+    ]);
+    const [policies, holds] = await Promise.all([
+      Promise.all(projects.projects.map((project) =>
+        request("/api/projects/" + encodeURIComponent(project.id) + "/git-policy")
+      )),
+      Promise.all(projects.projects.map((project) =>
+        request("/api/retention/holds?projectId=" + encodeURIComponent(project.id))
+      )),
     ]);
     app.projects = projects.projects;
     app.topics = topics.topics;
@@ -786,10 +938,20 @@
     app.board = board;
     app.promptProfiles = promptProfiles.profiles;
     app.modelRoutes = modelRoutes;
+    app.recoveryAttention = recovery.attention;
+    app.integrationAttention = integrations.attention;
+    app.gitPolicies = Object.fromEntries(policies.map((result) => [
+      result.policy.project_id,
+      result.policy,
+    ]));
+    app.retentionHolds = holds.flatMap((result) => result.holds);
+    app.storage = storage.inventory;
     renderProjects();
     renderTopics();
     renderBoard();
     renderPromptProfiles();
+    renderRecoveryAttention();
+    renderStorage();
     document.querySelector("#orchestrators").innerHTML = renderOrchestratorLeasesPanel({
       projectOrchestrators: orchestrators.orchestrators,
       conversationLeases: leases.leases,
@@ -799,13 +961,16 @@
       + esc(session.project_id + " · " + (session.latest_run_state || session.state)) + "</div>"
       + (session.latest_run_state === "running"
         ? "<button class=\"ghost\" data-stop-session=\"" + esc(session.id) + "\">Stop run</button>"
-        : "") + "</div>"
+        : session.deleted_at
+          ? "<div class=\"muted\">Artifacts deleted · manifest retained</div>"
+          : "<button class=\"ghost\" data-delete-session=\"" + esc(session.id)
+            + "\">Preview artifact deletion</button>") + "</div>"
     ).join("") || "<p class=\"muted\">No task sessions yet.</p>";
     document.querySelector("#commands").innerHTML = commands.commands.map((command) =>
       "<div class=\"row\"><strong>" + esc(command.kind + " · " + command.phase) + "</strong>"
       + "<div class=\"muted\">" + esc(command.project_name + " · " + command.state) + "</div>"
       + (command.result ? "<code>" + esc(JSON.stringify(command.result)) + "</code>" : "")
-      + (["failed", "reconciliation_required"].includes(command.state)
+      + (!command.execution && ["failed", "reconciliation_required"].includes(command.state)
         ? "<div class=\"controls\"><button data-reconcile-command=\"" + esc(command.id)
           + "\" data-reconcile-action=\"retry\">Retry</button><button class=\"secondary\" data-reconcile-command=\""
           + esc(command.id) + "\" data-reconcile-action=\"reset\">Reset task</button></div>"
@@ -822,6 +987,56 @@
   });
 
   document.querySelector("#projects").addEventListener("click", async (event) => {
+    const gitPolicyButton = event.target.closest("[data-edit-git-policy]");
+    if (gitPolicyButton) {
+      const projectId = gitPolicyButton.dataset.editGitPolicy;
+      const current = app.gitPolicies[projectId];
+      if (!current) return;
+      const mode = window.prompt(
+        "Integration mode: prepare_only, local_integrate, or pull_request",
+        current.mode,
+      );
+      if (mode === null) return;
+      const historyPolicy = window.prompt(
+        "History policy: merge_commit, squash, or rebase",
+        current.history_policy,
+      );
+      if (historyPolicy === null) return;
+      const targetBranch = window.prompt("Allowed target branch", current.target_branch);
+      if (targetBranch === null) return;
+      const reason = window.prompt("Reason for changing this project Git policy:");
+      if (!reason?.trim()) return;
+      const allowPush = mode !== "prepare_only"
+        && window.confirm("Allow a normal, non-force push after integration?");
+      const allowPullRequest = mode === "pull_request"
+        && allowPush
+        && window.confirm("Allow authenticated gh pull-request creation?");
+      gitPolicyButton.disabled = true;
+      try {
+        await request("/api/projects/" + encodeURIComponent(projectId) + "/git-policy", {
+          method: "PUT",
+          headers: { "content-type": "application/json", "idempotency-key": key("git-policy") },
+          body: JSON.stringify({
+            mode,
+            historyPolicy,
+            targetBranch,
+            remoteName: current.remote_name,
+            allowPush,
+            allowPullRequest,
+            allowedTargetBranches: [targetBranch],
+            expectedVersion: current.version,
+            reason,
+          }),
+        });
+        mutationStatus("Project Git policy updated.");
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+      } finally {
+        gitPolicyButton.disabled = false;
+      }
+      return;
+    }
     const deleteButton = event.target.closest("[data-delete-project]");
     if (deleteButton) {
       const project = app.projects.find((item) => item.id === deleteButton.dataset.deleteProject);
@@ -1164,6 +1379,141 @@
   });
 
   document.querySelector("#task-detail").addEventListener("click", async (event) => {
+    const createHoldButton = event.target.closest("[data-create-task-hold]");
+    if (createHoldButton) {
+      const reason = window.prompt("Reason for retaining all resources for this task:");
+      if (!reason?.trim()) return;
+      createHoldButton.disabled = true;
+      try {
+        await request("/api/retention/holds", {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": key("retention-hold") },
+          body: JSON.stringify({
+            projectId: app.selectedTask.project_id,
+            scopeType: "task",
+            scopeId: app.selectedTask.id,
+            reason,
+          }),
+        });
+        mutationStatus("Task retention hold created.");
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+        createHoldButton.disabled = false;
+      }
+      return;
+    }
+    const releaseHoldButton = event.target.closest("[data-release-hold]");
+    if (releaseHoldButton) {
+      const reason = window.prompt("Reason for releasing this retention hold:");
+      if (!reason?.trim()) return;
+      releaseHoldButton.disabled = true;
+      try {
+        await request(
+          "/api/retention/holds/" + encodeURIComponent(releaseHoldButton.dataset.releaseHold) + "/release",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "idempotency-key": key("retention-release") },
+            body: JSON.stringify({ reason }),
+          },
+        );
+        mutationStatus("Retention hold released.");
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+        releaseHoldButton.disabled = false;
+      }
+      return;
+    }
+    const prepareIntegration = event.target.closest("[data-prepare-integration]");
+    if (prepareIntegration) {
+      prepareIntegration.disabled = true;
+      try {
+        const result = await request(
+          "/api/tasks/" + encodeURIComponent(prepareIntegration.dataset.prepareIntegration) + "/integrations",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "idempotency-key": key("integration-prepare") },
+            body: "{}",
+          },
+        );
+        mutationStatus(
+          result.integration.state === "prepared"
+            ? "Integration plan prepared. Execution remains governed by project policy."
+            : "Integration conflict recorded without modifying the target branch.",
+        );
+        await loadTask(app.selectedTask.id);
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+        prepareIntegration.disabled = false;
+      }
+      return;
+    }
+    const integrationButton = event.target.closest("[data-integration-action]");
+    if (integrationButton) {
+      const action = integrationButton.dataset.integrationAction;
+      const reason = window.prompt("Reason for Git integration " + action + ":");
+      if (!reason?.trim()) return;
+      integrationButton.disabled = true;
+      try {
+        const result = await request(
+          "/api/integrations/" + encodeURIComponent(integrationButton.dataset.integrationId)
+            + "/actions/" + encodeURIComponent(action),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "idempotency-key": key("integration-action") },
+            body: JSON.stringify({
+              expectedVersion: Number(integrationButton.dataset.integrationVersion),
+              reason,
+            }),
+          },
+        );
+        mutationStatus("Git integration is " + result.integration.state.replaceAll("_", " ") + ".");
+        await loadTask(app.selectedTask.id);
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+        integrationButton.disabled = false;
+      }
+      return;
+    }
+    const cleanupButton = event.target.closest("[data-cleanup-task]");
+    if (cleanupButton) {
+      cleanupButton.disabled = true;
+      try {
+        const result = await request(
+          "/api/tasks/" + encodeURIComponent(cleanupButton.dataset.cleanupTask) + "/cleanup",
+        );
+        const preview = result.preview;
+        const eligible = preview.resources.filter((resource) => resource.eligible);
+        const blocked = preview.resources.filter((resource) => !resource.eligible);
+        const summary = eligible.length + " workspace(s) eligible; " + blocked.length
+          + " blocked. Session evidence will be retained.";
+        if (!eligible.length || !window.confirm(summary + "\n\nExecute eligible cleanup now?")) {
+          mutationStatus(summary);
+          return;
+        }
+        const reason = window.prompt("Reason for retiring these runtime resources:");
+        if (!reason?.trim()) return;
+        const cleaned = await request(
+          "/api/tasks/" + encodeURIComponent(cleanupButton.dataset.cleanupTask) + "/cleanup",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "idempotency-key": key("runtime-cleanup") },
+            body: JSON.stringify({ previewSha256: preview.previewSha256, reason }),
+          },
+        );
+        mutationStatus("Runtime cleanup is " + cleaned.operation.state.replaceAll("_", " ") + ".");
+        await loadTask(app.selectedTask.id);
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+      } finally {
+        cleanupButton.disabled = false;
+      }
+      return;
+    }
     const dispatchButton = event.target.closest("[data-task-dispatch]");
     if (dispatchButton) {
       dispatchButton.disabled = true;
@@ -1337,7 +1687,49 @@
 
   document.querySelector("#sessions").addEventListener("click", async (event) => {
     const button = event.target.closest("[data-stop-session]");
-    if (!button) return;
+    const deleteButton = event.target.closest("[data-delete-session]");
+    if (!button && !deleteButton) return;
+    if (deleteButton) {
+      deleteButton.disabled = true;
+      try {
+        const sessionId = deleteButton.dataset.deleteSession;
+        const result = await request(
+          "/api/sessions/" + encodeURIComponent(sessionId) + "/artifacts",
+        );
+        const preview = result.preview;
+        if (!preview.eligible) {
+          mutationStatus("Session deletion blocked: " + preview.blockers.join(", "), true);
+          return;
+        }
+        if (!window.confirm(
+          "Delete retained files for session " + sessionId + "?\n"
+          + "A checksum manifest and audit tombstone will remain.",
+        )) return;
+        const confirmation = window.prompt("Type the exact session ID to confirm:");
+        if (confirmation === null) return;
+        const reason = window.prompt("Reason for deleting retained session artifacts:");
+        if (!reason?.trim()) return;
+        const deleted = await request(
+          "/api/sessions/" + encodeURIComponent(sessionId) + "/artifacts",
+          {
+            method: "DELETE",
+            headers: { "content-type": "application/json", "idempotency-key": key("session-delete") },
+            body: JSON.stringify({
+              confirmSessionId: confirmation,
+              previewSha256: preview.previewSha256,
+              reason,
+            }),
+          },
+        );
+        mutationStatus("Session artifact deletion is " + deleted.receipt.state.replaceAll("_", " ") + ".");
+        await refresh();
+      } catch (error) {
+        mutationStatus(error.message, true);
+      } finally {
+        deleteButton.disabled = false;
+      }
+      return;
+    }
     button.disabled = true;
     try {
       await request("/api/sessions/" + encodeURIComponent(button.dataset.stopSession), {
@@ -1364,6 +1756,67 @@
       mutationStatus(button.dataset.reconcileAction === "retry"
         ? "A new explicit retry command was queued."
         : "Command cancelled and task reset to ready.");
+      await refresh();
+    } catch (error) {
+      mutationStatus(error.message, true);
+      button.disabled = false;
+    }
+  });
+
+  document.querySelector("#recovery-attention").addEventListener("click", async (event) => {
+    const executionButton = event.target.closest("[data-execution-action]");
+    const candidateButton = event.target.closest("[data-candidate-action]");
+    const integrationButton = event.target.closest("[data-integration-action]");
+    if (!executionButton && !candidateButton && !integrationButton) return;
+    const action = executionButton?.dataset.executionAction
+      || candidateButton?.dataset.candidateAction
+      || integrationButton.dataset.integrationAction;
+    const reason = window.prompt("Reason for " + action + ":");
+    if (!reason?.trim()) return;
+    const button = executionButton || candidateButton || integrationButton;
+    button.disabled = true;
+    try {
+      if (integrationButton) {
+        await request(
+          "/api/integrations/" + encodeURIComponent(integrationButton.dataset.integrationId)
+            + "/actions/" + encodeURIComponent(action),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "idempotency-key": key("integration-attention") },
+            body: JSON.stringify({
+              expectedVersion: Number(integrationButton.dataset.integrationVersion),
+              reason,
+            }),
+          },
+        );
+      } else if (executionButton) {
+        await request(
+          "/api/executions/" + encodeURIComponent(executionButton.dataset.executionId) + "/actions",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "idempotency-key": key("execution-action") },
+            body: JSON.stringify({
+              action,
+              expectedVersion: Number(executionButton.dataset.executionVersion),
+              reason: reason.trim(),
+            }),
+          },
+        );
+      } else {
+        await request(
+          "/api/recovery-candidates/" + encodeURIComponent(candidateButton.dataset.candidateId) + "/actions",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "idempotency-key": key("candidate-action") },
+            body: JSON.stringify({
+              action,
+              expectedVersion: Number(candidateButton.dataset.candidateVersion),
+              reason: reason.trim(),
+            }),
+          },
+        );
+      }
+      mutationStatus("Recovery action recorded: " + action + ".");
       await refresh();
     } catch (error) {
       mutationStatus(error.message, true);

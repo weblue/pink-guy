@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://boss-man.invalid/schemas/evidence-result.schema.json",
-  "title": "Boss Man Phase 0 evidence result",
+  "title": "Pink Guy Phase 0 evidence result",
   "type": "object",
   "additionalProperties": false,
   "required": [

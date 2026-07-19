@@ -12,7 +12,7 @@ The behavior contract is in [PRODUCT.md](./PRODUCT.md).
   records, topics, task state, commands, leases, memory, and evidence.
 - `src/server/control-plane.mjs` clones imports beneath
   `<stateRoot>/repositories/<projectId>` and owns filesystem effects.
-- `src/client/boss-client.mjs`, `scripts/boss.mjs`, and
+- `src/client/pink-client.mjs`, `scripts/pink.mjs`, and
   `src/ui/cockpit.html` provide the shared terminal and browser surfaces.
 
 The current platform has no project lifecycle state or deletion receipt.
@@ -75,7 +75,7 @@ The route remains guarded by the loopback owner profile. The terminal command
 is:
 
 ```sh
-npm run boss -- delete-project --project PROJECT_ID \
+npm run pink -- delete-project --project PROJECT_ID \
   --confirm "PowerToys" --reason "Canceled unsuitable maintenance scenario"
 ```
 

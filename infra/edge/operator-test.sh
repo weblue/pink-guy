@@ -1,6 +1,6 @@
 #!/bin/sh
 # Inert operator rehearsal for a separately authorized deployment.
-# It does not edit SWAG, DNS, the router, or the Boss Man host.
+# It does not edit SWAG, DNS, the router, or the Pink Guy host.
 set -eu
 
 : "${BOSS_MAN_URL:?Set BOSS_MAN_URL to the configured https origin}"

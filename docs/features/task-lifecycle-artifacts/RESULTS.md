@@ -4,7 +4,7 @@ Status: Implemented and verified against retained dogfood state
 
 Last updated: 2026-07-18
 
-Boss Man now separates execution status from artifact lifecycle. Tasks carry an
+Pink Guy now separates execution status from artifact lifecycle. Tasks carry an
 explicit `executable`, `umbrella`, or `intake` kind, optional normalized tags,
 and reversible archive provenance. Only active executable tasks can receive
 commands or start/resume phase sessions.

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { access } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,7 +18,10 @@ function usage() {
 let api;
 let projectId;
 let repositoryPath;
-let stateRoot = join(homedir(), ".local", "share", "boss-man", "dev");
+const pinkStateRoot = join(homedir(), ".local", "share", "pink-guy", "dev");
+const legacyStateRoot = join(homedir(), ".local", "share", "boss-man", "dev");
+let stateRoot = pinkStateRoot;
+let stateExplicit = false;
 let credentialSource;
 let piCommand = "pi";
 let leaseSeconds = 90;
@@ -27,7 +31,10 @@ for (let index = 2; index < process.argv.length; index += 1) {
   if (argument === "--api") api = process.argv[++index];
   else if (argument === "--project-id") projectId = process.argv[++index];
   else if (argument === "--repo") repositoryPath = resolve(process.argv[++index] ?? usage());
-  else if (argument === "--state-root") stateRoot = resolve(process.argv[++index] ?? usage());
+  else if (argument === "--state-root") {
+    stateRoot = resolve(process.argv[++index] ?? usage());
+    stateExplicit = true;
+  }
   else if (argument === "--credential-source") credentialSource = resolve(process.argv[++index] ?? usage());
   else if (argument === "--pi-command") piCommand = process.argv[++index];
   else if (argument === "--lease-seconds") leaseSeconds = Number(process.argv[++index]);
@@ -38,6 +45,19 @@ if (
   !api || (!projectId && !repositoryPath) || !Number.isInteger(leaseSeconds)
   || !Number.isInteger(pollMs) || pollMs < 100 || pollMs > 60_000
 ) usage();
+if (!stateExplicit) {
+  try {
+    await access(pinkStateRoot);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    try {
+      await access(legacyStateRoot);
+      stateRoot = legacyStateRoot;
+    } catch (legacyError) {
+      if (legacyError?.code !== "ENOENT") throw legacyError;
+    }
+  }
+}
 api = api.replace(/\/$/, "");
 
 const sleep = (duration) => new Promise((resolvePromise) => setTimeout(resolvePromise, duration));
@@ -118,44 +138,25 @@ const heartbeat = setInterval(async () => {
   }
 }, Math.max(5, Math.floor(leaseSeconds / 3)) * 1000);
 
-async function completeCommand(command, state, result) {
-  const response = await fetch(`${api}/api/orchestrators/commands/${command.id}/complete`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({ state, result }),
-  });
-  const body = await responseJson(response);
-  if (!response.ok) throw new Error(`${body?.error ?? `HTTP ${response.status}`}: ${body?.message ?? "command completion failed"}`);
-}
-
-async function executeCommand(command) {
+async function acceptCommandExecution(command) {
   if (command.kind !== "start_task") throw new Error(`unsupported command kind: ${command.kind}`);
-  const response = await fetch(`${api}/api/tasks/${command.task_id}/sessions`, {
+  const response = await fetch(`${api}/api/orchestrators/commands/${command.id}/executions`, {
     method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      phase: command.phase,
-      execute: true,
-      modelProvider: command.payload?.modelRoute?.provider,
-      modelId: command.payload?.modelRoute?.model,
-      thinkingLevel: command.payload?.modelRoute?.thinking,
-      billingClass: command.payload?.modelRoute?.billingClass,
-      modelPolicySource: command.payload?.modelRoute?.policySource,
-    }),
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+      "idempotency-key": `execute-command:${command.id}`,
+    },
+    body: "{}",
   });
   const body = await responseJson(response);
   if (!response.ok) {
-    throw new Error(`${body?.error ?? `HTTP ${response.status}`}: ${body?.message ?? "task session start failed"}`);
+    throw new Error(`${body?.error ?? `HTTP ${response.status}`}: ${body?.message ?? "execution acceptance failed"}`);
   }
   return {
-    sessionId: body?.session?.id ?? null,
-    runId: body?.run?.id ?? null,
-    phase: command.phase,
-    modelRoute: command.payload?.modelRoute ?? null,
-    taskVersion: body?.task?.version ?? null,
-    taskStatus: body?.task?.status ?? null,
-    revision: body?.task?.revision ?? null,
-    eventCount: body?.execution?.events?.length ?? 0,
+    executionId: body.execution.id,
+    state: body.execution.state,
+    replayed: Boolean(body.replayed),
   };
 }
 
@@ -175,14 +176,21 @@ async function pollCommands() {
       if (!response.ok) throw new Error(`${body?.error ?? `HTTP ${response.status}`}: ${body?.message ?? "claim failed"}`);
       const command = body.command;
       process.stdout.write(`Claimed command ${command.id}: ${command.kind} ${command.task_id} (${command.phase})\n`);
-      try {
-        const result = await executeCommand(command);
-        await completeCommand(command, "succeeded", result);
-        process.stdout.write(`Completed command ${command.id}: succeeded\n`);
-      } catch (error) {
-        const result = { name: error.name ?? "Error", message: String(error.message ?? error).slice(0, 2048) };
-        await completeCommand(command, "failed", result);
-        process.stderr.write(`Completed command ${command.id}: failed: ${result.message}\n`);
+      while (!stopping) {
+        try {
+          const accepted = await acceptCommandExecution(command);
+          process.stdout.write(
+            `Accepted execution ${accepted.executionId} for command ${command.id}`
+            + `${accepted.replayed ? " (replayed)" : ""}\n`,
+          );
+          break;
+        } catch (error) {
+          process.stderr.write(
+            `Command ${command.id} acceptance uncertain: ${String(error.message ?? error).slice(0, 2048)}; `
+            + "the central API remains settlement authority and the same acceptance key will be retried.\n",
+          );
+          await sleep(pollMs);
+        }
       }
     } catch (error) {
       if (!stopping) {

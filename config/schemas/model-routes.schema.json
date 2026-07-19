@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://boss-man.invalid/schemas/model-routes.schema.json",
-  "title": "Boss Man model route defaults",
+  "title": "Pink Guy model route defaults",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "default", "phases"],

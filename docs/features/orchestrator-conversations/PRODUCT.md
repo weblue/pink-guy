@@ -61,7 +61,7 @@ Figma: none provided.
    a new revision and visible diff; it never silently rewrites the prior
    snapshot.
 
-9. External sources are read-only. Creating or editing Boss Man tasks does not
+9. External sources are read-only. Creating or editing Pink Guy tasks does not
    modify a source system.
 
 10. Before asking the owner questions, the orchestrator reads the supplied
@@ -126,7 +126,7 @@ Figma: none provided.
 
 21. Repository content, ticket text, comments, and attachments are treated as
     untrusted evidence rather than privileged instructions. Source text cannot
-    override Boss Man policy or grant the orchestrator/task agents additional
+    override Pink Guy policy or grant the orchestrator/task agents additional
     authority.
 
 22. Empty, offline, and failure states are actionable:

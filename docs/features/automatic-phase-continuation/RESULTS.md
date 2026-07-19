@@ -4,7 +4,7 @@ Status: Model-less implementation verified; live services running
 
 Last updated: 2026-07-18
 
-Boss Man now derives successful test and review transitions from canonical
+Pink Guy now derives successful test and review transitions from canonical
 SQLite task evidence after the first implementation schedule. Reconciliation
 runs after command completion and before the next command claim, uses a
 task/revision/phase idempotency key, and makes no provider request.

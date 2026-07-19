@@ -72,7 +72,7 @@ async function request(path, { method = "GET", body, token, idempotencyKey } = {
 }
 
 const page = await fetch(base).then((response) => response.text());
-assert(page.includes("Phase 1 local cockpit") && page.includes("Recent commands"), "Phase 1 command observability is missing");
+assert(page.includes("Phase 2 local cockpit") && page.includes("Recent commands"), "local command observability is missing");
 
 const registrationA = await request("/api/orchestrators", {
   method: "POST",
@@ -258,10 +258,10 @@ const delivered = [
   { id: "fake-failure", project_id: "fake-project", task_id: "task-failure", kind: "start_task", phase: "review" },
 ];
 const deliveryCounts = new Map();
-const completions = [];
-let resolveCompletions;
-const completionsReady = new Promise((resolvePromise) => {
-  resolveCompletions = resolvePromise;
+const acceptances = [];
+let resolveAcceptances;
+const acceptancesReady = new Promise((resolvePromise) => {
+  resolveAcceptances = resolvePromise;
 });
 const fakeServer = createServer(async (incoming, response) => {
   const url = new URL(incoming.url, "http://fake.invalid");
@@ -303,23 +303,18 @@ const fakeServer = createServer(async (incoming, response) => {
     deliveryCounts.set(command.id, (deliveryCounts.get(command.id) ?? 0) + 1);
     return sendJson(response, 200, { command });
   }
-  const start = url.pathname.match(/^\/api\/tasks\/([^/]+)\/sessions$/);
-  if (incoming.method === "POST" && start) {
-    const body = await readRequestBody(incoming);
-    if (start[1] === "task-failure") {
-      return sendJson(response, 409, { error: "fixture_failure", message: `fixture rejected ${body.phase}` });
-    }
-    return sendJson(response, 201, {
-      session: { id: "fake-session" },
-      run: { id: "fake-run", phase: body.phase },
+  const accept = url.pathname.match(/^\/api\/orchestrators\/commands\/([^/]+)\/executions$/);
+  if (incoming.method === "POST" && accept) {
+    await readRequestBody(incoming);
+    acceptances.push({
+      id: accept[1],
+      idempotencyKey: incoming.headers["idempotency-key"],
     });
-  }
-  const complete = url.pathname.match(/^\/api\/orchestrators\/commands\/([^/]+)\/complete$/);
-  if (incoming.method === "POST" && complete) {
-    const body = await readRequestBody(incoming);
-    completions.push({ id: complete[1], ...body });
-    if (completions.length === 2) resolveCompletions();
-    return sendJson(response, 200, { command: { id: complete[1], state: body.state } });
+    if (acceptances.length === 2) resolveAcceptances();
+    return sendJson(response, 202, {
+      replayed: false,
+      execution: { id: `execution-${accept[1]}`, state: "starting" },
+    });
   }
   return sendJson(response, 404, { error: "not_found" });
 });
@@ -340,8 +335,8 @@ let childOutput = "";
 child.stdout.on("data", (chunk) => { childOutput += chunk; });
 child.stderr.on("data", (chunk) => { childOutput += chunk; });
 await Promise.race([
-  completionsReady,
-  new Promise((_, rejectPromise) => setTimeout(() => rejectPromise(new Error("project orchestrator did not complete fixture commands")), 10_000)),
+  acceptancesReady,
+  new Promise((_, rejectPromise) => setTimeout(() => rejectPromise(new Error("project orchestrator did not accept fixture executions")), 10_000)),
 ]);
 child.kill("SIGINT");
 await new Promise((resolvePromise, rejectPromise) => {
@@ -350,14 +345,12 @@ await new Promise((resolvePromise, rejectPromise) => {
 await new Promise((resolvePromise) => fakeServer.close(resolvePromise));
 assert(deliveryCounts.get("fake-success") === 1 && deliveryCounts.get("fake-failure") === 1, "consumer retried a terminal command");
 assert(
-  completions.find((item) => item.id === "fake-success")?.state === "succeeded"
-    && completions.find((item) => item.id === "fake-success")?.result.phase === "implementation",
-  "consumer did not forward a phase-scoped successful start",
+  acceptances.every((item) => item.idempotencyKey === `execute-command:${item.id}`),
+  "consumer did not use the stable command execution idempotency key",
 );
 assert(
-  completions.find((item) => item.id === "fake-failure")?.state === "failed"
-    && completions.find((item) => item.id === "fake-failure")?.result.message.includes("fixture rejected review"),
-  "consumer did not report a structured terminal failure",
+  !childOutput.includes("Completed command"),
+  "consumer still attempted to settle execution-backed commands",
 );
 
 const result = {
@@ -371,7 +364,7 @@ const result = {
   explicit_owner_retry: true,
   explicit_owner_reset: true,
   automatic_replay: false,
-  consumer_success_and_failure: true,
+  consumer_acceptance_only: true,
   terminal_failure_blocks_task: true,
   public_token_leak: false,
   isolated_root: root,

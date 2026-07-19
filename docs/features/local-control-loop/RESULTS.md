@@ -1,6 +1,6 @@
 # Phase 1 local control loop — implementation results
 
-Status: First Phase 1 slice implemented
+Status: Implemented; Phase 1 complete
 
 Last updated: 2026-07-17
 
@@ -42,9 +42,11 @@ The two container-backed regression probes used the pinned ARM64 image now
 tagged `boss-man:pi-0.80.9-rtk-0.42.3` at image ID
 `sha256:7669de2c3791c662a1f59094ad31ff018178de20e843d3485c5796d545688074`.
 
-## Remaining Phase 1 boundary
+## Subsequent Phase 1 closure
 
-The follow-up `phase1-local-task-controls` slice now creates tasks and
-atomically assigns/starts ready work from the cockpit. Task detail editing,
-dependencies, reconciliation controls, persistent PTY, and workspace
-inspectors remain.
+Later Phase 1 slices added task creation/editing, dependencies, reconciliation
+controls, workspace inspectors, persistent Pi RPC conversation projection,
+automatic test/review continuation, and deterministic initial dispatch. Phase
+1 closed on 2026-07-18 after multi-repository dogfood and the live
+automatic-release acceptance run. D-043 deliberately deferred a browser PTY;
+tmux/SSH remains the exact-session fallback.

@@ -9,7 +9,7 @@ not the visual design.
 
 ## Summary
 
-After an orchestrator starts an implementation task, Boss Man automatically
+After an orchestrator starts an implementation task, Pink Guy automatically
 continues successful work through test and independent review. The durable
 task, revision, validation, review, and command records—not an LLM
 conversation—determine each transition.
@@ -45,24 +45,24 @@ conversation—determine each transition.
    current fixed revision.
 
 3. When implementation succeeds with a review-requested fixed revision and
-   that revision has no validation result, Boss Man automatically queues a
+   that revision has no validation result, Pink Guy automatically queues a
    test phase using the configured test model route.
 
 4. A test command is not considered a settled test outcome unless it records
    passed or failed validation against the exact current revision.
 
 5. When test validation passes and the current revision has no review
-   disposition, Boss Man automatically queues an independent review phase
+   disposition, Pink Guy automatically queues an independent review phase
    using the configured review model route.
 
-6. When test validation fails, automatic continuation stops. Boss Man does not
+6. When test validation fails, automatic continuation stops. Pink Guy does not
    repeatedly retest or silently send the work back to implementation.
 
 7. A review command is not considered a settled review outcome unless it
    records approve, request-changes, or blocked against the exact current
    revision.
 
-8. When review approves and all existing completion gates pass, Boss Man
+8. When review approves and all existing completion gates pass, Pink Guy
    completes the task and records its local merge request exactly as it does
    today.
 

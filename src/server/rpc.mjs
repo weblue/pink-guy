@@ -23,9 +23,9 @@ export class PiRpcProcess {
     this.child.stdout.setEncoding("utf8");
     this.child.stdout.on("data", (chunk) => this.consume(chunk));
     this.child.once("exit", (code, signal) => {
-      const error = new Error(
+      const error = Object.assign(new Error(
         `Pi RPC exited before completing pending work (code=${code ?? "none"}, signal=${signal ?? "none"})`,
-      );
+      ), { code: "pi_process_exited", exitCode: code, signal });
       for (const waiter of this.waiters.splice(0)) {
         clearTimeout(waiter.timer);
         clearTimeout(waiter.inactivityTimer);
@@ -46,9 +46,16 @@ export class PiRpcProcess {
       try {
         message = JSON.parse(line.endsWith("\r") ? line.slice(0, -1) : line);
       } catch (error) {
-        this.onProtocolError(Object.assign(new Error(`invalid Pi RPC JSON: ${error.message}`), {
+        const protocolError = Object.assign(new Error(`invalid Pi RPC JSON: ${error.message}`), {
+          code: "protocol_error",
           line: line.slice(0, 2_000),
-        }));
+        });
+        this.onProtocolError(protocolError);
+        for (const waiter of this.waiters.splice(0)) {
+          clearTimeout(waiter.timer);
+          clearTimeout(waiter.inactivityTimer);
+          waiter.reject(protocolError);
+        }
         continue;
       }
       this.messages.push(message);
@@ -62,9 +69,9 @@ export class PiRpcProcess {
             const waiterIndex = this.waiters.indexOf(waiter);
             if (waiterIndex >= 0) this.waiters.splice(waiterIndex, 1);
             clearTimeout(waiter.timer);
-            waiter.reject(new Error(
+            waiter.reject(Object.assign(new Error(
               `timed out waiting for ${waiter.description} after ${waiter.inactivityTimeoutMs}ms without RPC activity`,
-            ));
+            ), { code: "rpc_inactive" }));
           }, waiter.inactivityTimeoutMs);
         }
         if (waiter.predicate(message)) {
@@ -96,16 +103,18 @@ export class PiRpcProcess {
         const index = this.waiters.indexOf(waiter);
         if (index >= 0) this.waiters.splice(index, 1);
         clearTimeout(waiter.inactivityTimer);
-        reject(new Error(`timed out waiting for ${description}`));
+        reject(Object.assign(new Error(`timed out waiting for ${description}`), {
+          code: "hard_deadline",
+        }));
       }, timeoutMs);
       if (inactivityTimeoutMs) {
         waiter.inactivityTimer = setTimeout(() => {
           const index = this.waiters.indexOf(waiter);
           if (index >= 0) this.waiters.splice(index, 1);
           clearTimeout(waiter.timer);
-          reject(new Error(
+          reject(Object.assign(new Error(
             `timed out waiting for ${description} after ${inactivityTimeoutMs}ms without RPC activity`,
-          ));
+          ), { code: "rpc_inactive" }));
         }, inactivityTimeoutMs);
       }
       this.waiters.push(waiter);
@@ -121,7 +130,11 @@ export class PiRpcProcess {
       `${payload.type} response`,
       from,
     );
-    if (!response.success) throw new Error(`${payload.type}: ${response.error}`);
+    if (!response.success) {
+      throw Object.assign(new Error(`${payload.type}: ${response.error}`), {
+        code: "provider_rejected",
+      });
+    }
     return response.data;
   }
 

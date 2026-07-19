@@ -1,8 +1,8 @@
-# Boss Man v2 technical design
+# Pink Guy v2 technical design
 
-Status: Direct-Pi Phase 1 implementation
+Status: Direct-Pi foundation; Phase 1 complete; Phase 2 active through P2-3
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 ## Context and evidence
 
@@ -12,7 +12,7 @@ This design is based on the following upstream revisions:
 - [`weblue/inspector-gadget@3df3938`](https://github.com/weblue/inspector-gadget/tree/3df39382ceb147aa411f9c578ef4131fc91912f2)
 - [`earendil-works/pi@v0.80.9`](https://github.com/earendil-works/pi/tree/2d16f92973230a7e095aa984f150ba8702784f50)
 
-The current Boss Man already has a useful SQLite task graph and event history, an SSE-backed web UI, Docker/Sandcastle execution, and worktree-based runs. Its continuation mechanism starts a fresh harness process from a prompt assembled from a rolling LLM summary, recent turns, tasks, and memories. The raw events remain available, but they are not treated as a portable, versioned session artifact.
+The current Pink Guy already has a useful SQLite task graph and event history, an SSE-backed web UI, Docker/Sandcastle execution, and worktree-based runs. Its continuation mechanism starts a fresh harness process from a prompt assembled from a rolling LLM summary, recent turns, tasks, and memories. The raw events remain available, but they are not treated as a portable, versioned session artifact.
 
 The existing MCP endpoint grants task mutation to the orchestrator while intentionally limiting worker sessions to a read-only prime operation. The v2 problem is therefore not simply “add update”; it is to add server-enforced, capability-scoped worker mutations and audit them.
 
@@ -20,13 +20,13 @@ Inspector Gadget demonstrates useful remote host setup through Tailscale, SSH, t
 
 Inspector Gadget also pins and installs RTK, wires its Pi extension, and instructs agents to use RTK filters. Current RTK supports Pi command interception, full-output tee artifacts, bypasses, and local savings metrics. This is directly useful when lossless raw evidence remains separate from filtered model context.
 
-The Pi ecosystem now also contains several local memory extensions. [`pi-persistent-intelligence`](https://github.com/Mont3ll/pi-persistent-intelligence) is the closest architectural match because it uses canonical JSONL, rendered Markdown, evidence, tombstones, and patch-governed durable changes. It is a useful spike candidate, but its current maturity is too low to make Boss Man's custody or recovery guarantees depend on it.
+The Pi ecosystem now also contains several local memory extensions. [`pi-persistent-intelligence`](https://github.com/Mont3ll/pi-persistent-intelligence) is the closest architectural match because it uses canonical JSONL, rendered Markdown, evidence, tombstones, and patch-governed durable changes. It is a useful spike candidate, but its current maturity is too low to make Pink Guy's custody or recovery guarantees depend on it.
 
 ## Architectural decision
 
-Build a Pi-native control plane that reuses the proven product concepts from Boss Man, but replace the execution, UI, task-authorization, and context seams instead of incrementally wrapping Sandcastle.
+Build a Pi-native control plane that reuses the proven product concepts from Pink Guy, but replace the execution, UI, task-authorization, and context seams instead of incrementally wrapping Sandcastle.
 
-Boss Man has one durable lifecycle authority: the central API and its SQLite
+Pink Guy has one durable lifecycle authority: the central API and its SQLite
 transaction log. One leased orchestrator process per project may coordinate
 its task agents, but it never owns a competing durable database. Pi JSONL
 remains authoritative session evidence.
@@ -36,7 +36,7 @@ remains authoritative session evidence.
 ```mermaid
 flowchart LR
     U["Remote browser"] -->|"HTTPS subdomain + conditional Basic Auth"| SWAG["Home-server SWAG"]
-    SWAG -->|"LAN or encrypted tunnel"| API["Boss Man control plane and cockpit"]
+    SWAG -->|"LAN or encrypted tunnel"| API["Pink Guy control plane and cockpit"]
     API --> DB[("SQLite + audit log")]
     API --> ORCH["Project orchestrator leases (one active per project)"]
     ORCH --> SUP["Phase-scoped task supervisors"]
@@ -45,7 +45,7 @@ flowchart LR
     API --> MEM["Governed memory + FTS5"]
     SUP --> D["Docker Engine"]
     D --> C1["Pi RPC task container"]
-    C1 --> EXT["Boss Man Pi extension"]
+    C1 --> EXT["Pink Guy Pi extension"]
     C1 --> RTK["RTK filter + raw tee"]
     EXT -->|"capability API"| API
     C1 -->|"native JSONL"| ART
@@ -94,7 +94,7 @@ The supervisor creates one managed Pi process per active session/run inside a co
 
 A browser reconnect only resubscribes to control-plane events. It has no ownership of the underlying process.
 
-### Boss Man Pi extension
+### Pink Guy Pi extension
 
 The extension is deliberately small and installed into every managed Pi runtime. It should use Pi's documented extension APIs rather than patching Pi internals.
 
@@ -122,7 +122,7 @@ The extension listens to `session_before_compact` and blocks automatic compactio
 
 ### RTK output layer
 
-Install a pinned, checksum-verified RTK binary and a small Boss Man Pi interception extension in the agent image. Disable telemetry by default. The extension executes each Bash command once, writes ephemeral raw output, runs the pinned RTK `log` filter, and returns filtered output to Pi. The daemon redacts and ingests both forms before deleting the ephemeral originals.
+Install a pinned, checksum-verified RTK binary and a small Pink Guy Pi interception extension in the agent image. Disable telemetry by default. The extension executes each Bash command once, writes ephemeral raw output, runs the pinned RTK `log` filter, and returns filtered output to Pi. The daemon redacts and ingests both forms before deleting the ephemeral originals.
 
 For every intercepted command, record:
 
@@ -133,7 +133,7 @@ For every intercepted command, record:
 - RTK version/filter and reported savings;
 - whether filtering was bypassed or failed.
 
-Use complete raw capture for managed runs because complete-session retention and auditability outweigh the disk savings of failure-only capture. The standalone contract retains `tee.mode = "always"`, but the selected container path uses the Boss Man wrapper: RTK 0.42.3's Linux tee behavior did not reliably emit a raw file for direct commands in the pinned image. The wrapper preserves single execution and makes ingestion explicit. RTK 0.42.3 also requires `max_files` and `max_file_size` during configuration deserialization, and the pinned image includes `make` because RTK's `make` rewrite still depends on that executable. The artifact quota system handles growth. The UI provides filtered output by default and one-click redacted raw access. `rtk proxy` remains the diagnostic escape hatch.
+Use complete raw capture for managed runs because complete-session retention and auditability outweigh the disk savings of failure-only capture. The standalone contract retains `tee.mode = "always"`, but the selected container path uses the Pink Guy wrapper: RTK 0.42.3's Linux tee behavior did not reliably emit a raw file for direct commands in the pinned image. The wrapper preserves single execution and makes ingestion explicit. RTK 0.42.3 also requires `max_files` and `max_file_size` during configuration deserialization, and the pinned image includes `make` because RTK's `make` rewrite still depends on that executable. The artifact quota system handles growth. The UI provides filtered output by default and one-click redacted raw access. `rtk proxy` remains the diagnostic escape hatch.
 
 Do not route control-plane-owned Git mutations through RTK. Tests and build commands may be filtered for agent context, but merge/review policy consumes their exit status plus raw evidence, not the summary alone.
 
@@ -167,7 +167,7 @@ Pi allocates a native session path before it necessarily flushes the file. For p
 
 ### Session import and child context
 
-Pi currently exposes native resume/import and SDK session management. Boss Man should use those mechanisms instead of recreating conversation state in a system prompt.
+Pi currently exposes native resume/import and SDK session management. Pink Guy should use those mechanisms instead of recreating conversation state in a system prompt.
 
 - **Same-session resume:** reopen the managed native JSONL by session ID.
 - **Imported resume:** copy and open a validated native JSONL, recording its source manifest.
@@ -182,7 +182,7 @@ The current community `pi-subagents` package already demonstrates session forkin
 
 ### Governed memory and retrieval
 
-Boss Man separates four layers that memory products often conflate:
+Pink Guy separates four layers that memory products often conflate:
 
 1. **Canonical evidence:** append-only Pi sessions, task/run/audit events, raw tool results, artifacts, Git references, and snapshot manifests. This is lossless, retained until explicit deletion, and independent of every memory library.
 2. **Governed durable memory:** typed records with scope, provenance, confidence, status, author, evidence links, staleness metadata, and supersession/tombstone relationships. Mutations are append-only events projected into current state and an inspectable Markdown view.
@@ -206,8 +206,8 @@ The default context assembler is deterministic and budgeted. It starts from expl
 
 The Phase 0/3 memory spike compares two paths:
 
-- embed or adapt the MIT-licensed `pi-persistent-intelligence` contract while Boss Man retains authority, scopes, audit, export, and version pinning; or
-- implement the thin contract directly in the Boss Man database and Pi extension, borrowing its governance model without taking a runtime dependency.
+- embed or adapt the MIT-licensed `pi-persistent-intelligence` contract while Pink Guy retains authority, scopes, audit, export, and version pinning; or
+- implement the thin contract directly in the Pink Guy database and Pi extension, borrowing its governance model without taking a runtime dependency.
 
 The acceptance criterion is not feature count. The selected path must support deterministic export/import, FTS-only operation, deletion/rebuild of indexes, evidence-linked retrieval receipts, task-scoped capabilities, and no automatic package updates. `pi-memctx`, `pi-hermes-memory`, Basic Memory, Graphiti, Mem0, and similar systems remain references or optional adapters rather than canonical stores.
 
@@ -347,7 +347,7 @@ Deployment code is an artifact, not standing deployment authority. Agents may bu
 
 ### Provider and model routing
 
-Pi remains the provider adapter. Boss Man does not assume a separate routing
+Pi remains the provider adapter. Pink Guy does not assume a separate routing
 service or automatic fallback.
 
 Each orchestrator and task-subagent run stores its resolved provider, model,
@@ -382,9 +382,9 @@ public wildcard bind unless that profile is enabled. Request locality is
 derived from the configured listener and trusted proxy boundary, never an
 arbitrary forwarded header.
 
-The existing LinuxServer SWAG container and the Boss Man Mac are on the same LAN. SWAG is the public TLS endpoint for a dedicated Boss Man subdomain and proxies HTTP and WebSocket traffic to the Mac's reserved LAN address. The current conditional SWAG Basic Auth remains an outer gate for non-local requests.
+The existing LinuxServer SWAG container and the Pink Guy Mac are on the same LAN. SWAG is the public TLS endpoint for a dedicated Pink Guy subdomain and proxies HTTP and WebSocket traffic to the Mac's reserved LAN address. The current conditional SWAG Basic Auth remains an outer gate for non-local requests.
 
-The SWAG configuration must preserve `Host`, `X-Forwarded-Proto`, and a controlled client-IP chain; support WebSocket upgrade; disable response buffering for live streams; use long but finite idle timeouts; and set an explicit upload limit for artifacts. Boss Man validates the public Host and Origin, generates external URLs from configured origin rather than untrusted headers, uses Secure/HttpOnly/SameSite cookies, and implements CSRF protection for mutations.
+The SWAG configuration must preserve `Host`, `X-Forwarded-Proto`, and a controlled client-IP chain; support WebSocket upgrade; disable response buffering for live streams; use long but finite idle timeouts; and set an explicit upload limit for artifacts. Pink Guy validates the public Host and Origin, generates external URLs from configured origin rather than untrusted headers, uses Secure/HttpOnly/SameSite cookies, and implements CSRF protection for mutations.
 
 Authenticated remote access is Phase 3, not a local development prerequisite. It supports one owner using either a password flow or an API-key flow. Password mode stores an Argon2id verifier on the host and exchanges the password for a Secure/HttpOnly/SameSite device session. API-key mode stores only a key hash and requires `Authorization: Bearer` on remote API requests. Rate limiting, rotation, revocation, and recovery apply to both as appropriate. SWAG Basic Auth is optional defense in depth, not application identity.
 
@@ -392,7 +392,7 @@ Raw credentials never enter SQLite task/context data or Git. Browser `localStora
 
 Never expose the upstream origin publicly or run without application awareness that it is behind a proxy. The Mac's application and SSH listeners bind to the LAN or host firewall policy needed for this topology, not a new public router mapping by default.
 
-Keep key-only SSH as a separate recovery path. The existing public port 315 terminates on the home server, which acts as an SSH `ProxyJump` bastion to the Boss Man Mac over the LAN. The RSA private key stays on authorized client devices and is never stored in SWAG, Boss Man, its database, or agent containers. A second router port directly to the Mac is deferred and requires a human network/security decision. Ordinary Cloudflare DNS/HTTP proxying is not treated as an SSH transport; any future Cloudflare Tunnel or Spectrum design is a separate explicit architecture choice.
+Keep key-only SSH as a separate recovery path. The existing public port 315 terminates on the home server, which acts as an SSH `ProxyJump` bastion to the Pink Guy Mac over the LAN. The RSA private key stays on authorized client devices and is never stored in SWAG, Pink Guy, its database, or agent containers. A second router port directly to the Mac is deferred and requires a human network/security decision. Ordinary Cloudflare DNS/HTTP proxying is not treated as an SSH transport; any future Cloudflare Tunnel or Spectrum design is a separate explicit architecture choice.
 
 ### Web application
 
@@ -418,7 +418,7 @@ active/contested/stale records, governed diffs, and evidence links. The
 complete layout and candidate evaluation live in `UI.md`.
 
 The direct cockpit is selected. D-043 supersedes the earlier Phase 1 xterm.js
-assumption: the browser and `boss` terminal client project the same durable Pi
+assumption: the browser and `pink` terminal client project the same durable Pi
 RPC conversation, while Ghostty/cmux/tmux remain local process attach and
 recovery clients. Reconsider an embedded PTY or separately authenticated
 code-server only after a workflow cannot be expressed through the structured
@@ -477,7 +477,7 @@ If provider completion is ambiguous or a tool call was in flight, the last two s
 
 C0-03 adds an authoritative SQLite side-effect ledger beside the ordered run events. Container lifecycle, provider responses, tools, snapshot publication, and Git mutations receive a stable run/kind/idempotency identity, a request checksum, an intent record before execution, and an immutable completion or reconciliation receipt afterward. A repeated identity with different intent is rejected.
 
-On restart, the daemon does not infer health from a surviving parent container. It verifies the recorded container ID, image, run label, and liveness, then conservatively stops the prior container after classification. A run with no uncertain work becomes `paused`; a lost provider response or tool completion becomes `reconciliation_required` and is never replayed automatically. A snapshot may be completed from its durable path and expected checksum. A Git checkpoint may be completed from the recorded parent revision plus Boss Man task/run/workspace provenance trailers. Missing or conflicting evidence remains unresolved.
+On restart, the daemon does not infer health from a surviving parent container. It verifies the recorded container ID, image, run label, and liveness, then conservatively stops the prior container after classification. A run with no uncertain work becomes `paused`; a lost provider response or tool completion becomes `reconciliation_required` and is never replayed automatically. A snapshot may be completed from its durable path and expected checksum. A Git checkpoint may be completed from the recorded parent revision plus Pink Guy task/run/workspace provenance trailers. Missing or conflicting evidence remains unresolved.
 
 This closes the Phase 0 restart gate without claiming in-flight Pi RPC process reattachment. Production resume starts from the retained native session at a safe boundary unless a future process manager can prove both worker identity and live stream ownership. The recovery UI must expose the uncertain effect and require an explicit resolution before continuation.
 
@@ -559,7 +559,7 @@ failed UI tests.
 - Central multi-project API, exclusive project-orchestrator leases, phase-scoped task runs, localhost runbook, and browser smoke.
 - No application authentication; the runnable listener is loopback-only.
 
-### Phase 1: useful local-first developer cockpit
+### Phase 1: useful local-first developer cockpit — complete
 
 - Project-orchestrator command queue and task-agent scheduling.
 - Multi-project board, task workspace, attention queue, decisions, tests, review, diffs, artifacts, and context inspector.
@@ -569,11 +569,21 @@ failed UI tests.
 
 ### Phase 2: autonomy, recovery, and portability
 
+- Central accepted-execution settlement, mutation fencing, fast failure
+  classification, paused/reconciliation attention, late-evidence recovery, and
+  restart reconciliation.
 - Policy-governed merge/rebase/push, conflict handling, and cleanup.
 - Recovery/resume UX, retention/deletion/quotas, backup/restore, and storage pressure.
 - Provider failure drills and custody-backed switch recovery.
 - Measured concurrency/resource limits on the target Mac.
-- Second clean ARM64 reproduction and migration rehearsal.
+- Model-less continuity export and isolated same-host restore. A second clean
+  ARM64 host is explicitly deferred by D-054 until format stability or
+  dogfood proves the need.
+
+The dependency order and exit evidence live in
+[`../product/PHASE2-PLAN.md`](../product/PHASE2-PLAN.md). Execution recovery is
+the blocking first contract because greater autonomy, concurrency, or cleanup
+would amplify the current command/run settlement race.
 
 ### Phase 3: authenticated remote access
 
@@ -584,15 +594,21 @@ failed UI tests.
 
 ## Parallelization
 
-Within Phase 1, cockpit surfaces can proceed against versioned API contracts while one integration owner controls central schema and orchestrator-command changes. Phase 2 reliability work follows the executable local workflow. Phase 3 remote/auth work is deliberately isolated so it does not slow local product iteration.
+P2-1 begins with one integration owner because store migration, execution
+states, daemon protocol, control-plane lifecycle, and the fault probe share one
+authority boundary. After that schema and state machine are green, two bounded
+tracks may use separate worktrees and land in the same recovery PR:
 
-After the foundation and schemas are fixed, three bounded tracks can run in parallel in separate worktrees and land as a coordinated PR series:
+| Track | Suggested worktree/branch | Ownership |
+|---|---|---|
+| Recovery authority | dedicated recovery worktree/branch | Store, API, daemon protocol, fencing, restart reconciliation, late-checkpoint verifier, model-less probe |
+| Recovery surfaces | dedicated recovery-UI worktree/branch | Cockpit and `pink` attention projection, state-aware actions, UI regression coverage after the API contract is fixed |
 
-| Agent role | Mode and worktree | Branch | Ownership and landing |
-|---|---|---|---|
-| Pi context/runtime | Local, `/Users/ND139178/Documents/worktrees/boss-man-pi-runtime` | `codex/bmv2-pi-runtime` | Pi extension, snapshot exporter, RTK ingestion, RPC/ACP adapter tests; lands first after shared schemas |
-| Task/Git policy | Local, `/Users/ND139178/Documents/worktrees/boss-man-task-policy` | `codex/bmv2-task-policy` | task events, capabilities, reviewer workflow, validation and merge policy, host Git service |
-| Cockpit/SWAG | Local, `/Users/ND139178/Documents/worktrees/boss-man-cockpit` | `codex/bmv2-cockpit` | board/task workspace/terminal UI, reverse-proxy deployment, Playwright tests; consumes mocked schemas until runtime lands |
+After P2-1, governed Git integration and retention design may proceed in
+parallel because both consume the settled execution contract. Capacity policy
+waits for measurements; isolated-root continuity restore is the final
+implementation gate before sustained dogfood.
+Phase 3 remote/auth remains isolated from these local reliability tracks.
 
 The main integration agent owns schema definitions, migrations, shared generated clients, final merges, and end-to-end validation. Each track avoids editing shared schema files without first messaging the integration agent. Prefer one PR per track followed by a small integration PR rather than three agents committing to one branch.
 
@@ -626,4 +642,11 @@ The main integration agent owns schema definitions, migrations, shared generated
 
 ## Implementation gate
 
-The owner resolved the foundation ADR in favor of direct Pi on 2026-07-16. The bounded Phase 0 local closure now integrates task policy, runtime/Git/credentials, active recovery, governed context retrieval, project-orchestrator leases, and a loopback operator smoke. Begin Phase 1 with the local cockpit and orchestrator command loop. Second-host reproduction is Phase 2; SWAG and owner authentication are Phase 3. Phase 0 evidence is summarized in `PHASE0-RESULTS.md`, and `ROADMAP.md` is the canonical delivery sequence.
+The owner resolved the foundation ADR in favor of direct Pi on 2026-07-16.
+Phase 0 and Phase 1 are complete. The supervised local cockpit has passed
+multi-repository implementation, fixed-revision validation, independent
+review, deterministic Ready dispatch, and live automatic-release dogfood.
+Phase 2 is active with approved D-047 through D-054 governing recovery, Git,
+retention, adoption, and bounded continuity. Isolated same-host restore closes
+the portability gate; SWAG and owner authentication remain Phase 3.
+`ROADMAP.md` is the canonical delivery sequence.

@@ -44,7 +44,7 @@ resolved profile. Task `runs` receive explicit profile columns.
 
 Mutation remains a loopback-owner operation in the current profile. The
 cockpit exposes a compact profile editor and revision metadata. `boss
-profiles` and `boss profile --key ...` provide terminal parity.
+profiles` and `pink profile --key ...` provide terminal parity.
 
 ## Sequencing
 

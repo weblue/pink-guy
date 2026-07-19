@@ -394,7 +394,7 @@ export class ContextCustodyService {
     });
     manager.appendCustomMessageEntry(
       "boss-man.child-context",
-      `${instruction}\nVerified Boss Man context manifest sha256:${checksums["manifest.json"]}; receipt sha256:${manifest.context_receipt_sha256}. The source transcript is retained in the bundle but is not injected into this child context.`,
+      `${instruction}\nVerified Pink Guy context manifest sha256:${checksums["manifest.json"]}; receipt sha256:${manifest.context_receipt_sha256}. The source transcript is retained in the bundle but is not injected into this child context.`,
       false,
       {
         mode: "bundle",

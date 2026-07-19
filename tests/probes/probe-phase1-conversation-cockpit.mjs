@@ -66,7 +66,7 @@ assert(
     && shell.value.includes('id="task-detail"')
     && shell.value.includes("data-reconcile-command")
     && shell.value.includes("data-stop-session")
-    && shell.value.includes("npm run boss -- chat --topic ")
+    && shell.value.includes("npm run pink -- chat --topic ")
     && shell.value.includes('import { renderOrchestratorLeasesPanel } from "/ui/lease-view.mjs";')
     && !shell.value.includes("new Terminal(")
     && !shell.value.includes("xterm"),

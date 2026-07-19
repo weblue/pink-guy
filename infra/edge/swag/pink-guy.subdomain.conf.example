@@ -5,22 +5,22 @@ server {
     listen 443 ssl;
     listen [::]:443 ssl;
 
-    server_name BOSS_MAN_SUBDOMAIN.EXAMPLE.COM;
+    server_name PINK_GUY_SUBDOMAIN.EXAMPLE.COM;
 
     include /config/nginx/ssl.conf;
 
     # Preserve the existing SWAG policy: LAN clients may bypass the outer gate,
-    # but Boss Man still requires its independent owner session.
+    # but Pink Guy still requires its independent owner session.
     satisfy any;
     allow SWAG_LAN_CIDR;
     deny all;
-    auth_basic "Boss Man edge";
-    auth_basic_user_file /config/nginx/.htpasswd-boss-man;
+    auth_basic "Pink Guy edge";
+    auth_basic_user_file /config/nginx/.htpasswd-pink-guy;
 
     client_max_body_size 64m;
 
     location / {
-        proxy_pass http://BOSS_MAN_MAC_LAN_IP:BOSS_MAN_PORT;
+        proxy_pass http://PINK_GUY_MAC_LAN_IP:PINK_GUY_PORT;
         proxy_http_version 1.1;
 
         # Overwrite, rather than append to, client-supplied forwarding headers.

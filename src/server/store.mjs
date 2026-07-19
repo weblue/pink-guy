@@ -17,7 +17,24 @@ const DISPATCH_PRIORITY_MIN = -100;
 const DISPATCH_PRIORITY_MAX = 100;
 const ORCHESTRATOR_COMMAND_KINDS = new Set(["start_task"]);
 const ORCHESTRATOR_COMMAND_TERMINAL_STATES = new Set([
-  "succeeded", "failed", "reconciliation_required", "cancelled",
+  "paused", "succeeded", "failed", "reconciliation_required", "cancelled",
+]);
+const EXECUTION_STATES = new Set([
+  "starting", "running", "stopping", "paused", "failed",
+  "reconciliation_required", "succeeded", "cancelled",
+]);
+const EXECUTION_TERMINAL_STATES = new Set([
+  "paused", "failed", "reconciliation_required", "succeeded", "cancelled",
+]);
+const RECOVERY_CANDIDATE_STATES = new Set(["pending", "accepted", "rejected", "ineligible"]);
+const GIT_INTEGRATION_MODES = new Set(["prepare_only", "local_integrate", "pull_request"]);
+const GIT_HISTORY_POLICIES = new Set(["merge_commit", "squash", "rebase"]);
+const GIT_INTEGRATION_STATES = new Set([
+  "preparing", "prepared", "conflict", "integrating", "integrated",
+  "published", "cancelled", "failed", "reconciliation_required",
+]);
+const RETENTION_SCOPE_TYPES = new Set([
+  "project", "task", "session", "run", "workspace",
 ]);
 const CAPABILITY_ACTIONS = {
   worker: new Set([
@@ -93,6 +110,33 @@ function normalizeDispatchPriority(value) {
   return value;
 }
 
+function normalizeGitBranch(value, label = "Git branch") {
+  const branch = typeof value === "string" ? value.trim() : "";
+  if (
+    !branch
+    || branch.length > 240
+    || branch.startsWith("-")
+    || branch.includes("..")
+    || /[\s~^:?*[\\\x00-\x1f\x7f]/.test(branch)
+    || branch.endsWith("/")
+    || branch.endsWith(".")
+    || branch.includes("//")
+    || branch.includes("@{")
+    || branch.endsWith(".lock")
+  ) {
+    throw codedError("invalid_request", `${label} is invalid`);
+  }
+  return branch;
+}
+
+function normalizeGitRemote(value) {
+  const remote = typeof value === "string" ? value.trim() : "";
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(remote)) {
+    throw codedError("invalid_request", "Git remote name is invalid");
+  }
+  return remote;
+}
+
 function publicOrchestrator(row) {
   if (!row) return null;
   const { token_sha256: ignoredTokenHash, metadata_json: ignoredMetadataJson, ...visible } = row;
@@ -111,6 +155,34 @@ function publicOrchestratorCommand(row) {
     ...visible,
     payload: parseJson(row.payload_json) ?? {},
     result: parseJson(row.result_json),
+  };
+}
+
+function publicCommandExecution(row) {
+  if (!row) return null;
+  const {
+    model_route_json: ignoredModelRouteJson,
+    failure_json: ignoredFailureJson,
+    ...visible
+  } = row;
+  return {
+    ...visible,
+    model_route: parseJson(row.model_route_json) ?? {},
+    failure: parseJson(row.failure_json),
+  };
+}
+
+function publicRecoveryCandidate(row) {
+  if (!row) return null;
+  const {
+    evidence_json: ignoredEvidenceJson,
+    proof_json: ignoredProofJson,
+    ...visible
+  } = row;
+  return {
+    ...visible,
+    evidence: parseJson(row.evidence_json) ?? {},
+    proof: parseJson(row.proof_json) ?? {},
   };
 }
 
@@ -155,6 +227,64 @@ function publicProjectDeletionReceipt(row) {
   };
 }
 
+function publicGitPolicy(row) {
+  if (!row) return null;
+  const { allowed_target_branches_json: ignoredBranches, ...visible } = row;
+  return {
+    ...visible,
+    allow_push: Boolean(row.allow_push),
+    allow_pull_request: Boolean(row.allow_pull_request),
+    allowed_target_branches: parseJson(row.allowed_target_branches_json) ?? [],
+  };
+}
+
+function publicGitIntegration(row) {
+  if (!row) return null;
+  const {
+    plan_json: ignoredPlan,
+    result_json: ignoredResult,
+    failure_json: ignoredFailure,
+    request_sha256: ignoredRequestHash,
+    ...visible
+  } = row;
+  return {
+    ...visible,
+    plan: parseJson(row.plan_json) ?? {},
+    result: parseJson(row.result_json),
+    failure: parseJson(row.failure_json),
+  };
+}
+
+function publicCleanupOperation(row) {
+  if (!row) return null;
+  const {
+    resources_json: ignoredResources,
+    result_json: ignoredResult,
+    request_sha256: ignoredRequestHash,
+    ...visible
+  } = row;
+  return {
+    ...visible,
+    resources: parseJson(row.resources_json) ?? [],
+    result: parseJson(row.result_json),
+  };
+}
+
+function publicSessionDeletionReceipt(row) {
+  if (!row) return null;
+  const {
+    preview_json: ignoredPreview,
+    result_json: ignoredResult,
+    request_sha256: ignoredRequestHash,
+    ...visible
+  } = row;
+  return {
+    ...visible,
+    preview: parseJson(row.preview_json) ?? {},
+    result: parseJson(row.result_json),
+  };
+}
+
 export class Phase0Store {
   constructor(path, { clock = () => new Date().toISOString() } = {}) {
     mkdirSync(dirname(path), { recursive: true });
@@ -195,6 +325,129 @@ export class Phase0Store {
         created_at TEXT NOT NULL,
         tombstoned_at TEXT,
         completed_at TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS project_git_policies (
+        project_id TEXT PRIMARY KEY REFERENCES projects(id),
+        mode TEXT NOT NULL,
+        history_policy TEXT NOT NULL,
+        target_branch TEXT NOT NULL,
+        remote_name TEXT NOT NULL,
+        allow_push INTEGER NOT NULL,
+        allow_pull_request INTEGER NOT NULL,
+        allowed_target_branches_json TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        updated_by TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS project_git_policy_events (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        prior_json TEXT NOT NULL,
+        new_json TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        request_sha256 TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS git_integrations (
+        id TEXT PRIMARY KEY,
+        task_id TEXT NOT NULL REFERENCES tasks(id),
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        merge_request_id TEXT REFERENCES merge_requests(id),
+        state TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        history_policy TEXT NOT NULL,
+        source_revision TEXT NOT NULL,
+        target_branch TEXT NOT NULL,
+        target_revision TEXT NOT NULL,
+        result_revision TEXT,
+        remote_name TEXT NOT NULL,
+        policy_version INTEGER NOT NULL,
+        request_sha256 TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        plan_json TEXT NOT NULL,
+        result_json TEXT,
+        failure_json TEXT,
+        version INTEGER NOT NULL,
+        prepared_at TEXT NOT NULL,
+        completed_at TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS git_integration_actions (
+        id TEXT PRIMARY KEY,
+        integration_id TEXT NOT NULL REFERENCES git_integrations(id),
+        action TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        request_sha256 TEXT NOT NULL,
+        result_json TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS retention_holds (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        scope_type TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        active INTEGER NOT NULL,
+        created_by TEXT NOT NULL,
+        request_sha256 TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        released_by TEXT,
+        release_reason TEXT,
+        released_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS retention_hold_events (
+        id TEXT PRIMARY KEY,
+        hold_id TEXT NOT NULL REFERENCES retention_holds(id),
+        action TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        request_sha256 TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS resource_cleanup_operations (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        task_id TEXT REFERENCES tasks(id),
+        preview_sha256 TEXT NOT NULL,
+        state TEXT NOT NULL,
+        resources_json TEXT NOT NULL,
+        result_json TEXT,
+        actor TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        request_sha256 TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        completed_at TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS session_deletion_receipts (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        task_id TEXT NOT NULL REFERENCES tasks(id),
+        preview_sha256 TEXT NOT NULL,
+        preview_json TEXT NOT NULL,
+        manifest_path TEXT,
+        state TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        request_sha256 TEXT NOT NULL,
+        result_json TEXT,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        completed_at TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS runtime_flags (
+        key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS source_snapshots (
@@ -295,6 +548,68 @@ export class Phase0Store {
         idempotency_key TEXT NOT NULL UNIQUE,
         request_sha256 TEXT NOT NULL,
         created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS command_executions (
+        id TEXT PRIMARY KEY,
+        command_id TEXT NOT NULL UNIQUE REFERENCES orchestrator_commands(id),
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        task_id TEXT NOT NULL REFERENCES tasks(id),
+        phase TEXT NOT NULL,
+        state TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        generation INTEGER NOT NULL,
+        session_id TEXT UNIQUE,
+        run_id TEXT UNIQUE,
+        workspace_id TEXT,
+        base_revision TEXT NOT NULL,
+        model_route_json TEXT NOT NULL,
+        failure_class TEXT,
+        failure_json TEXT,
+        last_activity_at TEXT NOT NULL,
+        accepted_at TEXT NOT NULL,
+        started_at TEXT,
+        stop_requested_at TEXT,
+        stopped_at TEXT,
+        settled_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS execution_events (
+        execution_id TEXT NOT NULL REFERENCES command_executions(id),
+        sequence INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (execution_id, sequence)
+      );
+      CREATE TABLE IF NOT EXISTS execution_action_receipts (
+        id TEXT PRIMARY KEY,
+        execution_id TEXT NOT NULL REFERENCES command_executions(id),
+        action TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        request_sha256 TEXT NOT NULL,
+        result_json TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS recovery_candidates (
+        id TEXT PRIMARY KEY,
+        execution_id TEXT NOT NULL REFERENCES command_executions(id),
+        task_id TEXT NOT NULL REFERENCES tasks(id),
+        run_id TEXT,
+        workspace_id TEXT,
+        kind TEXT NOT NULL,
+        state TEXT NOT NULL,
+        revision TEXT NOT NULL,
+        base_revision TEXT NOT NULL,
+        evidence_json TEXT NOT NULL,
+        proof_json TEXT NOT NULL,
+        discovered_at TEXT NOT NULL,
+        resolved_by TEXT,
+        resolution_reason TEXT,
+        resolved_at TEXT,
+        version INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS topics (
         id TEXT PRIMARY KEY,
@@ -757,6 +1072,10 @@ export class Phase0Store {
     this.ensureColumn("projects", "deleted_at", "TEXT");
     this.ensureColumn("projects", "deleted_by", "TEXT");
     this.ensureColumn("projects", "deletion_reason", "TEXT");
+    this.ensureColumn("sessions", "deleted_at", "TEXT");
+    this.ensureColumn("sessions", "deleted_by", "TEXT");
+    this.ensureColumn("sessions", "deletion_reason", "TEXT");
+    this.ensureColumn("sessions", "deletion_manifest_path", "TEXT");
     this.ensureColumn("task_events", "actor_role", "TEXT");
     this.ensureColumn("task_events", "run_id", "TEXT");
     this.ensureColumn("task_events", "task_version", "INTEGER");
@@ -774,6 +1093,15 @@ export class Phase0Store {
     this.ensureColumn("runs", "thinking_level", "TEXT");
     this.ensureColumn("runs", "model_policy_source", "TEXT");
     this.ensureColumn("runs", "billing_class", "TEXT");
+    this.ensureColumn("runs", "execution_id", "TEXT");
+    this.ensureColumn("capabilities", "execution_id", "TEXT");
+    this.ensureColumn("capabilities", "execution_generation", "INTEGER");
+    this.ensureColumn("workspaces", "retired_at", "TEXT");
+    this.ensureColumn("workspaces", "retired_by", "TEXT");
+    this.ensureColumn("workspaces", "retirement_reason", "TEXT");
+    this.ensureColumn("merge_requests", "integration_id", "TEXT");
+    this.ensureColumn("merge_requests", "result_revision", "TEXT");
+    this.ensureColumn("merge_requests", "integrated_at", "TEXT");
     this.ensureColumn("orchestrator_conversations", "version", "INTEGER NOT NULL DEFAULT 1");
     this.ensureColumn("conversation_custody_snapshots", "conversation_version", "INTEGER");
     this.seedPromptProfiles();
@@ -793,6 +1121,18 @@ export class Phase0Store {
         ON project_orchestrators(project_id) WHERE status='active';
       CREATE INDEX IF NOT EXISTS orchestrator_commands_project_state
         ON orchestrator_commands(project_id,state,sequence);
+      CREATE INDEX IF NOT EXISTS command_executions_project_state
+        ON command_executions(project_id,state,created_at);
+      CREATE INDEX IF NOT EXISTS command_executions_task_state
+        ON command_executions(task_id,state,created_at);
+      CREATE INDEX IF NOT EXISTS git_integrations_task_state
+        ON git_integrations(task_id,state,updated_at);
+      CREATE INDEX IF NOT EXISTS retention_holds_scope
+        ON retention_holds(project_id,scope_type,scope_id,active);
+      CREATE INDEX IF NOT EXISTS cleanup_operations_task_state
+        ON resource_cleanup_operations(task_id,state,updated_at);
+      CREATE INDEX IF NOT EXISTS recovery_candidates_task_state
+        ON recovery_candidates(task_id,state,discovered_at);
       CREATE INDEX IF NOT EXISTS topics_project_state
         ON topics(project_id,state,updated_at);
       CREATE INDEX IF NOT EXISTS conversation_turns_state
@@ -1169,7 +1509,7 @@ export class Phase0Store {
     const normalizedTags = normalizeTaskTags(tags ?? parseJson(task.tags_json) ?? []);
     if (normalizedKind !== task.task_kind) {
       const busy = this.database.prepare(`SELECT 1 value FROM orchestrator_commands
-        WHERE task_id=? AND state IN ('queued','claimed') LIMIT 1`).get(taskId)
+        WHERE task_id=? AND state IN ('queued','claimed','running') LIMIT 1`).get(taskId)
         || this.database.prepare(`SELECT 1 value FROM runs r JOIN sessions s ON s.id=r.session_id
           WHERE s.task_id=? AND r.state='running' LIMIT 1`).get(taskId);
       if (busy || ["in_progress", "review"].includes(task.status)) {
@@ -1321,7 +1661,7 @@ export class Phase0Store {
     }
     if (archived) {
       const busy = this.database.prepare(`SELECT 1 value FROM orchestrator_commands
-        WHERE task_id=? AND state IN ('queued','claimed') LIMIT 1`).get(taskId)
+        WHERE task_id=? AND state IN ('queued','claimed','running') LIMIT 1`).get(taskId)
         || this.database.prepare(`SELECT 1 value FROM runs r JOIN sessions s ON s.id=r.session_id
           WHERE s.task_id=? AND r.state='running' LIMIT 1`).get(taskId);
       if (busy || ["in_progress", "review"].includes(task.status)) {
@@ -1464,7 +1804,7 @@ export class Phase0Store {
       throw codedError("transition_denied", "only active executable tasks have dispatch policy");
     }
     const active = this.database.prepare(`SELECT 1 value FROM orchestrator_commands
-      WHERE task_id=? AND state IN ('queued','claimed') LIMIT 1`).get(taskId)
+      WHERE task_id=? AND state IN ('queued','claimed','running') LIMIT 1`).get(taskId)
       || this.database.prepare(`SELECT 1 value FROM runs r JOIN sessions s ON s.id=r.session_id
         WHERE s.task_id=? AND r.state='running' LIMIT 1`).get(taskId);
     if (active || !["ready", "backlog"].includes(task.status) || task.assigned_worker) {
@@ -1593,17 +1933,19 @@ export class Phase0Store {
     const orchestrator = this.activeProjectOrchestrator(projectId);
     const projectActive = Number(this.database.prepare(`SELECT COUNT(*) count
       FROM orchestrator_commands
-      WHERE project_id=? AND state IN ('queued','claimed')`).get(projectId).count);
+      WHERE project_id=? AND state IN ('queued','claimed','running')`).get(projectId).count);
     const globalActive = Number(this.database.prepare(`SELECT COUNT(*) count
-      FROM orchestrator_commands WHERE state IN ('queued','claimed')`).get().count);
+      FROM orchestrator_commands WHERE state IN ('queued','claimed','running')`).get().count);
     const rows = this.database.prepare(`SELECT * FROM tasks
       WHERE project_id=? AND archived_at IS NULL AND task_kind='executable'
         AND dispatch_policy IN ('automatic','paused')
       ORDER BY priority DESC,released_at,id`).all(projectId);
+    const storagePressure = this.runtimeFlag("storage_pressure")?.value ?? {};
     let rank = 0;
     return rows.map((task) => {
       const blockers = [];
       if (task.dispatch_policy === "paused") blockers.push("paused");
+      if (storagePressure.hardBlocked) blockers.push("storage_pressure");
       if (task.status !== "ready") blockers.push("not_ready");
       if (task.assigned_worker) blockers.push("assigned");
       const criteria = parseJson(task.acceptance_criteria_json) ?? [];
@@ -1619,7 +1961,7 @@ export class Phase0Store {
       }
       if (
         this.database.prepare(`SELECT 1 value FROM orchestrator_commands
-          WHERE task_id=? AND state IN ('queued','claimed') LIMIT 1`).get(task.id)
+          WHERE task_id=? AND state IN ('queued','claimed','running') LIMIT 1`).get(task.id)
         || this.database.prepare(`SELECT 1 value FROM runs r JOIN sessions s ON s.id=r.session_id
           WHERE s.task_id=? AND r.state='running' LIMIT 1`).get(task.id)
       ) blockers.push("phase_active");
@@ -1685,6 +2027,9 @@ export class Phase0Store {
       policySource: modelRoute?.policySource ?? "automatic_dispatch_default",
     };
     const now = this.clock();
+    if (this.runtimeFlag("storage_pressure")?.value?.hardBlocked) {
+      return { scheduled: false, reason: "storage_pressure" };
+    }
     this.database.exec("BEGIN IMMEDIATE");
     try {
       const orchestrator = this.database.prepare(`SELECT * FROM project_orchestrators
@@ -1695,13 +2040,13 @@ export class Phase0Store {
       }
       const projectActive = Number(this.database.prepare(`SELECT COUNT(*) count
         FROM orchestrator_commands
-        WHERE project_id=? AND state IN ('queued','claimed')`).get(projectId).count);
+        WHERE project_id=? AND state IN ('queued','claimed','running')`).get(projectId).count);
       if (projectActive >= projectCapacity) {
         this.database.exec("COMMIT");
         return { scheduled: false, reason: "project_capacity" };
       }
       const globalActive = Number(this.database.prepare(`SELECT COUNT(*) count
-        FROM orchestrator_commands WHERE state IN ('queued','claimed')`).get().count);
+        FROM orchestrator_commands WHERE state IN ('queued','claimed','running')`).get().count);
       if (globalActive >= globalCapacity) {
         this.database.exec("COMMIT");
         return { scheduled: false, reason: "global_capacity" };
@@ -1722,7 +2067,7 @@ export class Phase0Store {
           )
           AND NOT EXISTS(
             SELECT 1 FROM orchestrator_commands c
-            WHERE c.task_id=t.id AND c.state IN ('queued','claimed')
+            WHERE c.task_id=t.id AND c.state IN ('queued','claimed','running')
           )
           AND NOT EXISTS(
             SELECT 1 FROM runs r JOIN sessions s ON s.id=r.session_id
@@ -1911,7 +2256,7 @@ export class Phase0Store {
       throw codedError("orchestrator_unavailable", "project has no active orchestrator lease");
     }
     const activeCommand = this.database.prepare(`SELECT id,phase,state FROM orchestrator_commands
-      WHERE task_id=? AND state IN ('queued','claimed') ORDER BY sequence LIMIT 1`).get(taskId);
+      WHERE task_id=? AND state IN ('queued','claimed','running') ORDER BY sequence LIMIT 1`).get(taskId);
     if (activeCommand) {
       throw codedError("transition_denied", `task already has an active ${activeCommand.phase} command: ${activeCommand.id}`);
     }
@@ -3581,7 +3926,7 @@ export class Phase0Store {
         : [];
       if (operation === "update" && normalizedKind !== task.task_kind) {
         const busy = this.database.prepare(`SELECT 1 value FROM orchestrator_commands
-          WHERE task_id=? AND state IN ('queued','claimed') LIMIT 1`).get(taskId)
+          WHERE task_id=? AND state IN ('queued','claimed','running') LIMIT 1`).get(taskId)
           || this.database.prepare(`SELECT 1 value FROM runs r JOIN sessions s ON s.id=r.session_id
             WHERE s.task_id=? AND r.state='running' LIMIT 1`).get(taskId);
         if (busy || ["in_progress", "review"].includes(task.status)) {
@@ -4182,6 +4527,12 @@ export class Phase0Store {
     const orchestrator = this.authorizeActiveProjectOrchestrator(token);
     const command = this.database.prepare("SELECT * FROM orchestrator_commands WHERE id=?").get(commandId);
     if (!command) throw codedError("not_found", `unknown orchestrator command: ${commandId}`);
+    if (this.commandExecutionForCommand(commandId)) {
+      throw codedError(
+        "execution_managed",
+        "execution-backed commands are settled by the central API; use execution recovery actions",
+      );
+    }
     if (command.project_id !== orchestrator.project_id || command.orchestrator_id !== orchestrator.id) {
       throw codedError("orchestrator_denied", "orchestrator cannot complete a command outside its active lease");
     }
@@ -4267,9 +4618,13 @@ export class Phase0Store {
   }
 
   orchestratorCommand(id) {
-    return publicOrchestratorCommand(
+    const command = publicOrchestratorCommand(
       this.database.prepare("SELECT * FROM orchestrator_commands WHERE id=?").get(id),
     );
+    return command ? {
+      ...command,
+      execution: this.commandExecutionForCommand(id),
+    } : null;
   }
 
   orchestratorCommands({ projectId = null, limit = 100 } = {}) {
@@ -4282,13 +4637,1156 @@ export class Phase0Store {
         ORDER BY c.sequence DESC LIMIT ?`).all(projectId, limit)
       : this.database.prepare(`SELECT c.*,p.name project_name FROM orchestrator_commands c
         JOIN projects p ON p.id=c.project_id ORDER BY c.sequence DESC LIMIT ?`).all(limit);
-    return rows.map((row) => publicOrchestratorCommand(row));
+    return rows.map((row) => ({
+      ...publicOrchestratorCommand(row),
+      execution: this.commandExecutionForCommand(row.id),
+    }));
   }
 
   orchestratorCommandEvents(commandId) {
     return this.database.prepare(`SELECT sequence,type,orchestrator_id,payload_json,created_at
       FROM orchestrator_command_events WHERE command_id=? ORDER BY sequence`).all(commandId)
       .map((row) => ({ ...row, payload: parseJson(row.payload_json) ?? {} }));
+  }
+
+  acceptCommandExecution({ token, commandId, idempotencyKey }) {
+    if (idempotencyKey !== `execute-command:${commandId}`) {
+      throw codedError(
+        "invalid_request",
+        `execution acceptance requires Idempotency-Key execute-command:${commandId}`,
+      );
+    }
+    const orchestrator = this.authorizeActiveProjectOrchestrator(token);
+    const command = this.database.prepare(
+      "SELECT * FROM orchestrator_commands WHERE id=?",
+    ).get(commandId);
+    if (!command) throw codedError("not_found", `unknown orchestrator command: ${commandId}`);
+    if (
+      command.project_id !== orchestrator.project_id
+      || command.orchestrator_id !== orchestrator.id
+    ) {
+      throw codedError("orchestrator_denied", "orchestrator cannot accept an execution outside its active lease");
+    }
+    const prior = this.database.prepare(
+      "SELECT * FROM command_executions WHERE command_id=?",
+    ).get(commandId);
+    if (prior) {
+      return {
+        replayed: true,
+        command: this.orchestratorCommand(commandId),
+        execution: publicCommandExecution(prior),
+      };
+    }
+    if (command.kind !== "start_task" || command.state !== "claimed") {
+      throw codedError("command_conflict", "only a claimed task-phase command can be accepted");
+    }
+    const task = this.getTask(command.task_id);
+    if (!task || task.project_id !== command.project_id) {
+      throw codedError("orchestrator_denied", "execution task is outside the command project");
+    }
+    if (!task.revision) throw codedError("revision_required", "execution requires an authoritative base revision");
+    const route = parseJson(command.payload_json)?.modelRoute ?? {};
+    validateModelRoute(route, "accepted command model route");
+    const now = this.clock();
+    const executionId = randomUUID();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const stillClaimed = this.database.prepare(`UPDATE orchestrator_commands SET
+        state='running',updated_at=? WHERE id=? AND state='claimed'`).run(now, commandId);
+      if (Number(stillClaimed.changes) !== 1) {
+        throw codedError("command_conflict", "command changed before execution acceptance");
+      }
+      this.database.prepare(`INSERT INTO command_executions(
+        id,command_id,project_id,task_id,phase,state,version,generation,
+        base_revision,model_route_json,last_activity_at,accepted_at,created_at,updated_at
+      ) VALUES(?,?,?,?,?,'starting',1,1,?,?,?,?,?,?)`).run(
+        executionId,
+        commandId,
+        command.project_id,
+        command.task_id,
+        command.phase,
+        task.revision,
+        JSON.stringify(route),
+        now,
+        now,
+        now,
+        now,
+      );
+      this.appendExecutionEvent(executionId, "accepted", {
+        commandId,
+        orchestratorId: orchestrator.id,
+        taskVersion: task.version,
+        baseRevision: task.revision,
+        modelRoute: route,
+      }, now);
+      this.appendOrchestratorCommandEvent(commandId, "execution_accepted", orchestrator.id, {
+        executionId,
+      }, now);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
+        const replay = this.database.prepare(
+          "SELECT * FROM command_executions WHERE command_id=?",
+        ).get(commandId);
+        if (replay) {
+          return {
+            replayed: true,
+            command: this.orchestratorCommand(commandId),
+            execution: publicCommandExecution(replay),
+          };
+        }
+      }
+      throw error;
+    }
+    return {
+      replayed: false,
+      command: this.orchestratorCommand(commandId),
+      execution: this.commandExecution(executionId),
+    };
+  }
+
+  commandExecution(id) {
+    return publicCommandExecution(
+      this.database.prepare("SELECT * FROM command_executions WHERE id=?").get(id),
+    );
+  }
+
+  commandExecutionForCommand(commandId) {
+    return publicCommandExecution(
+      this.database.prepare("SELECT * FROM command_executions WHERE command_id=?").get(commandId),
+    );
+  }
+
+  commandExecutionForRun(runId) {
+    return publicCommandExecution(
+      this.database.prepare("SELECT * FROM command_executions WHERE run_id=?").get(runId),
+    );
+  }
+
+  commandExecutions({ projectId = null, nonterminalOnly = false } = {}) {
+    const terminal = "'paused','failed','reconciliation_required','succeeded','cancelled'";
+    const clauses = [
+      ...(projectId ? ["project_id=?"] : []),
+      ...(nonterminalOnly ? [`state NOT IN (${terminal})`] : []),
+    ];
+    const rows = this.database.prepare(`SELECT * FROM command_executions
+      ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
+      ORDER BY created_at,id`).all(...(projectId ? [projectId] : []));
+    return rows.map((row) => publicCommandExecution(row));
+  }
+
+  executionEvents(executionId) {
+    return this.database.prepare(`SELECT sequence,type,payload_json,created_at
+      FROM execution_events WHERE execution_id=? ORDER BY sequence`).all(executionId)
+      .map((row) => ({ ...row, payload: parseJson(row.payload_json) ?? {} }));
+  }
+
+  appendExecutionEvent(executionId, type, payload = {}, now = this.clock()) {
+    const next = this.database.prepare(`SELECT COALESCE(MAX(sequence),0)+1 value
+      FROM execution_events WHERE execution_id=?`).get(executionId);
+    this.database.prepare(`INSERT INTO execution_events(
+      execution_id,sequence,type,payload_json,created_at
+    ) VALUES(?,?,?,?,?)`).run(
+      executionId,
+      Number(next.value),
+      type,
+      JSON.stringify(payload),
+      now,
+    );
+  }
+
+  bindExecutionResources({
+    executionId,
+    generation,
+    sessionId = null,
+    runId = null,
+    workspaceId = null,
+  }) {
+    const execution = this.commandExecution(executionId);
+    if (!execution) throw codedError("not_found", `unknown execution: ${executionId}`);
+    if (
+      execution.generation !== generation
+      || !["starting", "running"].includes(execution.state)
+    ) {
+      throw codedError("execution_fenced", "execution authority changed before runtime binding");
+    }
+    const now = this.clock();
+    const nextState = runId && sessionId ? "running" : execution.state;
+    const changed = this.database.prepare(`UPDATE command_executions SET
+      session_id=COALESCE(?,session_id),run_id=COALESCE(?,run_id),
+      workspace_id=COALESCE(?,workspace_id),state=?,version=version+1,
+      started_at=CASE WHEN ?='running' THEN COALESCE(started_at,?) ELSE started_at END,
+      last_activity_at=?,updated_at=?
+      WHERE id=? AND generation=? AND state IN ('starting','running')`).run(
+      sessionId,
+      runId,
+      workspaceId,
+      nextState,
+      nextState,
+      now,
+      now,
+      now,
+      executionId,
+      generation,
+    );
+    if (Number(changed.changes) !== 1) {
+      throw codedError("execution_fenced", "execution authority changed during runtime binding");
+    }
+    this.appendExecutionEvent(executionId, nextState === "running" ? "started" : "resources_bound", {
+      sessionId,
+      runId,
+      workspaceId,
+      generation,
+    }, now);
+    return this.commandExecution(executionId);
+  }
+
+  attachExecutionEvidenceResources({
+    executionId,
+    runId = null,
+    workspaceId = null,
+    reason,
+  }) {
+    const execution = this.commandExecution(executionId);
+    if (!execution) throw codedError("not_found", `unknown execution: ${executionId}`);
+    const now = this.clock();
+    this.database.prepare(`UPDATE command_executions SET
+      run_id=COALESCE(run_id,?),workspace_id=COALESCE(workspace_id,?),
+      version=version+1,updated_at=? WHERE id=?`).run(
+      runId,
+      workspaceId,
+      now,
+      executionId,
+    );
+    this.appendExecutionEvent(executionId, "late_resource_evidence_attached", {
+      runId,
+      workspaceId,
+      reason,
+    }, now);
+    return this.commandExecution(executionId);
+  }
+
+  touchExecution(executionId, generation, activity = {}) {
+    const now = this.clock();
+    const current = this.commandExecution(executionId);
+    if (
+      current
+      && current.generation === generation
+      && ["starting", "running"].includes(current.state)
+      && Date.parse(now) - Date.parse(current.last_activity_at) < 1_000
+    ) return true;
+    const changed = this.database.prepare(`UPDATE command_executions SET
+      last_activity_at=?,updated_at=? WHERE id=? AND generation=?
+      AND state IN ('starting','running')`).run(now, now, executionId, generation);
+    if (Number(changed.changes) === 1) {
+      const last = this.database.prepare(`SELECT created_at FROM execution_events
+        WHERE execution_id=? AND type='activity' ORDER BY sequence DESC LIMIT 1`).get(executionId);
+      if (!last || Date.parse(now) - Date.parse(last.created_at) >= 5_000) {
+        this.appendExecutionEvent(executionId, "activity", activity, now);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  assertExecutionGeneration(executionId, generation) {
+    const execution = this.commandExecution(executionId);
+    if (
+      !execution
+      || execution.generation !== generation
+      || !["starting", "running"].includes(execution.state)
+    ) {
+      throw codedError("execution_fenced", "execution mutation authority is fenced");
+    }
+    return execution;
+  }
+
+  fenceExecution({
+    executionId,
+    expectedVersion = null,
+    reason,
+    failureClass = null,
+    failure = null,
+  }) {
+    const execution = this.commandExecution(executionId);
+    if (!execution) throw codedError("not_found", `unknown execution: ${executionId}`);
+    if (expectedVersion !== null && execution.version !== expectedVersion) {
+      throw codedError(
+        "version_conflict",
+        `execution version conflict: expected ${expectedVersion}, current ${execution.version}`,
+      );
+    }
+    if (execution.state === "stopping" || EXECUTION_TERMINAL_STATES.has(execution.state)) {
+      return { replayed: true, execution };
+    }
+    if (!reason?.trim()) throw codedError("invalid_request", "execution fence reason is required");
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const changed = this.database.prepare(`UPDATE command_executions SET
+        state='stopping',generation=generation+1,version=version+1,
+        failure_class=COALESCE(?,failure_class),failure_json=COALESCE(?,failure_json),
+        stop_requested_at=COALESCE(stop_requested_at,?),updated_at=?
+        WHERE id=? AND version=? AND state IN ('starting','running')`).run(
+        failureClass,
+        failure ? JSON.stringify(failure) : null,
+        now,
+        now,
+        executionId,
+        execution.version,
+      );
+      if (Number(changed.changes) !== 1) {
+        throw codedError("version_conflict", "execution changed while applying mutation fence");
+      }
+      if (execution.run_id) {
+        this.database.prepare(`UPDATE capabilities SET revoked_at=COALESCE(revoked_at,?)
+          WHERE run_id=?`).run(now, execution.run_id);
+      }
+      this.appendExecutionEvent(executionId, "fenced", {
+        reason,
+        priorGeneration: execution.generation,
+        generation: execution.generation + 1,
+        failureClass,
+      }, now);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return { replayed: false, execution: this.commandExecution(executionId) };
+  }
+
+  settleExecution({
+    executionId,
+    state,
+    failureClass = null,
+    failure = null,
+    result = {},
+  }) {
+    if (!EXECUTION_TERMINAL_STATES.has(state)) {
+      throw codedError("invalid_request", `unsupported terminal execution state: ${state}`);
+    }
+    const execution = this.commandExecution(executionId);
+    if (!execution) throw codedError("not_found", `unknown execution: ${executionId}`);
+    if (EXECUTION_TERMINAL_STATES.has(execution.state)) {
+      if (execution.state !== state) {
+        throw codedError("transition_denied", `execution already settled ${execution.state}`);
+      }
+      return { replayed: true, execution };
+    }
+    if (execution.state !== "stopping") {
+      throw codedError("transition_denied", "execution must be fenced before settlement");
+    }
+    const command = this.database.prepare(
+      "SELECT * FROM orchestrator_commands WHERE id=?",
+    ).get(execution.command_id);
+    const task = this.getTask(execution.task_id);
+    const now = this.clock();
+    const commandState = state;
+    const failurePayload = failure ?? (failureClass ? { failureClass } : null);
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const changed = this.database.prepare(`UPDATE command_executions SET
+        state=?,version=version+1,failure_class=COALESCE(?,failure_class),
+        failure_json=COALESCE(?,failure_json),stopped_at=COALESCE(stopped_at,?),
+        settled_at=?,updated_at=? WHERE id=? AND state='stopping'`).run(
+        state,
+        failureClass,
+        failurePayload ? JSON.stringify(failurePayload) : null,
+        now,
+        now,
+        now,
+        executionId,
+      );
+      if (Number(changed.changes) !== 1) {
+        throw codedError("version_conflict", "execution changed while settling");
+      }
+      this.database.prepare(`UPDATE orchestrator_commands SET
+        state=?,result_json=?,completed_at=?,updated_at=? WHERE id=?`).run(
+        commandState,
+        JSON.stringify({
+          ...result,
+          executionId,
+          failureClass,
+          failure: failurePayload,
+        }),
+        now,
+        now,
+        command.id,
+      );
+      this.appendExecutionEvent(executionId, "settled", {
+        state,
+        failureClass,
+        result,
+      }, now);
+      this.appendOrchestratorCommandEvent(command.id, commandState, command.orchestrator_id, {
+        executionId,
+        failureClass,
+      }, now);
+      if (
+        task
+        && task.status !== "done"
+        && ["failed", "reconciliation_required"].includes(state)
+      ) {
+        const priorTask = this.getTaskDetails(task.id);
+        const nextVersion = task.version + 1;
+        this.database.prepare(`UPDATE tasks SET
+          status='blocked',version=?,updated_at=? WHERE id=? AND version=?`).run(
+          nextVersion,
+          now,
+          task.id,
+          task.version,
+        );
+        const currentTask = this.getTaskDetails(task.id);
+        const payload = {
+          executionId,
+          commandId: command.id,
+          phase: execution.phase,
+          failureClass,
+          failure: failurePayload,
+          recoveryRequired: state === "reconciliation_required",
+        };
+        this.database.prepare(`INSERT INTO task_events(
+          task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,
+          created_at,actor_role,run_id,task_version
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+          task.id,
+          "task_execution_attention",
+          "control-plane",
+          task.status,
+          "blocked",
+          JSON.stringify(payload),
+          `execution-attention:${executionId}`,
+          now,
+          "host",
+          execution.run_id,
+          nextVersion,
+        );
+        this.database.prepare(`INSERT INTO audit_events(
+          task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,
+          payload_json,idempotency_key,request_sha256,created_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+          task.id,
+          "task_execution_attention",
+          "control-plane",
+          "host",
+          null,
+          execution.run_id,
+          JSON.stringify(priorTask),
+          JSON.stringify(currentTask),
+          JSON.stringify(payload),
+          `execution-attention:${executionId}`,
+          sha256(JSON.stringify(payload)),
+          now,
+        );
+      }
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return { replayed: false, execution: this.commandExecution(executionId) };
+  }
+
+  resolveReconciliationExecution({
+    executionId,
+    state = "cancelled",
+    reason,
+    actor = "local-owner",
+  }) {
+    if (!["cancelled", "failed", "paused"].includes(state)) {
+      throw codedError("invalid_request", "unsupported reconciliation resolution state");
+    }
+    const execution = this.commandExecution(executionId);
+    if (!execution) throw codedError("not_found", `unknown execution: ${executionId}`);
+    if (execution.state !== "reconciliation_required") {
+      throw codedError("transition_denied", "execution does not require reconciliation");
+    }
+    const run = execution.run_id ? this.getRun(execution.run_id) : null;
+    if (run?.state === "running") {
+      throw codedError("transition_denied", "cannot resolve while the linked run is still running");
+    }
+    const liveCapability = execution.run_id
+      ? this.database.prepare(`SELECT id FROM capabilities
+        WHERE run_id=? AND revoked_at IS NULL LIMIT 1`).get(execution.run_id)
+      : null;
+    if (liveCapability) {
+      throw codedError("transition_denied", "cannot resolve while a mutation capability remains active");
+    }
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`UPDATE command_executions SET
+        state=?,version=version+1,settled_at=?,updated_at=?
+        WHERE id=? AND state='reconciliation_required'`).run(
+        state,
+        now,
+        now,
+        executionId,
+      );
+      this.database.prepare(`UPDATE orchestrator_commands SET
+        state=?,result_json=?,completed_at=COALESCE(completed_at,?),updated_at=?
+        WHERE id=?`).run(
+        state,
+        JSON.stringify({
+          executionId,
+          ownerResolution: state,
+          reason,
+          uncertainEvidenceRetained: true,
+        }),
+        now,
+        now,
+        execution.command_id,
+      );
+      this.appendExecutionEvent(executionId, "reconciliation_resolved", {
+        state,
+        reason,
+        actor,
+        uncertainEvidenceRetained: true,
+      }, now);
+      this.appendOrchestratorCommandEvent(
+        execution.command_id,
+        state,
+        null,
+        { executionId, reason, actor, uncertainEvidenceRetained: true },
+        now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return this.commandExecution(executionId);
+  }
+
+  executionActionReceipt(idempotencyKey) {
+    const row = this.database.prepare(
+      "SELECT * FROM execution_action_receipts WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    return row ? { ...row, result: parseJson(row.result_json) ?? {} } : null;
+  }
+
+  recordExecutionAction({
+    executionId,
+    action,
+    expectedVersion,
+    reason,
+    idempotencyKey,
+    actor = "local-owner",
+    result = {},
+  }) {
+    if (!["stop", "pause", "cancel"].includes(action)) {
+      throw codedError("invalid_request", "execution control action must stop, pause, or cancel");
+    }
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    if (!reason?.trim()) throw codedError("invalid_request", "recovery action reason is required");
+    const requestSha256 = sha256(JSON.stringify({
+      executionId,
+      action,
+      expectedVersion,
+      reason: reason.trim(),
+      actor,
+    }));
+    const prior = this.executionActionReceipt(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different recovery action");
+      }
+      return { replayed: true, receipt: prior, execution: this.commandExecution(executionId) };
+    }
+    const now = this.clock();
+    const id = randomUUID();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const execution = this.commandExecution(executionId);
+      if (!execution) throw codedError("not_found", `unknown execution: ${executionId}`);
+      if (execution.version !== expectedVersion) {
+        throw codedError(
+          "version_conflict",
+          `execution version conflict: expected ${expectedVersion}, current ${execution.version}`,
+        );
+      }
+      if (execution.state === "reconciliation_required") {
+        if (action !== "cancel") {
+          throw codedError(
+            "transition_denied",
+            `${action} is not valid while execution is reconciliation_required`,
+          );
+        }
+        const run = execution.run_id ? this.getRun(execution.run_id) : null;
+        if (run?.state === "running") {
+          throw codedError(
+            "transition_denied",
+            "cannot resolve while the linked run is still running",
+          );
+        }
+        const liveCapability = execution.run_id
+          ? this.database.prepare(`SELECT id FROM capabilities
+            WHERE run_id=? AND revoked_at IS NULL LIMIT 1`).get(execution.run_id)
+          : null;
+        if (liveCapability) {
+          throw codedError(
+            "transition_denied",
+            "cannot resolve while a mutation capability remains active",
+          );
+        }
+        const changed = this.database.prepare(`UPDATE command_executions SET
+          state='cancelled',version=version+1,settled_at=?,updated_at=?
+          WHERE id=? AND version=? AND state='reconciliation_required'`).run(
+          now,
+          now,
+          executionId,
+          expectedVersion,
+        );
+        if (Number(changed.changes) !== 1) {
+          throw codedError("version_conflict", "execution changed while resolving cancellation");
+        }
+        this.database.prepare(`UPDATE orchestrator_commands SET
+          state='cancelled',result_json=?,completed_at=COALESCE(completed_at,?),updated_at=?
+          WHERE id=?`).run(
+          JSON.stringify({
+            executionId,
+            ownerResolution: "cancelled",
+            reason: reason.trim(),
+            uncertainEvidenceRetained: true,
+          }),
+          now,
+          now,
+          execution.command_id,
+        );
+        this.appendExecutionEvent(executionId, "reconciliation_resolved", {
+          state: "cancelled",
+          reason: reason.trim(),
+          actor,
+          uncertainEvidenceRetained: true,
+        }, now);
+        this.appendOrchestratorCommandEvent(
+          execution.command_id,
+          "cancelled",
+          null,
+          {
+            executionId,
+            reason: reason.trim(),
+            actor,
+            uncertainEvidenceRetained: true,
+          },
+          now,
+        );
+      } else {
+        if (!["starting", "running"].includes(execution.state)) {
+          throw codedError(
+            "transition_denied",
+            `${action} is not valid while execution is ${execution.state}`,
+          );
+        }
+        const failureClass = action === "stop" ? "owner_stop" : null;
+        const changed = this.database.prepare(`UPDATE command_executions SET
+          state='stopping',generation=generation+1,version=version+1,
+          failure_class=COALESCE(?,failure_class),
+          stop_requested_at=COALESCE(stop_requested_at,?),updated_at=?
+          WHERE id=? AND version=? AND state IN ('starting','running')`).run(
+          failureClass,
+          now,
+          now,
+          executionId,
+          expectedVersion,
+        );
+        if (Number(changed.changes) !== 1) {
+          throw codedError("version_conflict", "execution changed while applying owner action");
+        }
+        if (execution.run_id) {
+          this.database.prepare(`UPDATE capabilities SET revoked_at=COALESCE(revoked_at,?)
+            WHERE run_id=?`).run(now, execution.run_id);
+        }
+        this.appendExecutionEvent(executionId, "fenced", {
+          reason: reason.trim(),
+          priorGeneration: execution.generation,
+          generation: execution.generation + 1,
+          failureClass,
+        }, now);
+      }
+      this.database.prepare(`INSERT INTO execution_action_receipts(
+        id,execution_id,action,actor,reason,request_sha256,result_json,idempotency_key,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?)`).run(
+        id,
+        executionId,
+        action,
+        actor,
+        reason.trim(),
+        requestSha256,
+        JSON.stringify(result),
+        idempotencyKey,
+        now,
+      );
+      this.appendExecutionEvent(executionId, `owner_${action}`, {
+        actor,
+        reason: reason.trim(),
+        receiptId: id,
+        ...result,
+      }, now);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      replayed: false,
+      receipt: this.executionActionReceipt(idempotencyKey),
+      execution: this.commandExecution(executionId),
+    };
+  }
+
+  queueExecutionReplacement({
+    executionId,
+    action,
+    expectedVersion,
+    reason,
+    idempotencyKey,
+    actor = "local-owner",
+    modelRoute = null,
+  }) {
+    if (!["retry", "resume"].includes(action)) {
+      throw codedError("invalid_request", "replacement action must be retry or resume");
+    }
+    const execution = this.commandExecution(executionId);
+    if (!execution) throw codedError("not_found", `unknown execution: ${executionId}`);
+    if (execution.version !== expectedVersion) {
+      throw codedError(
+        "version_conflict",
+        `execution version conflict: expected ${expectedVersion}, current ${execution.version}`,
+      );
+    }
+    if (
+      action === "resume"
+        ? execution.state !== "paused"
+        : !["paused", "failed"].includes(execution.state)
+    ) {
+      throw codedError("transition_denied", `${action} is not valid while execution is ${execution.state}`);
+    }
+    if (this.recoveryCandidates({ taskId: execution.task_id }).some((candidate) =>
+      candidate.execution_id === execution.id && candidate.state === "pending"
+    )) {
+      throw codedError("transition_denied", "resolve pending late evidence before replacing the execution");
+    }
+    const priorReceipt = this.executionActionReceipt(idempotencyKey);
+    const requestSha256 = sha256(JSON.stringify({
+      executionId,
+      action,
+      expectedVersion,
+      reason: reason?.trim(),
+      actor,
+      modelRoute,
+    }));
+    if (priorReceipt) {
+      if (priorReceipt.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for another replacement");
+      }
+      return {
+        replayed: true,
+        receipt: priorReceipt,
+        command: this.orchestratorCommand(priorReceipt.result.commandId),
+        execution,
+      };
+    }
+    if (!reason?.trim()) throw codedError("invalid_request", "replacement reason is required");
+    const route = modelRoute
+      ? {
+        ...validateModelRoute(modelRoute, `${action} model route`),
+        policySource: modelRoute.policySource ?? `owner_${action}`,
+      }
+      : execution.model_route;
+    const task = this.getTask(execution.task_id);
+    const orchestrator = this.activeProjectOrchestrator(execution.project_id);
+    if (!orchestrator) {
+      throw codedError("orchestrator_unavailable", "project has no active orchestrator for replacement");
+    }
+    const commandId = randomUUID();
+    const now = this.clock();
+    const payload = {
+      source: `owner_${action}`,
+      modelRoute: route,
+      ...(action === "retry" ? { retryOf: execution.command_id } : {
+        resumeOf: execution.id,
+        parentSessionId: execution.session_id,
+      }),
+    };
+    const priorTask = this.getTaskDetails(task.id);
+    const nextTaskVersion = task.version + 1;
+    const nextStatus = execution.phase === "implementation" ? "in_progress" : "review";
+    const nextWorker = execution.phase === "implementation"
+      ? `task-agent:${execution.phase}:${commandId}`
+      : task.assigned_worker;
+    const receiptId = randomUUID();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`INSERT INTO orchestrator_commands(
+        id,project_id,task_id,orchestrator_id,kind,phase,state,payload_json,
+        request_sha256,idempotency_key,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,'queued',?,?,?,?,?)`).run(
+        commandId,
+        execution.project_id,
+        execution.task_id,
+        orchestrator.id,
+        "start_task",
+        execution.phase,
+        JSON.stringify(payload),
+        sha256(JSON.stringify({
+          projectId: execution.project_id,
+          taskId: execution.task_id,
+          phase: execution.phase,
+          payload,
+        })),
+        `execution-replacement:${idempotencyKey}`,
+        now,
+        now,
+      );
+      const changed = this.database.prepare(`UPDATE tasks SET
+        status=?,assigned_worker=?,version=?,updated_at=? WHERE id=? AND version=?`).run(
+        nextStatus,
+        nextWorker,
+        nextTaskVersion,
+        now,
+        task.id,
+        task.version,
+      );
+      if (Number(changed.changes) !== 1) {
+        throw codedError("version_conflict", "task changed while queuing replacement");
+      }
+      const result = { commandId, action, priorExecutionId: executionId };
+      this.database.prepare(`INSERT INTO execution_action_receipts(
+        id,execution_id,action,actor,reason,request_sha256,result_json,idempotency_key,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?)`).run(
+        receiptId,
+        executionId,
+        action,
+        actor,
+        reason.trim(),
+        requestSha256,
+        JSON.stringify(result),
+        idempotencyKey,
+        now,
+      );
+      this.appendExecutionEvent(executionId, `owner_${action}`, {
+        actor,
+        reason: reason.trim(),
+        receiptId,
+        commandId,
+      }, now);
+      this.appendOrchestratorCommandEvent(commandId, "queued", orchestrator.id, payload, now);
+      const currentTask = this.getTaskDetails(task.id);
+      this.database.prepare(`INSERT INTO task_events(
+        task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,
+        created_at,actor_role,run_id,task_version
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        task.id,
+        `task_execution_${action}_queued`,
+        actor,
+        task.status,
+        nextStatus,
+        JSON.stringify(result),
+        `task-execution-replacement:${idempotencyKey}`,
+        now,
+        "owner",
+        execution.run_id,
+        nextTaskVersion,
+      );
+      this.database.prepare(`INSERT INTO audit_events(
+        task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,
+        payload_json,idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        task.id,
+        `task_execution_${action}_queued`,
+        actor,
+        "owner",
+        null,
+        execution.run_id,
+        JSON.stringify(priorTask),
+        JSON.stringify(currentTask),
+        JSON.stringify(result),
+        `task-execution-replacement:${idempotencyKey}`,
+        sha256(JSON.stringify(result)),
+        now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      replayed: false,
+      receipt: this.executionActionReceipt(idempotencyKey),
+      command: this.orchestratorCommand(commandId),
+      execution: this.commandExecution(executionId),
+      task: this.getTaskDetails(task.id),
+    };
+  }
+
+  allowedExecutionActions(execution) {
+    if (!execution) return [];
+    if (["starting", "running"].includes(execution.state)) return ["stop", "pause", "cancel"];
+    if (execution.state === "paused") return ["resume", "retry"];
+    if (execution.state === "failed") return ["retry"];
+    if (execution.state === "reconciliation_required") return ["cancel"];
+    return [];
+  }
+
+  createRecoveryCandidate({
+    executionId,
+    revision,
+    baseRevision,
+    evidence = {},
+    proof = {},
+    eligible = false,
+  }) {
+    const execution = this.commandExecution(executionId);
+    if (!execution) throw codedError("not_found", `unknown execution: ${executionId}`);
+    if (!revision || !baseRevision) {
+      throw codedError("invalid_request", "recovery candidate requires revision and base revision");
+    }
+    const prior = this.database.prepare(`SELECT * FROM recovery_candidates
+      WHERE execution_id=? AND kind='checkpoint' AND revision=?`).get(executionId, revision);
+    if (prior) return { replayed: true, candidate: publicRecoveryCandidate(prior) };
+    const now = this.clock();
+    const id = randomUUID();
+    const state = eligible ? "pending" : "ineligible";
+    this.database.prepare(`INSERT INTO recovery_candidates(
+      id,execution_id,task_id,run_id,workspace_id,kind,state,revision,base_revision,
+      evidence_json,proof_json,discovered_at,version
+    ) VALUES(?,?,?,?,?,'checkpoint',?,?,?,?,?,?,1)`).run(
+      id,
+      executionId,
+      execution.task_id,
+      execution.run_id,
+      execution.workspace_id,
+      state,
+      revision,
+      baseRevision,
+      JSON.stringify(evidence),
+      JSON.stringify(proof),
+      now,
+    );
+    this.appendExecutionEvent(executionId, "late_checkpoint_discovered", {
+      candidateId: id,
+      state,
+      revision,
+      baseRevision,
+      proof,
+    }, now);
+    return { replayed: false, candidate: this.recoveryCandidate(id) };
+  }
+
+  recoveryCandidate(id) {
+    return publicRecoveryCandidate(
+      this.database.prepare("SELECT * FROM recovery_candidates WHERE id=?").get(id),
+    );
+  }
+
+  recoveryCandidates({ taskId = null, state = null } = {}) {
+    if (state && !RECOVERY_CANDIDATE_STATES.has(state)) {
+      throw codedError("invalid_request", `unsupported recovery candidate state: ${state}`);
+    }
+    const clauses = [
+      ...(taskId ? ["task_id=?"] : []),
+      ...(state ? ["state=?"] : []),
+    ];
+    const values = [...(taskId ? [taskId] : []), ...(state ? [state] : [])];
+    return this.database.prepare(`SELECT * FROM recovery_candidates
+      ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
+      ORDER BY discovered_at,id`).all(...values).map((row) => publicRecoveryCandidate(row));
+  }
+
+  resolveRecoveryCandidate({
+    candidateId,
+    action,
+    expectedVersion,
+    reason,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    if (!["accept", "reject"].includes(action)) {
+      throw codedError("invalid_request", "candidate action must be accept or reject");
+    }
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    if (!reason?.trim()) throw codedError("invalid_request", "candidate resolution reason is required");
+    const requestSha256 = sha256(JSON.stringify({
+      action: "resolve_recovery_candidate",
+      candidateId,
+      resolution: action,
+      expectedVersion,
+      reason: reason.trim(),
+      actor,
+    }));
+    const auditKey = `recovery-candidate:${idempotencyKey}`;
+    const priorAudit = this.database.prepare(
+      "SELECT * FROM audit_events WHERE idempotency_key=?",
+    ).get(auditKey);
+    if (priorAudit) {
+      if (priorAudit.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for another candidate resolution");
+      }
+      return {
+        replayed: true,
+        candidate: this.recoveryCandidate(candidateId),
+        task: this.getTaskDetails(priorAudit.task_id),
+      };
+    }
+    const candidate = this.recoveryCandidate(candidateId);
+    if (!candidate) throw codedError("not_found", `unknown recovery candidate: ${candidateId}`);
+    if (candidate.version !== expectedVersion) {
+      throw codedError(
+        "version_conflict",
+        `candidate version conflict: expected ${expectedVersion}, current ${candidate.version}`,
+      );
+    }
+    if (candidate.state !== "pending") {
+      throw codedError("transition_denied", `candidate is ${candidate.state}, not pending`);
+    }
+    const execution = this.commandExecution(candidate.execution_id);
+    const task = this.getTask(candidate.task_id);
+    if (!execution || !task) throw codedError("reconciliation_required", "candidate scope is incomplete");
+    if (action === "accept") {
+      if (!candidate.proof.eligible) {
+        throw codedError("transition_denied", "candidate proof is not eligible for acceptance");
+      }
+      if (task.revision !== candidate.base_revision) {
+        throw codedError(
+          "revision_conflict",
+          "task advanced after candidate discovery; use governed Git integration",
+        );
+      }
+      if (!EXECUTION_TERMINAL_STATES.has(execution.state)) {
+        throw codedError("transition_denied", "candidate cannot advance while its execution remains active");
+      }
+    }
+    const now = this.clock();
+    const priorTask = this.getTaskDetails(task.id);
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`UPDATE recovery_candidates SET
+        state=?,resolved_by=?,resolution_reason=?,resolved_at=?,version=version+1
+        WHERE id=? AND version=? AND state='pending'`).run(
+        action === "accept" ? "accepted" : "rejected",
+        actor,
+        reason.trim(),
+        now,
+        candidateId,
+        expectedVersion,
+      );
+      let nextVersion = task.version;
+      if (action === "accept") {
+        nextVersion += 1;
+        const changed = this.database.prepare(`UPDATE tasks SET
+          revision=?,validation_passed=0,requested_review_revision=?,merge_requested=0,
+          status='review',version=?,updated_at=? WHERE id=? AND version=?`).run(
+          candidate.revision,
+          candidate.revision,
+          nextVersion,
+          now,
+          task.id,
+          task.version,
+        );
+        if (Number(changed.changes) !== 1) {
+          throw codedError("version_conflict", "task changed while accepting recovery candidate");
+        }
+      }
+      const currentTask = this.getTaskDetails(task.id);
+      const payload = {
+        candidateId,
+        executionId: candidate.execution_id,
+        action,
+        reason: reason.trim(),
+        priorRevision: task.revision,
+        candidateRevision: candidate.revision,
+        validationAndReviewInvalidated: action === "accept",
+      };
+      this.database.prepare(`INSERT INTO task_events(
+        task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,
+        created_at,actor_role,run_id,task_version
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        task.id,
+        `recovery_candidate_${action}ed`,
+        actor,
+        task.status,
+        currentTask.status,
+        JSON.stringify(payload),
+        auditKey,
+        now,
+        "owner",
+        candidate.run_id,
+        nextVersion,
+      );
+      this.database.prepare(`INSERT INTO audit_events(
+        task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,
+        payload_json,idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        task.id,
+        `recovery_candidate_${action}ed`,
+        actor,
+        "owner",
+        null,
+        candidate.run_id,
+        JSON.stringify(priorTask),
+        JSON.stringify(currentTask),
+        JSON.stringify(payload),
+        auditKey,
+        requestSha256,
+        now,
+      );
+      this.appendExecutionEvent(candidate.execution_id, `recovery_candidate_${action}ed`, {
+        candidateId,
+        actor,
+        reason: reason.trim(),
+      }, now);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      replayed: false,
+      candidate: this.recoveryCandidate(candidateId),
+      task: this.getTaskDetails(task.id),
+    };
+  }
+
+  recoveryAttention({ projectId = null } = {}) {
+    const executions = this.commandExecutions({ projectId }).filter((execution) =>
+      ["starting", "running", "stopping", "paused", "failed", "reconciliation_required"]
+        .includes(execution.state)
+    );
+    return executions.map((execution) => {
+      const task = this.getTaskDetails(execution.task_id);
+      const run = execution.run_id ? this.getRun(execution.run_id) : null;
+      const sideEffects = run ? this.sideEffectsForRun(run.id) : [];
+      return {
+        execution,
+        command: this.orchestratorCommand(execution.command_id),
+        task: task ? {
+          id: task.id,
+          title: task.title,
+          status: task.status,
+          version: task.version,
+          revision: task.revision,
+        } : null,
+        run,
+        side_effects: sideEffects,
+        uncertain_side_effects: sideEffects.filter((effect) =>
+          effect.state !== "completed"
+        ),
+        recovery_candidates: this.recoveryCandidates({ taskId: execution.task_id })
+          .filter((candidate) => candidate.execution_id === execution.id),
+        allowed_actions: this.allowedExecutionActions(execution),
+        action_receipts: this.database.prepare(`SELECT
+          id,action,actor,reason,result_json,idempotency_key,created_at
+          FROM execution_action_receipts WHERE execution_id=? ORDER BY created_at,id`)
+          .all(execution.id).map((row) => ({
+            ...row,
+            result: parseJson(row.result_json) ?? {},
+            result_json: undefined,
+          })),
+      };
+    });
   }
 
   reconcileOrchestratorCommand({
@@ -4303,6 +5801,12 @@ export class Phase0Store {
     }
     const command = this.orchestratorCommand(commandId);
     if (!command) throw codedError("not_found", `unknown command: ${commandId}`);
+    if (this.commandExecutionForCommand(commandId)) {
+      throw codedError(
+        "execution_managed",
+        "execution-backed commands require explicit execution recovery actions",
+      );
+    }
     const requestSha256 = sha256(JSON.stringify({
       action: "reconcile_orchestrator_command",
       commandId,
@@ -4471,6 +5975,27 @@ export class Phase0Store {
     return commands.map(({ id }) => id);
   }
 
+  reconcileLegacyClaimedCommands(reason = "control_plane_restart", now = this.clock()) {
+    const commands = this.database.prepare(`SELECT c.id,c.orchestrator_id
+      FROM orchestrator_commands c
+      LEFT JOIN command_executions e ON e.command_id=c.id
+      WHERE c.state='claimed' AND e.id IS NULL ORDER BY c.sequence`).all();
+    for (const command of commands) {
+      const result = { reason, automaticReplay: false, executionMissing: true };
+      this.database.prepare(`UPDATE orchestrator_commands SET
+        state='reconciliation_required',result_json=?,completed_at=?,updated_at=?
+        WHERE id=? AND state='claimed'`).run(JSON.stringify(result), now, now, command.id);
+      this.appendOrchestratorCommandEvent(
+        command.id,
+        "reconciliation_required",
+        command.orchestrator_id,
+        result,
+        now,
+      );
+    }
+    return commands.map((command) => command.id);
+  }
+
   getTaskDetails(taskId) {
     const task = this.getTask(taskId);
     if (!task) return null;
@@ -4508,7 +6033,903 @@ export class Phase0Store {
       validations: this.database.prepare("SELECT * FROM validations WHERE task_id=? ORDER BY created_at,id").all(taskId)
         .map((row) => ({ ...row, evidence: parseJson(row.evidence_json) })),
       merge_requests: this.database.prepare("SELECT * FROM merge_requests WHERE task_id=? ORDER BY created_at,id").all(taskId),
+      git_integrations: this.gitIntegrations({ taskId }),
     };
+  }
+
+  ensureProjectGitPolicy({ projectId, targetBranch, actor = "system-default" }) {
+    if (!this.getProject(projectId)) throw codedError("not_found", `unknown project: ${projectId}`);
+    const prior = this.projectGitPolicy(projectId);
+    if (prior) return prior;
+    const branch = normalizeGitBranch(targetBranch, "default target branch");
+    const now = this.clock();
+    this.database.prepare(`INSERT INTO project_git_policies(
+      project_id,mode,history_policy,target_branch,remote_name,allow_push,
+      allow_pull_request,allowed_target_branches_json,version,updated_by,reason,updated_at
+    ) VALUES(?,?,?,?,?,?,?,?,1,?,?,?)`).run(
+      projectId,
+      "prepare_only",
+      "merge_commit",
+      branch,
+      "origin",
+      0,
+      0,
+      JSON.stringify([branch]),
+      actor,
+      "conservative default",
+      now,
+    );
+    return this.projectGitPolicy(projectId);
+  }
+
+  projectGitPolicy(projectId) {
+    return publicGitPolicy(
+      this.database.prepare("SELECT * FROM project_git_policies WHERE project_id=?").get(projectId),
+    );
+  }
+
+  updateProjectGitPolicy({
+    projectId,
+    mode,
+    historyPolicy,
+    targetBranch,
+    remoteName = "origin",
+    allowPush = false,
+    allowPullRequest = false,
+    allowedTargetBranches = [],
+    expectedVersion,
+    reason,
+    actor = "local-owner",
+    idempotencyKey,
+  }) {
+    const prior = this.projectGitPolicy(projectId);
+    if (!prior) throw codedError("not_found", `project Git policy is not initialized: ${projectId}`);
+    if (!idempotencyKey || !reason?.trim()) {
+      throw codedError("invalid_request", "policy reason and idempotency key are required");
+    }
+    if (!GIT_INTEGRATION_MODES.has(mode)) {
+      throw codedError("invalid_request", `unsupported Git integration mode: ${mode}`);
+    }
+    if (!GIT_HISTORY_POLICIES.has(historyPolicy)) {
+      throw codedError("invalid_request", `unsupported Git history policy: ${historyPolicy}`);
+    }
+    const target = normalizeGitBranch(targetBranch, "target branch");
+    const remote = normalizeGitRemote(remoteName);
+    const allowed = [...new Set(allowedTargetBranches.map((branch) =>
+      normalizeGitBranch(branch, "allowed target branch")
+    ))].sort();
+    if (!allowed.includes(target)) {
+      throw codedError("invalid_request", "target branch must be in allowed target branches");
+    }
+    if (allowPullRequest && (!allowPush || mode !== "pull_request")) {
+      throw codedError(
+        "invalid_request",
+        "pull-request publication requires pull_request mode and normal push authorization",
+      );
+    }
+    if (mode === "pull_request" && (!allowPush || !allowPullRequest)) {
+      throw codedError(
+        "invalid_request",
+        "pull_request mode requires normal push and pull-request authorization",
+      );
+    }
+    const intent = {
+      projectId,
+      mode,
+      historyPolicy,
+      targetBranch: target,
+      remoteName: remote,
+      allowPush: Boolean(allowPush),
+      allowPullRequest: Boolean(allowPullRequest),
+      allowedTargetBranches: allowed,
+      expectedVersion,
+      reason: reason.trim(),
+    };
+    const requestSha256 = sha256(JSON.stringify(intent));
+    const replay = this.database.prepare(
+      "SELECT * FROM project_git_policy_events WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (replay) {
+      if (replay.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "policy idempotency key was reused");
+      }
+      return { replayed: true, policy: this.projectGitPolicy(projectId), event: replay };
+    }
+    if (prior.version !== expectedVersion) {
+      throw codedError("version_conflict", "project Git policy changed", { current: prior });
+    }
+    const now = this.clock();
+    const nextVersion = prior.version + 1;
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const changed = this.database.prepare(`UPDATE project_git_policies SET
+        mode=?,history_policy=?,target_branch=?,remote_name=?,allow_push=?,
+        allow_pull_request=?,allowed_target_branches_json=?,version=?,updated_by=?,
+        reason=?,updated_at=? WHERE project_id=? AND version=?`).run(
+        mode,
+        historyPolicy,
+        target,
+        remote,
+        allowPush ? 1 : 0,
+        allowPullRequest ? 1 : 0,
+        JSON.stringify(allowed),
+        nextVersion,
+        actor,
+        reason.trim(),
+        now,
+        projectId,
+        expectedVersion,
+      );
+      if (Number(changed.changes) !== 1) {
+        throw codedError("version_conflict", "project Git policy changed");
+      }
+      const current = this.projectGitPolicy(projectId);
+      this.database.prepare(`INSERT INTO project_git_policy_events(
+        id,project_id,prior_json,new_json,actor,reason,request_sha256,idempotency_key,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?)`).run(
+        randomUUID(),
+        projectId,
+        JSON.stringify(prior),
+        JSON.stringify(current),
+        actor,
+        reason.trim(),
+        requestSha256,
+        idempotencyKey,
+        now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return {
+      replayed: false,
+      policy: this.projectGitPolicy(projectId),
+      event: this.database.prepare(
+        "SELECT * FROM project_git_policy_events WHERE idempotency_key=?",
+      ).get(idempotencyKey),
+    };
+  }
+
+  integrationGateEvaluation(taskId) {
+    const task = this.getTaskDetails(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    const completion = this.evaluateCompletion(taskId);
+    const mergeRequest = this.database.prepare(
+      "SELECT * FROM merge_requests WHERE task_id=? AND revision=? ORDER BY created_at DESC LIMIT 1",
+    ).get(taskId, task.revision);
+    const activeExecution = this.database.prepare(`SELECT id,state FROM command_executions
+      WHERE task_id=? AND state IN ('starting','running','stopping','paused','reconciliation_required')
+      ORDER BY created_at DESC LIMIT 1`).get(taskId);
+    const recoveryCandidate = this.database.prepare(`SELECT id,state FROM recovery_candidates
+      WHERE task_id=? AND state='pending' ORDER BY discovered_at DESC LIMIT 1`).get(taskId);
+    const reasons = [...completion.reasons];
+    if (task.status !== "done") reasons.push("task_not_done");
+    if (!task.merge_requested || !mergeRequest || mergeRequest.status !== "requested") {
+      reasons.push("merge_request_not_pending");
+    }
+    if (activeExecution) reasons.push(`execution_${activeExecution.state}`);
+    if (recoveryCandidate) reasons.push("recovery_candidate_pending");
+    return {
+      allowed: reasons.length === 0,
+      reasons: [...new Set(reasons)],
+      task,
+      mergeRequest: mergeRequest ?? null,
+      policy: this.projectGitPolicy(task.project_id),
+      activeExecution: activeExecution ?? null,
+      recoveryCandidate: recoveryCandidate ?? null,
+    };
+  }
+
+  recordGitIntegrationPreparation({
+    id = randomUUID(),
+    taskId,
+    state,
+    sourceRevision,
+    targetBranch,
+    targetRevision,
+    plan,
+    idempotencyKey,
+  }) {
+    if (!["prepared", "conflict"].includes(state)) {
+      throw codedError("invalid_request", "Git preparation must be prepared or conflict");
+    }
+    const gates = this.integrationGateEvaluation(taskId);
+    if (!gates.allowed) {
+      throw codedError("integration_blocked", `integration blocked: ${gates.reasons.join(",")}`, {
+        reasons: gates.reasons,
+      });
+    }
+    const policy = gates.policy;
+    if (!policy) throw codedError("integration_blocked", "project Git policy is not initialized");
+    const branch = normalizeGitBranch(targetBranch, "target branch");
+    if (!policy.allowed_target_branches.includes(branch) || branch !== policy.target_branch) {
+      throw codedError("integration_blocked", "target branch is not allowed by project policy");
+    }
+    if (sourceRevision !== gates.task.revision) {
+      throw codedError("revision_conflict", "integration source is not the current task revision");
+    }
+    const intent = { taskId };
+    const requestSha256 = sha256(JSON.stringify(intent));
+    const prior = this.database.prepare(
+      "SELECT * FROM git_integrations WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "integration preparation key was reused");
+      }
+      return { replayed: true, integration: publicGitIntegration(prior) };
+    }
+    const now = this.clock();
+    this.database.prepare(`INSERT INTO git_integrations(
+      id,task_id,project_id,merge_request_id,state,mode,history_policy,
+      source_revision,target_branch,target_revision,remote_name,policy_version,
+      request_sha256,idempotency_key,plan_json,version,prepared_at,updated_at
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      id,
+      taskId,
+      gates.task.project_id,
+      gates.mergeRequest.id,
+      state,
+      policy.mode,
+      policy.history_policy,
+      sourceRevision,
+      branch,
+      targetRevision,
+      policy.remote_name,
+      policy.version,
+      requestSha256,
+      idempotencyKey,
+      JSON.stringify(plan),
+      1,
+      now,
+      now,
+    );
+    return { replayed: false, integration: this.gitIntegration(id) };
+  }
+
+  gitIntegration(id) {
+    return publicGitIntegration(
+      this.database.prepare("SELECT * FROM git_integrations WHERE id=?").get(id),
+    );
+  }
+
+  gitIntegrationPreparationByIdempotency({ taskId, idempotencyKey }) {
+    if (!idempotencyKey) return null;
+    const row = this.database.prepare(
+      "SELECT * FROM git_integrations WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (!row) return null;
+    if (row.task_id !== taskId) {
+      throw codedError(
+        "idempotency_conflict",
+        "integration preparation key was reused for another task",
+      );
+    }
+    return publicGitIntegration(row);
+  }
+
+  gitIntegrations({ taskId = null, projectId = null } = {}) {
+    const clauses = [];
+    const values = [];
+    if (taskId) {
+      clauses.push("task_id=?");
+      values.push(taskId);
+    }
+    if (projectId) {
+      clauses.push("project_id=?");
+      values.push(projectId);
+    }
+    return this.database.prepare(`SELECT * FROM git_integrations
+      ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
+      ORDER BY prepared_at,id`).all(...values).map(publicGitIntegration);
+  }
+
+  integrationAttention(projectId = null) {
+    const rows = this.database.prepare(`SELECT * FROM git_integrations
+      WHERE state IN ('conflict','failed','reconciliation_required')
+        ${projectId ? "AND project_id=?" : ""}
+      ORDER BY updated_at,id`).all(...(projectId ? [projectId] : []));
+    return rows.map((row) => {
+      const integration = publicGitIntegration(row);
+      const gates = this.integrationGateEvaluation(integration.task_id);
+      return {
+        integration,
+        task: this.getTaskDetails(integration.task_id),
+        gate_evaluation: { allowed: gates.allowed, reasons: gates.reasons },
+        action_receipts: this.database.prepare(`SELECT
+          id,action,actor,reason,result_json,idempotency_key,created_at
+          FROM git_integration_actions WHERE integration_id=? ORDER BY created_at,id`)
+          .all(integration.id).map((receipt) => ({
+            ...receipt,
+            result: parseJson(receipt.result_json) ?? {},
+            result_json: undefined,
+          })),
+        allowed_actions: integration.state === "conflict"
+          ? ["cancel"]
+          : integration.state === "failed" ? ["cancel"] : ["cancel"],
+      };
+    });
+  }
+
+  reconcileGitIntegrationsAfterRestart() {
+    const rows = this.database.prepare(
+      "SELECT id,version FROM git_integrations WHERE state IN ('preparing','integrating') ORDER BY updated_at,id",
+    ).all();
+    for (const row of rows) {
+      this.transitionGitIntegration({
+        integrationId: row.id,
+        expectedVersion: row.version,
+        state: "reconciliation_required",
+        failure: {
+          code: "control_plane_restart",
+          message: "Git integration was interrupted; no automatic replay is permitted.",
+        },
+      });
+    }
+    return rows.map((row) => row.id);
+  }
+
+  recordGitIntegrationAction({
+    integrationId,
+    action,
+    expectedVersion,
+    reason,
+    idempotencyKey,
+    actor = "local-owner",
+    result = {},
+  }) {
+    if (!["execute", "cancel"].includes(action) || !reason?.trim() || !idempotencyKey) {
+      throw codedError("invalid_request", "integration action, reason, and idempotency key are required");
+    }
+    const integration = this.gitIntegration(integrationId);
+    if (!integration) throw codedError("not_found", `unknown Git integration: ${integrationId}`);
+    const intent = { integrationId, action, expectedVersion, reason: reason.trim() };
+    const requestSha256 = sha256(JSON.stringify(intent));
+    const prior = this.database.prepare(
+      "SELECT * FROM git_integration_actions WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "integration action key was reused");
+      }
+      return {
+        replayed: true,
+        receipt: { ...prior, result: parseJson(prior.result_json) ?? {} },
+        integration: this.gitIntegration(integrationId),
+      };
+    }
+    if (integration.version !== expectedVersion) {
+      throw codedError("version_conflict", "Git integration changed", { current: integration });
+    }
+    const now = this.clock();
+    const id = randomUUID();
+    this.database.prepare(`INSERT INTO git_integration_actions(
+      id,integration_id,action,actor,reason,request_sha256,result_json,idempotency_key,created_at
+    ) VALUES(?,?,?,?,?,?,?,?,?)`).run(
+      id,
+      integrationId,
+      action,
+      actor,
+      reason.trim(),
+      requestSha256,
+      JSON.stringify(result),
+      idempotencyKey,
+      now,
+    );
+    return {
+      replayed: false,
+      receipt: {
+        ...this.database.prepare("SELECT * FROM git_integration_actions WHERE id=?").get(id),
+        result,
+      },
+      integration,
+    };
+  }
+
+  completeGitIntegrationAction(receiptId, result) {
+    const receipt = this.database.prepare(
+      "SELECT * FROM git_integration_actions WHERE id=?",
+    ).get(receiptId);
+    if (!receipt) throw codedError("not_found", `unknown integration action receipt: ${receiptId}`);
+    this.database.prepare(
+      "UPDATE git_integration_actions SET result_json=? WHERE id=?",
+    ).run(JSON.stringify(result), receiptId);
+    return {
+      ...this.database.prepare("SELECT * FROM git_integration_actions WHERE id=?").get(receiptId),
+      result,
+    };
+  }
+
+  transitionGitIntegration({
+    integrationId,
+    expectedVersion,
+    state,
+    resultRevision = null,
+    result = null,
+    failure = null,
+  }) {
+    if (!GIT_INTEGRATION_STATES.has(state)) {
+      throw codedError("invalid_request", `unsupported Git integration state: ${state}`);
+    }
+    const prior = this.gitIntegration(integrationId);
+    if (!prior) throw codedError("not_found", `unknown Git integration: ${integrationId}`);
+    if (prior.version !== expectedVersion) {
+      throw codedError("version_conflict", "Git integration changed", { current: prior });
+    }
+    const nextVersion = prior.version + 1;
+    const now = this.clock();
+    const completedAt = ["integrated", "published", "cancelled"].includes(state) ? now : null;
+    const changed = this.database.prepare(`UPDATE git_integrations SET
+      state=?,result_revision=COALESCE(?,result_revision),result_json=?,
+      failure_json=?,version=?,completed_at=COALESCE(?,completed_at),updated_at=?
+      WHERE id=? AND version=?`).run(
+      state,
+      resultRevision,
+      result === null ? prior.result ? JSON.stringify(prior.result) : null : JSON.stringify(result),
+      failure === null ? null : JSON.stringify(failure),
+      nextVersion,
+      completedAt,
+      now,
+      integrationId,
+      expectedVersion,
+    );
+    if (Number(changed.changes) !== 1) {
+      throw codedError("version_conflict", "Git integration changed");
+    }
+    if (["integrated", "published"].includes(state)) {
+      this.database.prepare(`UPDATE merge_requests SET
+        status=?,integration_id=?,result_revision=?,integrated_at=?
+        WHERE id=? AND task_id=? AND revision=?`).run(
+        state,
+        integrationId,
+        resultRevision,
+        now,
+        prior.merge_request_id,
+        prior.task_id,
+        prior.source_revision,
+      );
+    }
+    return this.gitIntegration(integrationId);
+  }
+
+  createRetentionHold({
+    projectId,
+    scopeType,
+    scopeId,
+    reason,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    if (!RETENTION_SCOPE_TYPES.has(scopeType) || !scopeId || !reason?.trim() || !idempotencyKey) {
+      throw codedError("invalid_request", "valid hold scope, reason, and idempotency key are required");
+    }
+    const intent = { projectId, scopeType, scopeId, reason: reason.trim() };
+    const requestSha256 = sha256(JSON.stringify(intent));
+    const prior = this.database.prepare(
+      "SELECT * FROM retention_holds WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "retention hold key was reused");
+      }
+      return { replayed: true, hold: { ...prior, active: Boolean(prior.active) } };
+    }
+    if (!this.getProject(projectId)) throw codedError("not_found", `unknown project: ${projectId}`);
+    let scopedProjectId = null;
+    if (scopeType === "project") {
+      scopedProjectId = scopeId;
+    } else if (scopeType === "task") {
+      scopedProjectId = this.getTask(scopeId)?.project_id ?? null;
+    } else if (scopeType === "session") {
+      const session = this.getSession(scopeId);
+      scopedProjectId = session ? this.getTask(session.task_id)?.project_id ?? null : null;
+    } else if (scopeType === "run") {
+      const run = this.getRun(scopeId);
+      const session = run ? this.getSession(run.session_id) : null;
+      scopedProjectId = session ? this.getTask(session.task_id)?.project_id ?? null : null;
+    } else if (scopeType === "workspace") {
+      const workspace = this.getWorkspace(scopeId);
+      scopedProjectId = workspace ? this.getTask(workspace.task_id)?.project_id ?? null : null;
+    }
+    if (!scopedProjectId) {
+      throw codedError("not_found", `unknown ${scopeType} hold scope: ${scopeId}`);
+    }
+    if (scopedProjectId !== projectId) {
+      throw codedError("scope_mismatch", `${scopeType} hold scope is outside project ${projectId}`);
+    }
+    const id = randomUUID();
+    const now = this.clock();
+    this.database.prepare(`INSERT INTO retention_holds(
+      id,project_id,scope_type,scope_id,reason,active,created_by,request_sha256,
+      idempotency_key,created_at
+    ) VALUES(?,?,?,?,?,1,?,?,?,?)`).run(
+      id,
+      projectId,
+      scopeType,
+      scopeId,
+      reason.trim(),
+      actor,
+      requestSha256,
+      idempotencyKey,
+      now,
+    );
+    return {
+      replayed: false,
+      hold: { ...this.database.prepare("SELECT * FROM retention_holds WHERE id=?").get(id), active: true },
+    };
+  }
+
+  releaseRetentionHold({
+    holdId,
+    reason,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    const hold = this.database.prepare("SELECT * FROM retention_holds WHERE id=?").get(holdId);
+    if (!hold) throw codedError("not_found", `unknown retention hold: ${holdId}`);
+    if (!reason?.trim() || !idempotencyKey) {
+      throw codedError("invalid_request", "release reason and idempotency key are required");
+    }
+    const intent = { holdId, reason: reason.trim() };
+    const requestSha256 = sha256(JSON.stringify(intent));
+    const prior = this.database.prepare(
+      "SELECT * FROM retention_hold_events WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "retention release key was reused");
+      }
+      const current = this.database.prepare("SELECT * FROM retention_holds WHERE id=?").get(holdId);
+      return { replayed: true, hold: { ...current, active: Boolean(current.active) } };
+    }
+    if (!hold.active) throw codedError("transition_denied", "retention hold is already released");
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`UPDATE retention_holds SET
+        active=0,released_by=?,release_reason=?,released_at=? WHERE id=? AND active=1`).run(
+        actor,
+        reason.trim(),
+        now,
+        holdId,
+      );
+      this.database.prepare(`INSERT INTO retention_hold_events(
+        id,hold_id,action,actor,reason,request_sha256,idempotency_key,created_at
+      ) VALUES(?,?,?,?,?,?,?,?)`).run(
+        randomUUID(),
+        holdId,
+        "release",
+        actor,
+        reason.trim(),
+        requestSha256,
+        idempotencyKey,
+        now,
+      );
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    const current = this.database.prepare("SELECT * FROM retention_holds WHERE id=?").get(holdId);
+    return { replayed: false, hold: { ...current, active: Boolean(current.active) } };
+  }
+
+  retentionHolds(projectId, { activeOnly = true } = {}) {
+    return this.database.prepare(`SELECT * FROM retention_holds WHERE project_id=?
+      ${activeOnly ? "AND active=1" : ""} ORDER BY created_at,id`).all(projectId)
+      .map((hold) => ({ ...hold, active: Boolean(hold.active) }));
+  }
+
+  setRuntimeFlag(key, value) {
+    this.database.prepare(`INSERT INTO runtime_flags(key,value_json,updated_at)
+      VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET
+      value_json=excluded.value_json,updated_at=excluded.updated_at`).run(
+      key,
+      JSON.stringify(value),
+      this.clock(),
+    );
+    return this.runtimeFlag(key);
+  }
+
+  runtimeFlag(key) {
+    const row = this.database.prepare("SELECT * FROM runtime_flags WHERE key=?").get(key);
+    return row ? { ...row, value: parseJson(row.value_json) } : null;
+  }
+
+  resourceCleanupProjection(taskId) {
+    const task = this.getTaskDetails(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    const holds = this.retentionHolds(task.project_id);
+    const integrated = task.git_integrations.some((integration) =>
+      ["integrated", "published"].includes(integration.state)
+      && integration.source_revision === task.revision
+    );
+    const workspaces = this.database.prepare(`SELECT w.*,r.state AS run_state,r.phase,
+      r.container_id,r.session_id,r.execution_id
+      FROM workspaces w JOIN runs r ON r.id=w.run_id
+      WHERE w.task_id=? ORDER BY w.created_at,w.id`).all(taskId).map((workspace) => {
+      const blockers = [];
+      if (workspace.state !== "active") blockers.push("workspace_not_active");
+      if (workspace.run_state === "running") blockers.push("run_active");
+      const execution = workspace.execution_id
+        ? this.commandExecution(workspace.execution_id)
+        : null;
+      if (execution && ["starting", "running", "stopping", "paused", "reconciliation_required"].includes(execution.state)) {
+        blockers.push(`execution_${execution.state}`);
+      }
+      if (this.database.prepare(`SELECT 1 value FROM recovery_candidates
+        WHERE workspace_id=? AND state='pending' LIMIT 1`).get(workspace.id)) {
+        blockers.push("recovery_candidate_pending");
+      }
+      if (this.sideEffectsForRun(workspace.run_id).some((effect) => effect.state !== "completed")) {
+        blockers.push("side_effect_unsettled");
+      }
+      if (workspace.phase === "implementation" && !integrated) {
+        blockers.push("implementation_not_integrated");
+      }
+      const matchingHolds = holds.filter((hold) =>
+        (hold.scope_type === "project" && hold.scope_id === task.project_id)
+        || (hold.scope_type === "task" && hold.scope_id === taskId)
+        || (hold.scope_type === "session" && hold.scope_id === workspace.session_id)
+        || (hold.scope_type === "run" && hold.scope_id === workspace.run_id)
+        || (hold.scope_type === "workspace" && hold.scope_id === workspace.id)
+      );
+      if (matchingHolds.length) blockers.push("retention_hold");
+      return {
+        ...workspace,
+        execution,
+        holds: matchingHolds,
+        eligible: blockers.length === 0,
+        blockers,
+      };
+    });
+    return {
+      task,
+      holds,
+      workspaces,
+      integrated,
+      generated_at: this.clock(),
+    };
+  }
+
+  beginResourceCleanup({
+    projectId,
+    taskId,
+    previewSha256,
+    resources,
+    reason,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    if (!previewSha256 || !reason?.trim() || !idempotencyKey || !Array.isArray(resources)) {
+      throw codedError("invalid_request", "cleanup preview, resources, reason, and idempotency key are required");
+    }
+    const intent = { projectId, taskId, previewSha256, resources, reason: reason.trim() };
+    const requestSha256 = sha256(JSON.stringify(intent));
+    const prior = this.database.prepare(
+      "SELECT * FROM resource_cleanup_operations WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "cleanup idempotency key was reused");
+      }
+      return { replayed: true, operation: publicCleanupOperation(prior) };
+    }
+    const id = randomUUID();
+    const now = this.clock();
+    this.database.prepare(`INSERT INTO resource_cleanup_operations(
+      id,project_id,task_id,preview_sha256,state,resources_json,actor,reason,
+      request_sha256,idempotency_key,created_at,updated_at
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      id,
+      projectId,
+      taskId,
+      previewSha256,
+      "prepared",
+      JSON.stringify(resources),
+      actor,
+      reason.trim(),
+      requestSha256,
+      idempotencyKey,
+      now,
+      now,
+    );
+    return { replayed: false, operation: this.resourceCleanupOperation(id) };
+  }
+
+  resourceCleanupOperation(id) {
+    return publicCleanupOperation(
+      this.database.prepare("SELECT * FROM resource_cleanup_operations WHERE id=?").get(id),
+    );
+  }
+
+  resourceCleanupByIdempotency(idempotencyKey) {
+    if (!idempotencyKey) return null;
+    return publicCleanupOperation(
+      this.database.prepare(
+        "SELECT * FROM resource_cleanup_operations WHERE idempotency_key=?",
+      ).get(idempotencyKey),
+    );
+  }
+
+  completeResourceCleanup(id, { state, result }) {
+    if (!["complete", "cleanup_pending", "reconciliation_required"].includes(state)) {
+      throw codedError("invalid_request", `unsupported cleanup state: ${state}`);
+    }
+    const now = this.clock();
+    this.database.prepare(`UPDATE resource_cleanup_operations SET
+      state=?,result_json=?,completed_at=CASE WHEN ?='complete' THEN ? ELSE completed_at END,
+      updated_at=? WHERE id=?`).run(state, JSON.stringify(result), state, now, now, id);
+    return this.resourceCleanupOperation(id);
+  }
+
+  markWorkspaceRetired(workspaceId, {
+    actor = "local-owner",
+    reason,
+  }) {
+    const workspace = this.getWorkspace(workspaceId);
+    if (!workspace) throw codedError("not_found", `unknown workspace: ${workspaceId}`);
+    if (workspace.state === "retired") return workspace;
+    const now = this.clock();
+    this.database.prepare(`UPDATE workspaces SET
+      state='retired',retired_at=?,retired_by=?,retirement_reason=?,updated_at=?
+      WHERE id=? AND state='active'`).run(now, actor, reason, now, workspaceId);
+    return this.getWorkspace(workspaceId);
+  }
+
+  sessionDeletionProjection(sessionId) {
+    const session = this.getSession(sessionId);
+    if (!session) throw codedError("not_found", `unknown session: ${sessionId}`);
+    const task = this.getTaskDetails(session.task_id);
+    const runs = this.database.prepare(
+      "SELECT * FROM runs WHERE session_id=? ORDER BY started_at,id",
+    ).all(sessionId);
+    const holds = this.retentionHolds(task.project_id).filter((hold) =>
+      (hold.scope_type === "project" && hold.scope_id === task.project_id)
+      || (hold.scope_type === "task" && hold.scope_id === task.id)
+      || (hold.scope_type === "session" && hold.scope_id === sessionId)
+      || runs.some((run) => hold.scope_type === "run" && hold.scope_id === run.id)
+    );
+    const blockers = [];
+    if (session.deleted_at) blockers.push("session_already_deleted");
+    if (runs.some((run) => run.state === "running")) blockers.push("run_active");
+    if (holds.length) blockers.push("retention_hold");
+    if (runs.some((run) => this.database.prepare(`SELECT 1 value FROM recovery_candidates
+      WHERE run_id=? AND state='pending' LIMIT 1`).get(run.id))) {
+      blockers.push("recovery_candidate_pending");
+    }
+    const implementationRevision = runs.some((run) => run.phase === "implementation");
+    if (
+      implementationRevision
+      && !task.git_integrations.some((integration) =>
+        ["integrated", "published"].includes(integration.state)
+        && integration.source_revision === task.revision
+      )
+    ) blockers.push("implementation_not_integrated");
+    return {
+      session,
+      task,
+      runs,
+      artifacts: this.artifacts(sessionId),
+      holds,
+      eligible: blockers.length === 0,
+      blockers,
+      generated_at: this.clock(),
+    };
+  }
+
+  beginSessionDeletion({
+    sessionId,
+    confirmSessionId,
+    previewSha256,
+    preview,
+    reason,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    if (confirmSessionId !== sessionId) {
+      throw codedError("confirmation_mismatch", "session confirmation must exactly match the session ID");
+    }
+    if (!previewSha256 || !reason?.trim() || !idempotencyKey) {
+      throw codedError("invalid_request", "session deletion preview, reason, and idempotency key are required");
+    }
+    const intent = { sessionId, confirmSessionId, previewSha256, reason: reason.trim() };
+    const requestSha256 = sha256(JSON.stringify(intent));
+    const prior = this.database.prepare(
+      "SELECT * FROM session_deletion_receipts WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (prior) {
+      if (prior.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "session deletion key was reused");
+      }
+      return { replayed: true, receipt: publicSessionDeletionReceipt(prior) };
+    }
+    const projection = this.sessionDeletionProjection(sessionId);
+    if (!projection.eligible) {
+      throw codedError("deletion_blocked", `session deletion blocked: ${projection.blockers.join(",")}`, {
+        blockers: projection.blockers,
+      });
+    }
+    const id = randomUUID();
+    const now = this.clock();
+    this.database.prepare(`INSERT INTO session_deletion_receipts(
+      id,session_id,task_id,preview_sha256,preview_json,state,actor,reason,
+      request_sha256,idempotency_key,created_at,updated_at
+    ) VALUES(?,?,?,?,?,'prepared',?,?,?,?,?,?)`).run(
+      id,
+      sessionId,
+      projection.task.id,
+      previewSha256,
+      JSON.stringify(preview),
+      actor,
+      reason.trim(),
+      requestSha256,
+      idempotencyKey,
+      now,
+      now,
+    );
+    return { replayed: false, receipt: this.sessionDeletionReceipt(id) };
+  }
+
+  sessionDeletionReceipt(id) {
+    return publicSessionDeletionReceipt(
+      this.database.prepare("SELECT * FROM session_deletion_receipts WHERE id=?").get(id),
+    );
+  }
+
+  sessionDeletionByIdempotency(idempotencyKey) {
+    if (!idempotencyKey) return null;
+    return publicSessionDeletionReceipt(
+      this.database.prepare(
+        "SELECT * FROM session_deletion_receipts WHERE idempotency_key=?",
+      ).get(idempotencyKey),
+    );
+  }
+
+  settleSessionDeletion(id, {
+    state,
+    manifestPath = null,
+    result = {},
+  }) {
+    if (!["cleanup_pending", "complete"].includes(state)) {
+      throw codedError("invalid_request", `unsupported session deletion state: ${state}`);
+    }
+    const receipt = this.sessionDeletionReceipt(id);
+    if (!receipt) throw codedError("not_found", `unknown session deletion receipt: ${id}`);
+    const now = this.clock();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare(`UPDATE session_deletion_receipts SET
+        state=?,manifest_path=COALESCE(?,manifest_path),result_json=?,
+        completed_at=CASE WHEN ?='complete' THEN ? ELSE completed_at END,updated_at=?
+        WHERE id=?`).run(
+        state,
+        manifestPath,
+        JSON.stringify(result),
+        state,
+        now,
+        now,
+        id,
+      );
+      if (state === "complete") {
+        this.database.prepare(`UPDATE sessions SET
+          state='deleted',deleted_at=?,deleted_by=?,deletion_reason=?,
+          deletion_manifest_path=?,updated_at=? WHERE id=?`).run(
+          now,
+          receipt.actor,
+          receipt.reason,
+          manifestPath,
+          now,
+          receipt.session_id,
+        );
+      }
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+    return this.sessionDeletionReceipt(id);
   }
 
   recordTaskContextItem({ id = randomUUID(), taskId, kind, body, status = "active", sourceRef = null }) {
@@ -4526,9 +6947,19 @@ export class Phase0Store {
     return this.database.prepare("SELECT * FROM task_context_items WHERE task_id=? ORDER BY created_at,id").all(taskId);
   }
 
-  issueCapability({ role, actorId, taskId, runId = null, actions = [...(CAPABILITY_ACTIONS[role] ?? [])], expiresAt }) {
+  issueCapability({
+    role,
+    actorId,
+    taskId,
+    runId = null,
+    executionId = null,
+    executionGeneration = null,
+    actions = [...(CAPABILITY_ACTIONS[role] ?? [])],
+    expiresAt,
+  }) {
     if (!CAPABILITY_ACTIONS[role]) throw codedError("invalid_role", `unknown role: ${role}`);
     if (!this.getTask(taskId)) throw codedError("not_found", `unknown task: ${taskId}`);
+    if (executionId) this.assertExecutionGeneration(executionId, executionGeneration);
     if (!actorId || !expiresAt || Date.parse(expiresAt) <= Date.parse(this.clock())) {
       throw codedError("invalid_capability", "capability actor and future expiry are required");
     }
@@ -4539,8 +6970,20 @@ export class Phase0Store {
     this.database.exec("BEGIN IMMEDIATE");
     try {
       this.database.prepare(`INSERT INTO capabilities(
-        id,token_sha256,role,actor_id,task_id,run_id,expires_at,created_at
-      ) VALUES(?,?,?,?,?,?,?,?)`).run(id, sha256(token), role, actorId, taskId, runId, expiresAt, this.clock());
+        id,token_sha256,role,actor_id,task_id,run_id,expires_at,created_at,
+        execution_id,execution_generation
+      ) VALUES(?,?,?,?,?,?,?,?,?,?)`).run(
+        id,
+        sha256(token),
+        role,
+        actorId,
+        taskId,
+        runId,
+        expiresAt,
+        this.clock(),
+        executionId,
+        executionGeneration,
+      );
       const insertAction = this.database.prepare("INSERT INTO capability_actions(capability_id,action) VALUES(?,?)");
       for (const action of actions) insertAction.run(id, action);
       this.database.exec("COMMIT");
@@ -4548,7 +6991,18 @@ export class Phase0Store {
       this.database.exec("ROLLBACK");
       throw error;
     }
-    return { id, token, role, actorId, taskId, runId, actions, expiresAt };
+    return {
+      id,
+      token,
+      role,
+      actorId,
+      taskId,
+      runId,
+      executionId,
+      executionGeneration,
+      actions,
+      expiresAt,
+    };
   }
 
   revokeCapability(id) {
@@ -4562,6 +7016,9 @@ export class Phase0Store {
       WHERE c.token_sha256=? AND c.task_id=? AND a.action=?`).get(sha256(token), taskId, action);
     if (!capability || capability.revoked_at || Date.parse(capability.expires_at) <= Date.parse(this.clock())) {
       throw codedError("capability_denied", "capability is missing, expired, revoked, or outside action scope");
+    }
+    if (capability.execution_id) {
+      this.assertExecutionGeneration(capability.execution_id, capability.execution_generation);
     }
     return capability;
   }
@@ -4820,7 +7277,7 @@ export class Phase0Store {
     return tasks.map((task) => {
       const activeCommand = this.database.prepare(`SELECT id,phase,state
         FROM orchestrator_commands
-        WHERE task_id=? AND state IN ('queued','claimed')
+        WHERE task_id=? AND state IN ('queued','claimed','running')
         ORDER BY sequence LIMIT 1`).get(task.id);
       const running = this.database.prepare(`SELECT r.id,r.phase FROM runs r
         JOIN sessions s ON s.id=r.session_id
@@ -4928,6 +7385,54 @@ export class Phase0Store {
     }
     const task = this.getTask(operation.task_id);
     if (!task) throw codedError("not_found", `unknown task: ${operation.task_id}`);
+    const execution = this.commandExecutionForRun(operation.run_id);
+    const operationCapability = this.database.prepare(
+      "SELECT * FROM capabilities WHERE id=?",
+    ).get(operation.capability_id);
+    if (
+      execution
+      && (
+        !operationCapability
+        || operationCapability.execution_id !== execution.id
+        || operationCapability.execution_generation !== execution.generation
+        || !["starting", "running"].includes(execution.state)
+      )
+    ) {
+      const identityProven = Boolean(
+        operation.workspace_id === execution.workspace_id
+        && operation.run_id === execution.run_id
+        && operation.task_id === execution.task_id
+      );
+      const directDescendant = operation.prior_revision === task.revision;
+      const proof = {
+        eligible: identityProven && directDescendant,
+        repositoryScopeProven: identityProven,
+        executionGenerationFenced: true,
+        directParentMatchesAuthoritativeRevision: directDescendant,
+        operationReceiptId: operation.id,
+      };
+      const candidate = this.createRecoveryCandidate({
+        executionId: execution.id,
+        revision: operation.new_revision,
+        baseRevision: task.revision,
+        evidence: {
+          operationId: operation.id,
+          runId: operation.run_id,
+          workspaceId: operation.workspace_id,
+          capabilityId: operation.capability_id,
+          priorRevision: operation.prior_revision,
+          discoveredBy: "host_git_revision_guard",
+        },
+        proof,
+        eligible: proof.eligible,
+      });
+      return {
+        replayed: candidate.replayed,
+        lateEvidence: true,
+        candidate: candidate.candidate,
+        task: this.getTaskDetails(task.id),
+      };
+    }
     const prior = this.getTaskDetails(task.id);
     const now = this.clock();
     this.database.exec("BEGIN IMMEDIATE");
@@ -4980,7 +7485,7 @@ export class Phase0Store {
     if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
     if (task.archived_at || task.task_kind !== "executable") return [];
     const busy = this.database.prepare(`SELECT 1 AS value FROM orchestrator_commands
-      WHERE task_id=? AND state IN ('queued','claimed') LIMIT 1`).get(taskId)
+      WHERE task_id=? AND state IN ('queued','claimed','running') LIMIT 1`).get(taskId)
       || this.database.prepare(`SELECT 1 AS value FROM runs r JOIN sessions s ON s.id=r.session_id
         WHERE s.task_id=? AND r.state='running' LIMIT 1`).get(taskId);
     if (busy) return [];
@@ -5042,8 +7547,16 @@ export class Phase0Store {
         "SELECT * FROM orchestrator_commands WHERE task_id=? ORDER BY sequence",
       ).all(taskId).map((row) => ({
         ...publicOrchestratorCommand(row),
+        execution: this.commandExecutionForCommand(row.id),
         events: this.orchestratorCommandEvents(row.id),
       })),
+      executions: this.commandExecutions().filter((execution) => execution.task_id === taskId)
+        .map((execution) => ({
+          ...execution,
+          events: this.executionEvents(execution.id),
+          allowed_actions: this.allowedExecutionActions(execution),
+        })),
+      recovery_candidates: this.recoveryCandidates({ taskId }),
       runs,
       sources: this.database.prepare(
         "SELECT id,kind,source_ref,content,content_sha256,actor,created_at FROM source_snapshots WHERE project_id=? ORDER BY created_at,id",
@@ -5091,7 +7604,11 @@ export class Phase0Store {
     const now = this.clock();
     this.database
       .prepare(`INSERT INTO sessions(id,task_id,native_path,state,model_provider,model_id,parent_session_id,updated_at)
-                VALUES(?,?,?,?,?,?,?,?)`)
+                VALUES(?,?,?,?,?,?,?,?)
+                ON CONFLICT(id) DO UPDATE SET
+                  native_path=excluded.native_path,state='idle',
+                  model_provider=excluded.model_provider,model_id=excluded.model_id,
+                  updated_at=excluded.updated_at`)
       .run(id, taskId, nativePath, "idle", provider, model, parentSessionId, now);
     return this.getSession(id);
   }
@@ -5103,6 +7620,7 @@ export class Phase0Store {
   createRun({
     id = randomUUID(), sessionId, processId = null, shellProcessId = null, containerId = null, imageId = null,
     workspaceId = null, credentialProfile = null, orchestratorId = null, phase = "implementation",
+    executionId = null,
     promptProfileKey = null, promptProfileVersion = null, promptSha256 = null,
     modelProvider = null, modelId = null, thinkingLevel = null,
     modelPolicySource = null, billingClass = null,
@@ -5120,13 +7638,14 @@ export class Phase0Store {
       .prepare(`INSERT INTO runs(
         id,session_id,state,process_id,shell_process_id,started_at,container_id,image_id,workspace_id,
         credential_profile,orchestrator_id,phase,prompt_profile_key,prompt_profile_version,prompt_sha256,
-        model_provider,model_id,thinking_level,model_policy_source,billing_class
-      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        model_provider,model_id,thinking_level,model_policy_source,billing_class,execution_id
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(
         id, sessionId, "running", processId, shellProcessId, this.clock(), containerId, imageId,
         workspaceId, credentialProfile, orchestratorId, phase,
         promptProfileKey, promptProfileVersion, promptSha256,
         modelProvider, modelId, thinkingLevel, modelPolicySource, billingClass,
+        executionId,
       );
     return this.getRun(id);
   }

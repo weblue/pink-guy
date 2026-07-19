@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { chmod, mkdir, readFile, readdir, stat } from "node:fs/promises";
+import { access, chmod, mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 function sha256(value) {
@@ -15,8 +15,30 @@ function runGit(repositoryPath, args) {
   });
 }
 
+function runFile(command, args, options = {}) {
+  return new Promise((resolvePromise) => {
+    execFile(command, args, {
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      ...options,
+    }, (error, stdout, stderr) => {
+      resolvePromise({ code: error?.code ?? 0, stdout, stderr });
+    });
+  });
+}
+
 function gitError(operation, result) {
   return Object.assign(new Error(`${operation} failed: ${result.stderr || result.stdout}`.trim()), { code: "git_operation_failed", operation });
+}
+
+async function exists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
 }
 
 async function makeWorkspaceWritable(root) {
@@ -57,7 +79,7 @@ export class HostGitService {
   async createWorkspace({ taskId, runId }) {
     await mkdir(this.workspaceRoot, { recursive: true, mode: 0o700 });
     const shortRun = runId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12);
-    const branch = `boss-man/${taskId.replace(/[^a-zA-Z0-9_.-]/g, "-")}/${shortRun}`;
+    const branch = `pink-guy/${taskId.replace(/[^a-zA-Z0-9_.-]/g, "-")}/${shortRun}`;
     const path = join(this.workspaceRoot, runId);
     const task = this.store.getTask(taskId);
     if (!task?.revision) {
@@ -118,6 +140,329 @@ export class HostGitService {
     return result.stdout.trim();
   }
 
+  async repositoryIdentity() {
+    const [topLevel, head, originHead, originUrl] = await Promise.all([
+      runGit(this.repositoryPath, ["rev-parse", "--show-toplevel"]),
+      runGit(this.repositoryPath, ["symbolic-ref", "--quiet", "--short", "HEAD"]),
+      runGit(this.repositoryPath, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]),
+      runGit(this.repositoryPath, ["remote", "get-url", "origin"]),
+    ]);
+    if (topLevel.code !== 0) throw gitError("resolve repository identity", topLevel);
+    const defaultBranch = originHead.code === 0
+      ? originHead.stdout.trim().replace(/^origin\//, "")
+      : head.code === 0 ? head.stdout.trim() : null;
+    if (!defaultBranch) {
+      throw Object.assign(new Error("repository has no detectable default branch"), {
+        code: "git_default_branch_required",
+      });
+    }
+    return {
+      repositoryPath: topLevel.stdout.trim(),
+      repositorySha256: sha256(topLevel.stdout.trim()),
+      defaultBranch,
+      remoteName: "origin",
+      remoteUrl: originUrl.code === 0 ? originUrl.stdout.trim() : null,
+    };
+  }
+
+  async resolveRef(ref) {
+    const resolved = await runGit(this.repositoryPath, ["rev-parse", `${ref}^{commit}`]);
+    if (resolved.code !== 0) throw gitError(`resolve ${ref}`, resolved);
+    return resolved.stdout.trim();
+  }
+
+  integrationBranch(integrationId, suffix = "") {
+    const safe = integrationId.replace(/[^A-Za-z0-9_.-]/g, "-").slice(0, 80);
+    return `pink-guy/integration/${safe}${suffix}`;
+  }
+
+  async removeManagedWorktree(path, branch = null) {
+    if (await exists(path)) {
+      const removed = await runGit(this.repositoryPath, ["worktree", "remove", "--force", path]);
+      if (removed.code !== 0) throw gitError("remove managed worktree", removed);
+    }
+    await runGit(this.repositoryPath, ["worktree", "prune"]);
+    if (branch) {
+      const deleted = await runGit(this.repositoryPath, ["branch", "-D", branch]);
+      if (deleted.code !== 0 && !/not found|not exist/i.test(`${deleted.stderr}\n${deleted.stdout}`)) {
+        throw gitError("delete managed branch", deleted);
+      }
+    }
+  }
+
+  async simulateIntegration({
+    integrationId,
+    sourceRevision,
+    targetBranch,
+    historyPolicy,
+  }) {
+    const source = await this.resolveRef(sourceRevision);
+    const target = await this.resolveRef(`refs/heads/${targetBranch}`);
+    const previewPath = join(this.workspaceRoot, "integration-previews", integrationId);
+    const previewBranch = historyPolicy === "rebase"
+      ? this.integrationBranch(integrationId, "-preview")
+      : null;
+    await mkdir(join(this.workspaceRoot, "integration-previews"), { recursive: true, mode: 0o700 });
+    await this.removeManagedWorktree(previewPath, previewBranch).catch(() => undefined);
+    const addArgs = historyPolicy === "rebase"
+      ? ["worktree", "add", "-b", previewBranch, previewPath, source]
+      : ["worktree", "add", "--detach", previewPath, target];
+    const created = await runGit(this.repositoryPath, addArgs);
+    if (created.code !== 0) throw gitError("create integration preview", created);
+    let operation;
+    try {
+      if (historyPolicy === "merge_commit") {
+        operation = await runGit(previewPath, ["merge", "--no-commit", "--no-ff", source]);
+      } else if (historyPolicy === "squash") {
+        operation = await runGit(previewPath, ["merge", "--squash", source]);
+      } else if (historyPolicy === "rebase") {
+        const mergeBase = await runGit(this.repositoryPath, ["merge-base", target, source]);
+        if (mergeBase.code !== 0) throw gitError("resolve integration merge base", mergeBase);
+        operation = await runGit(previewPath, [
+          "-c", "user.name=Pink Guy", "-c", "user.email=pink-guy@localhost.invalid",
+          "rebase", "--onto", target, mergeBase.stdout.trim(), previewBranch,
+        ]);
+      } else {
+        throw Object.assign(new Error(`unsupported history policy: ${historyPolicy}`), {
+          code: "invalid_request",
+        });
+      }
+      const clean = operation.code === 0;
+      const conflictFiles = clean
+        ? []
+        : (await runGit(previewPath, ["diff", "--name-only", "--diff-filter=U"]))
+          .stdout.split("\n").map((value) => value.trim()).filter(Boolean);
+      return {
+        clean,
+        sourceRevision: source,
+        targetBranch,
+        targetRevision: target,
+        historyPolicy,
+        conflictFiles,
+        diagnostic: clean ? null : (operation.stderr || operation.stdout).trim().slice(0, 8_000),
+      };
+    } finally {
+      await this.removeManagedWorktree(previewPath, previewBranch).catch(() => undefined);
+    }
+  }
+
+  async createIntegrationResult({
+    integrationId,
+    sourceRevision,
+    targetBranch,
+    targetRevision,
+    historyPolicy,
+    taskId,
+  }) {
+    const currentTarget = await this.resolveRef(`refs/heads/${targetBranch}`);
+    if (currentTarget !== targetRevision) {
+      throw Object.assign(new Error("integration target moved after preparation"), {
+        code: "integration_stale",
+        expectedTargetRevision: targetRevision,
+        currentTargetRevision: currentTarget,
+      });
+    }
+    const source = await this.resolveRef(sourceRevision);
+    const branch = this.integrationBranch(integrationId);
+    const path = join(this.workspaceRoot, "integrations", integrationId);
+    await mkdir(join(this.workspaceRoot, "integrations"), { recursive: true, mode: 0o700 });
+    await this.removeManagedWorktree(path, branch).catch(() => undefined);
+    const startRevision = historyPolicy === "rebase" ? source : targetRevision;
+    const created = await runGit(this.repositoryPath, [
+      "worktree", "add", "-b", branch, path, startRevision,
+    ]);
+    if (created.code !== 0) throw gitError("create integration worktree", created);
+    let operation;
+    if (historyPolicy === "merge_commit") {
+      operation = await runGit(path, [
+        "-c", "user.name=Pink Guy", "-c", "user.email=pink-guy@localhost.invalid",
+        "merge", "--no-ff", source,
+        "-m", `Integrate Pink Guy task ${taskId}`,
+        "-m", `Pink-Guy-Task: ${taskId}\nPink-Guy-Integration: ${integrationId}`,
+      ]);
+    } else if (historyPolicy === "squash") {
+      operation = await runGit(path, ["merge", "--squash", source]);
+      if (operation.code === 0) {
+        operation = await runGit(path, [
+          "-c", "user.name=Pink Guy", "-c", "user.email=pink-guy@localhost.invalid",
+          "commit", "-m", `Integrate Pink Guy task ${taskId}`,
+          "-m", `Pink-Guy-Task: ${taskId}\nPink-Guy-Integration: ${integrationId}`,
+        ]);
+      }
+    } else if (historyPolicy === "rebase") {
+      const mergeBase = await runGit(this.repositoryPath, ["merge-base", targetRevision, source]);
+      if (mergeBase.code !== 0) throw gitError("resolve integration merge base", mergeBase);
+      operation = await runGit(path, [
+        "-c", "user.name=Pink Guy", "-c", "user.email=pink-guy@localhost.invalid",
+        "rebase", "--onto", targetRevision, mergeBase.stdout.trim(), branch,
+      ]);
+    } else {
+      throw Object.assign(new Error(`unsupported history policy: ${historyPolicy}`), {
+        code: "invalid_request",
+      });
+    }
+    if (operation.code !== 0) {
+      const conflicts = (await runGit(path, ["diff", "--name-only", "--diff-filter=U"]))
+        .stdout.split("\n").map((value) => value.trim()).filter(Boolean);
+      throw Object.assign(new Error(
+        `integration produced conflicts: ${(operation.stderr || operation.stdout).trim()}`,
+      ), {
+        code: "integration_conflict",
+        conflicts,
+        branch,
+        path,
+      });
+    }
+    const resultRevision = await this.resolveRef(branch);
+    return {
+      branch,
+      path,
+      sourceRevision: source,
+      targetBranch,
+      targetRevision,
+      resultRevision,
+      historyPolicy,
+    };
+  }
+
+  async cleanupIntegration(integrationId) {
+    const branch = this.integrationBranch(integrationId);
+    const path = join(this.workspaceRoot, "integrations", integrationId);
+    await this.removeManagedWorktree(path, branch);
+    return { integrationId, path, branch };
+  }
+
+  async publishLocalIntegration(result) {
+    const currentTarget = await this.resolveRef(`refs/heads/${result.targetBranch}`);
+    if (currentTarget !== result.targetRevision) {
+      throw Object.assign(new Error("integration target moved before publication"), {
+        code: "integration_stale",
+        expectedTargetRevision: result.targetRevision,
+        currentTargetRevision: currentTarget,
+      });
+    }
+    const worktreeList = await runGit(this.repositoryPath, ["worktree", "list", "--porcelain"]);
+    if (worktreeList.code !== 0) throw gitError("inspect target worktrees", worktreeList);
+    const entries = worktreeList.stdout.trim().split(/\n\n+/).map((block) =>
+      Object.fromEntries(block.split("\n").map((line) => {
+        const [key, ...rest] = line.split(" ");
+        return [key, rest.join(" ") || true];
+      }))
+    );
+    const targetEntry = entries.find((entry) =>
+      entry.branch === `refs/heads/${result.targetBranch}`
+    );
+    if (targetEntry?.worktree) {
+      const status = await runGit(targetEntry.worktree, ["status", "--porcelain=v1"]);
+      if (status.code !== 0) throw gitError("inspect checked-out target", status);
+      if (status.stdout.trim()) {
+        throw Object.assign(new Error("checked-out target branch has owner modifications"), {
+          code: "target_worktree_dirty",
+          targetWorktree: targetEntry.worktree,
+        });
+      }
+      const advanced = await runGit(targetEntry.worktree, ["merge", "--ff-only", result.resultRevision]);
+      if (advanced.code !== 0) throw gitError("publish integration to checked-out target", advanced);
+    } else {
+      const advanced = await runGit(this.repositoryPath, [
+        "update-ref",
+        `refs/heads/${result.targetBranch}`,
+        result.resultRevision,
+        result.targetRevision,
+      ]);
+      if (advanced.code !== 0) throw gitError("publish integration target", advanced);
+    }
+    return {
+      ...result,
+      publishedRevision: await this.resolveRef(`refs/heads/${result.targetBranch}`),
+      publication: "local_branch",
+    };
+  }
+
+  async pushIntegration({ remoteName, targetBranch, expectedRemoteRevision = null }) {
+    const targetRevision = await this.resolveRef(`refs/heads/${targetBranch}`);
+    if (expectedRemoteRevision) {
+      const remote = await runGit(this.repositoryPath, [
+        "ls-remote", "--heads", remoteName, `refs/heads/${targetBranch}`,
+      ]);
+      if (remote.code !== 0) throw gitError("inspect remote target", remote);
+      const actual = remote.stdout.trim().split(/\s+/)[0] || null;
+      if (actual !== expectedRemoteRevision) {
+        throw Object.assign(new Error("remote target moved before push"), {
+          code: "integration_stale",
+          expectedRemoteRevision,
+          currentRemoteRevision: actual,
+        });
+      }
+    }
+    const pushed = await runGit(this.repositoryPath, [
+      "push", "--porcelain", remoteName,
+      `refs/heads/${targetBranch}:refs/heads/${targetBranch}`,
+    ]);
+    if (pushed.code !== 0) throw gitError("push integrated target", pushed);
+    return { remoteName, targetBranch, targetRevision, output: pushed.stdout.trim() };
+  }
+
+  async publishPullRequest({
+    branch,
+    remoteName,
+    targetBranch,
+    title,
+    body,
+  }) {
+    const pushed = await runGit(this.repositoryPath, [
+      "push", "--porcelain", "--set-upstream", remoteName,
+      `refs/heads/${branch}:refs/heads/${branch}`,
+    ]);
+    if (pushed.code !== 0) throw gitError("push pull-request branch", pushed);
+    const created = await runFile("gh", [
+      "pr", "create",
+      "--base", targetBranch,
+      "--head", branch,
+      "--title", title,
+      "--body", body,
+    ], {
+      cwd: this.repositoryPath,
+      env: { ...process.env, GH_PROMPT_DISABLED: "1" },
+    });
+    if (created.code !== 0) {
+      throw Object.assign(new Error(
+        `pull-request creation outcome requires reconciliation: ${created.stderr || created.stdout}`,
+      ), {
+        code: "side_effect_uncertain",
+        branch,
+        remoteName,
+      });
+    }
+    return {
+      publication: "pull_request",
+      branch,
+      remoteName,
+      targetBranch,
+      url: created.stdout.trim().split("\n").at(-1) || null,
+      pushed: pushed.stdout.trim(),
+    };
+  }
+
+  async retireWorkspace(workspace) {
+    if (workspace.state === "retired") return { replayed: true, workspaceId: workspace.id };
+    const managedBranch = workspace.branch.startsWith("pink-guy/")
+      || workspace.branch.startsWith("boss-man/");
+    if (!managedBranch) {
+      throw Object.assign(new Error("workspace branch is not Pink Guy-managed"), {
+        code: "workspace_tampered",
+      });
+    }
+    if (await exists(workspace.workspace_path)) await this.assertWorkspace(workspace);
+    await this.removeManagedWorktree(workspace.workspace_path, workspace.branch);
+    return {
+      replayed: false,
+      workspaceId: workspace.id,
+      branch: workspace.branch,
+      path: workspace.workspace_path,
+    };
+  }
+
   async checkpoint({ workspace, capability, kind, idempotencyKey, message, evidence = [] }) {
     if (!idempotencyKey) throw Object.assign(new Error("idempotency key is required"), { code: "invalid_request" });
     await this.assertWorkspace(workspace);
@@ -132,7 +477,7 @@ export class HostGitService {
     const status = await this.status(workspace);
     if (!status.dirty) throw Object.assign(new Error("workspace has no changes to checkpoint"), { code: "git_no_changes" });
     const priorRevision = await this.revision(workspace);
-    const subject = cleanMessage(message, kind === "checkpoint" ? "chore: Boss Man checkpoint" : "chore: Boss Man commit");
+    const subject = cleanMessage(message, kind === "checkpoint" ? "chore: Pink Guy checkpoint" : "chore: Pink Guy commit");
     const journal = this.store.beginSideEffect({
       runId: workspace.run_id,
       kind: "git",
@@ -163,13 +508,13 @@ export class HostGitService {
     const staged = await runGit(workspace.workspace_path, ["add", "--all", "--", "."]);
     if (staged.code !== 0) throw gitError("stage workspace", staged);
     const trailers = [
-      `Boss-Man-Task: ${workspace.task_id}`,
-      `Boss-Man-Run: ${workspace.run_id}`,
-      `Boss-Man-Workspace: ${workspace.id}`,
-      ...evidence.map((item) => `Boss-Man-Evidence: ${String(item).replace(/[\r\n]/g, " ")}`),
+      `Pink-Guy-Task: ${workspace.task_id}`,
+      `Pink-Guy-Run: ${workspace.run_id}`,
+      `Pink-Guy-Workspace: ${workspace.id}`,
+      ...evidence.map((item) => `Pink-Guy-Evidence: ${String(item).replace(/[\r\n]/g, " ")}`),
     ].join("\n");
     const committed = await runGit(workspace.workspace_path, [
-      "-c", "user.name=Boss Man", "-c", "user.email=boss-man@localhost.invalid",
+      "-c", "user.name=Pink Guy", "-c", "user.email=pink-guy@localhost.invalid",
       "commit", "-m", subject, "-m", trailers,
     ]);
     if (committed.code !== 0) throw gitError("commit workspace checkpoint", committed);
@@ -210,10 +555,15 @@ export class HostGitService {
     }
     const parent = await runGit(workspace.workspace_path, ["rev-parse", `${currentRevision}^`]);
     const message = await runGit(workspace.workspace_path, ["show", "-s", "--format=%B", currentRevision]);
-    const provenance = message.code === 0
+    const pinkProvenance = message.code === 0
+      && message.stdout.includes(`Pink-Guy-Task: ${workspace.task_id}`)
+      && message.stdout.includes(`Pink-Guy-Run: ${workspace.run_id}`)
+      && message.stdout.includes(`Pink-Guy-Workspace: ${workspace.id}`);
+    const legacyProvenance = message.code === 0
       && message.stdout.includes(`Boss-Man-Task: ${workspace.task_id}`)
       && message.stdout.includes(`Boss-Man-Run: ${workspace.run_id}`)
       && message.stdout.includes(`Boss-Man-Workspace: ${workspace.id}`);
+    const provenance = pinkProvenance || legacyProvenance;
     if (parent.code !== 0 || parent.stdout.trim() !== intent.priorRevision || !provenance) {
       this.store.requireSideEffectReconciliation(effect.id, "git_revision_identity_ambiguous", {
         currentRevision,

@@ -14,7 +14,7 @@ narrow cleanup operation, not a general retention-deletion feature.
 
 ## Behavior
 
-1. A project is eligible for deletion only when it is a Boss Man-managed
+1. A project is eligible for deletion only when it is a Pink Guy-managed
    repository import with no retained work:
    - no tasks, including archived tasks;
    - no source snapshots, memories, or normalized evidence;
@@ -44,13 +44,13 @@ narrow cleanup operation, not a general retention-deletion feature.
 8. Deletion rechecks eligibility immediately before filesystem changes. A
    concurrent task, source, command, conversation, or lease prevents deletion.
 9. The managed checkout is first moved to a platform-owned quarantine path.
-   If the database cannot record the tombstone, Boss Man attempts to restore
+   If the database cannot record the tombstone, Pink Guy attempts to restore
    the checkout to its original path and leaves the project active.
 10. If tombstoning succeeds but final checkout removal fails, the project
     remains deleted from active views and the receipt reports cleanup pending.
     Repeating the same deletion request retries only that cleanup.
 11. If both the original and quarantine paths exist, or neither exists before
-    tombstoning, Boss Man stops with reconciliation required and does not guess
+    tombstoning, Pink Guy stops with reconciliation required and does not guess
     which copy is authoritative.
 12. The loopback terminal client exposes the same operation and refusal
     reasons as the cockpit. This feature does not enable remote deletion.

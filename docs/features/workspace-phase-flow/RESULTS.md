@@ -1,6 +1,6 @@
 # Workspace inspectors and phase flow results
 
-Status: Implementation ready for live-provider dogfood
+Status: Implemented and live-dogfooded; Phase 1 complete
 
 Last updated: 2026-07-18
 
@@ -22,7 +22,8 @@ Last updated: 2026-07-18
 
 ## Verification
 
-- `npm test` — nine Phase 1 probes passed with zero provider requests.
+- `npm test` — the current 15-probe Phase 1 suite passes with zero provider
+  requests (nine probes existed when this slice first landed).
 - `npm run test:workflow` — implementation → checkpoint → test → review →
   completion passed against one immutable revision.
 - `npm run test:baseline` — reproducibility baseline passed.
@@ -33,9 +34,11 @@ Last updated: 2026-07-18
   completion gates, validation/review sections, phase timeline, workspace
   inspector, and source snapshot section.
 
-## Remaining Phase 1 evidence
+## Phase 1 closure evidence
 
-Run the live provider workflow through the normal cockpit and project daemon
-on at least two real repositories. Record failures as product gaps rather than
-editing SQLite or using probe helpers. Actual merge/rebase/push and worktree
-cleanup remain Phase 2.
+The workflow passed through the normal cockpit/project daemons on the local
+`doc-map` prototype and imported `inspector-gadget` maintenance repository.
+The final automatic-release run also proved model-less initial dispatch,
+fixed-revision validation, independent review, and completion without SQLite
+edits or probe helpers. Actual merge/rebase/push and settled worktree cleanup
+remain Phase 2.

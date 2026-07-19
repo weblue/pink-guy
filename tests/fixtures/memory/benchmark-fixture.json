@@ -3,7 +3,7 @@
   "clock": "2026-07-16T12:00:00.000Z",
   "project": {
     "id": "boss-man-phase0-task",
-    "name": "Boss Man Phase 0 task fixture",
+    "name": "Pink Guy Phase 0 task fixture",
     "repository_id": "boss-man-phase0-repository"
   },
   "task": {
@@ -38,7 +38,7 @@
       "scope_id": "boss-man-phase0-task",
       "status": "active",
       "title": "Platform checkpoint terminology",
-      "body": "The operation formerly described as an agent commit is now a platform checkpoint request. A worker requests a checkpoint; Boss Man performs the Git commit.",
+      "body": "The operation formerly described as an agent commit is now a platform checkpoint request. A worker requests a checkpoint; Pink Guy performs the Git commit.",
       "confidence": 1,
       "trust_class": "owner",
       "author_type": "owner",
