@@ -595,11 +595,14 @@ function rewriteDatabasePaths(database, manifest, targetRoot) {
   const sourceRoot = resolve(manifest.sourceStateRoot);
   const unavailableRoot = join(targetRoot, "unavailable");
   const includedFiles = new Set(manifest.files.map(({ path }) => path));
+  const liveProjects = new Set(manifest.projects.map(({ id }) => id));
   database.exec("BEGIN IMMEDIATE");
   try {
-    for (const project of manifest.projects) {
+    for (const project of database.prepare("SELECT id FROM projects").all()) {
       database.prepare("UPDATE projects SET repository_path=? WHERE id=?").run(
-        join(targetRoot, "repositories", project.id),
+        liveProjects.has(project.id)
+          ? join(targetRoot, "repositories", project.id)
+          : join(unavailableRoot, "projects", project.id),
         project.id,
       );
     }

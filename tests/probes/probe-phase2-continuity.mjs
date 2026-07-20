@@ -95,6 +95,18 @@ try {
     title: "Retain work through an isolated restore",
     acceptanceCriteria: ["The restored task remains schedulable."],
   });
+  plane.store.database.prepare(`INSERT INTO projects(
+    id,name,repository_path,created_at,repository_id,deleted_at,deleted_by,deletion_reason
+  ) VALUES(?,?,?,?,?,?,?,?)`).run(
+    "deleted-project",
+    "Deleted fixture",
+    join(stateRoot, "project-trash", "deleted-project"),
+    new Date().toISOString(),
+    "deleted-repository",
+    new Date().toISOString(),
+    "probe",
+    "continuity regression",
+  );
 
   const sessionPath = join(stateRoot, "runs", "retained-run", "sessions", "session.jsonl");
   const artifactPath = join(stateRoot, "runs", "retained-run", "artifacts", "result.txt");
@@ -251,6 +263,8 @@ try {
     .get("continuity-project");
   const restoredSession = restoredDatabase.prepare("SELECT * FROM sessions WHERE id=?")
     .get("retained-session");
+  const restoredDeletedProject = restoredDatabase.prepare("SELECT * FROM projects WHERE id=?")
+    .get("deleted-project");
   const activeCapabilities = Number(
     restoredDatabase.prepare("SELECT COUNT(*) count FROM capabilities WHERE revoked_at IS NULL").get().count,
   );
@@ -270,6 +284,11 @@ try {
     "restored project path was not rebased",
   );
   assert(restoredSession.native_path.startsWith(restoredRoot), "restored session path was not rebased");
+  assert(
+    restoredDeletedProject.repository_path
+      === join(restoredRoot, "unavailable", "projects", "deleted-project"),
+    "deleted project path still referenced source state",
+  );
   assert(
     activeCapabilities === 0 && activeLeases === 0 && activeProjectOrchestrators === 0,
     "restored ephemeral authority remained active",
