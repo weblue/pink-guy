@@ -22,12 +22,21 @@ The recorder now emits `git_working_tree_dirty`, writes a partial artifact on
 owner stop, and records macOS memory-pressure percentage. Repeat any
 policy-setting run from a committed revision.
 
+The recorder was then committed as `add1a4e` and a clean-worktree
+API-plus-one-orchestrator confirmation was captured. Across seven samples it
+reported 94% minimum macOS memory-pressure availability, 138 MiB swap, zero
+state growth/errors, 99.6 MiB peak control-plane RSS, and 118.6 MiB peak
+orchestrator RSS. This clean run validates the recorder and confirms that the
+lower raw-free-memory counter reflected reclaimable cache rather than host
+pressure.
+
 ## Measurements
 
 | Window | Evidence |
 | --- | --- |
 | Codex + Docker idle | 13 samples over 67 seconds; 19.35 GiB minimum raw free memory, 19.40 GiB average, 138 MiB swap, zero Pink Guy containers, zero state growth, zero sample errors. |
 | API + one idle project orchestrator | Control plane peaked at 91.2 MiB RSS/0.7% CPU; orchestrator at 108.1 MiB/0.7%; 64 KiB state growth; zero containers and sample errors. |
+| Committed API + one orchestrator confirmation | Revision `add1a4e`, clean worktree, seven samples; 94% minimum memory-pressure availability; 99.6 MiB control-plane RSS; 118.6 MiB orchestrator RSS; zero state growth/errors. |
 | One complete `doc-map` task lifecycle | 181 samples over 17m22s including quiet tails; one container at a time; 182.6 MiB peak container memory, 44.8% peak container CPU, 4.07 peak one-minute host load, 18.66 GiB minimum raw free memory, unchanged 138 MiB swap, 18.8 MiB retained-state growth, zero sample errors. A post-run `memory_pressure -Q` check reported 94% system-wide memory free. |
 
 The successful task moved automatically through:
