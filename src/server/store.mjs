@@ -5576,6 +5576,55 @@ export class Phase0Store {
     return { replayed: false, candidate: this.recoveryCandidate(id) };
   }
 
+  checkpointRecoveryAfterTimeout(executionId) {
+    const execution = this.commandExecution(executionId);
+    if (!execution?.run_id || !execution.workspace_id) return null;
+    const operation = this.database.prepare(`SELECT * FROM git_operations
+      WHERE task_id=? AND run_id=? AND workspace_id=?
+        AND kind='checkpoint' AND status='committed'
+      ORDER BY created_at DESC,id DESC LIMIT 1`).get(
+      execution.task_id,
+      execution.run_id,
+      execution.workspace_id,
+    );
+    if (!operation) return null;
+    const task = this.getTask(execution.task_id);
+    if (!task) return null;
+    const identityProven = Boolean(
+      operation.task_id === execution.task_id
+      && operation.run_id === execution.run_id
+      && operation.workspace_id === execution.workspace_id
+    );
+    const checkpointAlreadyAuthoritative = task.revision === operation.new_revision;
+    const checkpointCanAdvance = Boolean(
+      task.revision === operation.prior_revision
+      && operation.prior_revision === execution.base_revision
+    );
+    const eligible = identityProven && (checkpointAlreadyAuthoritative || checkpointCanAdvance);
+    return this.createRecoveryCandidate({
+      executionId,
+      revision: operation.new_revision,
+      baseRevision: task.revision,
+      evidence: {
+        operationId: operation.id,
+        runId: operation.run_id,
+        workspaceId: operation.workspace_id,
+        priorRevision: operation.prior_revision,
+        discoveredBy: "execution_timeout_settlement",
+        checkpointAlreadyAuthoritative,
+      },
+      proof: {
+        eligible,
+        repositoryScopeProven: identityProven,
+        executionGenerationFenced: true,
+        operationReceiptId: operation.id,
+        checkpointAlreadyAuthoritative,
+        directParentMatchesAuthoritativeRevision: checkpointCanAdvance,
+      },
+      eligible,
+    });
+  }
+
   recoveryCandidate(id) {
     return publicRecoveryCandidate(
       this.database.prepare("SELECT * FROM recovery_candidates WHERE id=?").get(id),

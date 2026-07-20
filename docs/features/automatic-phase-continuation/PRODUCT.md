@@ -87,7 +87,7 @@ conversation—determine each transition.
 14. Provider/process failures continue to block the task and remain eligible
     for explicit owner recovery. Failure detection uses process exit and
     inactivity supervision; the ten-minute hard ceiling is not the expected
-    detection path. Proposed D-057 corrects the implementation after P2-4
+    detection path. Accepted D-057 corrects the implementation after P2-4
     observed that ceiling fencing healthy finishing work.
 
 15. The cockpit's manual phase action remains available only as an explicit

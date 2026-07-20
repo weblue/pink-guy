@@ -214,6 +214,118 @@ assert(
   "candidate rejection changed authoritative task state",
 );
 
+const timeoutTask = authority.store.createOwnerTask({
+  projectId: "recovery-project",
+  title: "Preserve an authoritative checkpoint after timeout",
+  acceptanceCriteria: ["A proven checkpoint remains owner-recoverable."],
+  revision: authoritativeRevision,
+  idempotencyKey: "timeout-task-create",
+}).task;
+const timeoutScheduled = authority.store.scheduleOwnerTaskRun({
+  taskId: timeoutTask.id,
+  phase: "implementation",
+  idempotencyKey: "timeout-task-schedule",
+  modelRoute: {
+    provider: "boss-man-phase0",
+    model: "complete",
+    thinking: "medium",
+    billingClass: "local",
+  },
+});
+const timeoutCommand = authority.store.claimOrchestratorCommand(registration.token);
+assert(timeoutCommand.id === timeoutScheduled.command.id, "timeout fixture command was not claimed");
+const timeoutExecution = authority.store.acceptCommandExecution({
+  token: registration.token,
+  commandId: timeoutCommand.id,
+  idempotencyKey: `execute-command:${timeoutCommand.id}`,
+}).execution;
+authority.store.recordWorkspace({
+  id: "timeout-workspace",
+  taskId: timeoutTask.id,
+  runId: "timeout-run",
+  repositoryPath: fixture,
+  workspacePath: join(root, "timeout-workspace"),
+  branch: "pink-guy/timeout-checkpoint",
+  baseRevision: authoritativeRevision,
+  gitMarkerSha256: "timeout-marker",
+});
+authority.store.bindExecutionResources({
+  executionId: timeoutExecution.id,
+  generation: timeoutExecution.generation,
+  runId: "timeout-run",
+  sessionId: "timeout-session",
+  workspaceId: "timeout-workspace",
+});
+const timeoutCapability = authority.store.issueCapability({
+  role: "worker",
+  actorId: authority.store.getTask(timeoutTask.id).assigned_worker,
+  taskId: timeoutTask.id,
+  runId: "timeout-run",
+  executionId: timeoutExecution.id,
+  executionGeneration: timeoutExecution.generation,
+  expiresAt: new Date(Date.now() + 60_000).toISOString(),
+});
+const timeoutRevision = "4444444444444444444444444444444444444444";
+authority.store.database.prepare(`INSERT INTO git_operations(
+  id,workspace_id,task_id,run_id,capability_id,kind,idempotency_key,request_sha256,
+  prior_revision,new_revision,status,metadata_json,created_at
+) VALUES(?,?,?,?,?,'checkpoint',?,?,?,?, 'committed','{}',?)`).run(
+  "timeout-operation",
+  "timeout-workspace",
+  timeoutTask.id,
+  "timeout-run",
+  timeoutCapability.id,
+  "timeout-checkpoint",
+  "timeout-request",
+  authoritativeRevision,
+  timeoutRevision,
+  new Date().toISOString(),
+);
+authority.store.recordHostGitRevision({
+  id: "timeout-operation",
+  task_id: timeoutTask.id,
+  run_id: "timeout-run",
+  workspace_id: "timeout-workspace",
+  capability_id: timeoutCapability.id,
+  kind: "checkpoint",
+  prior_revision: authoritativeRevision,
+  new_revision: timeoutRevision,
+});
+const timeoutBeforeFence = authority.store.commandExecution(timeoutExecution.id);
+authority.store.fenceExecution({
+  executionId: timeoutExecution.id,
+  expectedVersion: timeoutBeforeFence.version,
+  reason: "hard deadline after checkpoint",
+  failureClass: "hard_deadline",
+});
+const timeoutRecovery = authority.store.checkpointRecoveryAfterTimeout(timeoutExecution.id);
+assert(
+  timeoutRecovery?.candidate.state === "pending"
+    && timeoutRecovery.candidate.revision === timeoutRevision
+    && timeoutRecovery.candidate.base_revision === timeoutRevision
+    && timeoutRecovery.candidate.proof.checkpointAlreadyAuthoritative,
+  "timeout did not project the already-authoritative checkpoint for owner recovery",
+);
+authority.store.settleExecution({
+  executionId: timeoutExecution.id,
+  state: "reconciliation_required",
+  failureClass: "side_effect_uncertain",
+  failure: { trigger: "hard_deadline" },
+});
+const acceptedTimeout = authority.store.resolveRecoveryCandidate({
+  candidateId: timeoutRecovery.candidate.id,
+  action: "accept",
+  expectedVersion: timeoutRecovery.candidate.version,
+  reason: "continue the fixed timeout checkpoint through fresh gates",
+  idempotencyKey: "accept-timeout-checkpoint",
+});
+assert(
+  acceptedTimeout.task.revision === timeoutRevision
+    && acceptedTimeout.task.status === "review"
+    && acceptedTimeout.task.requested_review_revision === timeoutRevision,
+  "accepting an already-authoritative timeout checkpoint did not require fresh gates",
+);
+
 const attention = await request("/api/recovery/attention");
 assert(
   attention.status === 200
@@ -308,6 +420,7 @@ process.stdout.write(`${JSON.stringify({
   late_checkpoint_quarantined: lateReceipt.candidate.id,
   candidate_accept_requires_fresh_gates: true,
   candidate_rejection_retains_evidence: true,
+  timeout_checkpoint_recoverable: true,
   owner_action_receipt_atomic: true,
   restart_automatic_replay: false,
   attention_projection: true,

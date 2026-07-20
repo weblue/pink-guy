@@ -15,8 +15,8 @@ evidence inspectors, deterministic Ready scheduling, managed
 worktrees/containers, and model-less context custody.
 Authenticated remote access is a later phase.
 
-Phase 2 is active. P2-1 through P2-3 are merged and P2-4 calibration is in
-progress. Recovery now provides
+Phase 2 is active. P2-1 through P2-3 are merged; P2-4 live closure and the
+P2-5 continuity rehearsal remain. Recovery now provides
 durable command execution identity, central asynchronous settlement, mutation
 fencing, restart reconciliation, explicit pause/retry/cancel actions, and
 owner-only late-checkpoint recovery. Governed Git adds prepare-only defaults,
@@ -25,9 +25,10 @@ local/remote publication without force push. Retention adds holds, safe
 worktree/container cleanup, explicit session deletion manifests, storage
 inventory, and dispatch blocking under configured hard pressure. P2-4 host and
 provider calibration has established a healthy three-idle-orchestrator,
-single-task-container baseline. It also found two gates before sustained
-dogfood: the fixed ten-minute phase deadline and excessive full-session
-snapshot cadence. See the
+single-task-container baseline. The fixed ten-minute phase deadline and
+excessive internal-turn session-copy cadence it found are now replaced by
+accepted progress-aware supervision and owner-boundary custody. P2-5 adds a
+model-less, checksummed continuity bundle and isolated restore. See the
 [Phase 2 delivery map](docs/product/PHASE2-PLAN.md).
 The operational sequence from merge through calibration, continuity, dogfood,
 and UX acceptance is in the
@@ -142,6 +143,23 @@ npm run pink -- profiles
 npm run pink -- models
 npm run pink -- models --refresh
 ```
+
+Create, verify, and restore a continuity bundle without an LLM:
+
+```sh
+npm run continuity -- export \
+  --output "/absolute/backups/pink-guy-$(date +%Y%m%d)"
+npm run continuity -- verify --bundle /absolute/backups/pink-guy-YYYYMMDD
+npm run continuity -- restore \
+  --bundle /absolute/backups/pink-guy-YYYYMMDD \
+  --target /absolute/restores/pink-guy
+```
+
+Export uses the live API at `http://127.0.0.1:4310` by default so it can pause
+new claims briefly and reject active work. The destination must not exist and
+must be outside the live state root and managed repositories. Restore is
+standalone, never overwrites the source, revokes ephemeral authority, and does
+not start agents or containers.
 
 A practical cmux layout is one central-API pane, one orchestrator pane per
 active repository, and optional `pink chat` panes. Closing a chat pane does

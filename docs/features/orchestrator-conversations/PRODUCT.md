@@ -118,7 +118,7 @@ Figma: none provided.
     A second submit cannot race the same conversation turn; it queues behind
     the active turn or the owner cancels the active turn first.
 
-    Long orchestrator turns use the same proposed D-057 supervision boundary
+    Long orchestrator turns use the same accepted D-057 supervision boundary
     as task phases: immediate process/protocol failures, activity-aware
     inactivity, a visible configurable final ceiling, and bounded settlement
     grace. A fixed ten-minute browser/API wait is not the long-turn contract.

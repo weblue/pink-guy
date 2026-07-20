@@ -14,6 +14,7 @@
   "scripts": {
     "start": "node ./scripts/serve.mjs",
     "calibrate": "node ./scripts/calibrate.mjs",
+    "continuity": "node ./scripts/continuity.mjs",
     "pink": "node ./scripts/pink.mjs",
     "boss": "node ./scripts/boss.mjs",
     "orchestrator:project": "node ./scripts/project-orchestrator.mjs",

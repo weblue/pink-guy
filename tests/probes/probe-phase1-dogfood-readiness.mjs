@@ -22,7 +22,7 @@ import {
   DEFAULT_PROMPT_PROFILES,
   phaseKickoffPrompt,
 } from "../../src/server/prompt-profiles.mjs";
-import { PiRpcProcess } from "../../src/server/rpc.mjs";
+import { PiRpcProcess, piSupervisionPolicy } from "../../src/server/rpc.mjs";
 
 const fixture = process.argv[2];
 if (!fixture?.startsWith("/")) {
@@ -60,6 +60,32 @@ const activityAwareSettlement = activeRpc.waitFor(
 setTimeout(() => activeChild.stdout.write('{"type":"message_update"}\n'), 40);
 setTimeout(() => activeChild.stdout.write('{"type":"agent_settled"}\n'), 80);
 await activityAwareSettlement;
+
+const graceChild = fakeRpcChild();
+const graceRpc = new PiRpcProcess({ child: graceChild });
+const settledDuringGrace = graceRpc.waitFor(
+  (message) => message.type === "agent_settled",
+  "final settlement grace",
+  0,
+  40,
+  200,
+  80,
+);
+setTimeout(() => graceChild.stdout.write('{"type":"message_update"}\n'), 30);
+setTimeout(() => graceChild.stdout.write('{"type":"agent_settled"}\n'), 75);
+await settledDuringGrace;
+
+const supervision = piSupervisionPolicy({
+  PINK_GUY_PI_HARD_DEADLINE_MS: "1000",
+  PINK_GUY_PI_INACTIVITY_TIMEOUT_MS: "250",
+  PINK_GUY_PI_SETTLEMENT_GRACE_MS: "100",
+});
+assert(
+  supervision.hardDeadlineMs === 1000
+    && supervision.inactivityTimeoutMs === 250
+    && supervision.settlementGraceMs === 100,
+  "Pi supervision environment was not parsed",
+);
 
 const exitedChild = fakeRpcChild();
 const exitedRpc = new PiRpcProcess({ child: exitedChild });
@@ -100,6 +126,17 @@ assert(
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(moduleDirectory, "../..");
+const lifecycleSource = await readFile(
+  resolve(repositoryRoot, "src/pi/lifecycle-probe.ts"),
+  "utf8",
+);
+assert(
+  lifecycleSource.includes('pi.on("agent_settled"')
+    && !lifecycleSource.includes('pi.on("turn_start"')
+    && !lifecycleSource.includes('pi.on("context"')
+    && !lifecycleSource.includes('pi.on("turn_end"'),
+  "task custody still copies full native state on internal Pi tool-loop turns",
+);
 const fakePi = resolve(moduleDirectory, "fixtures/fake-pi-rpc.mjs");
 await chmod(fakePi, 0o755);
 const configuredDefaultPolicy = await loadModelRoutePolicy(
@@ -369,6 +406,9 @@ process.stdout.write(`${JSON.stringify({
   scope_transfer_custody: transfer.value.binding.custody_snapshot_id,
   transferred_native_session_resumed: true,
   progress_aware_task_supervision: true,
+  final_settlement_grace: true,
+  configurable_pi_supervision: supervision,
+  owner_boundary_native_custody: true,
   sanitized_task_event_projection: true,
   phase_state_contract_aligned: true,
   provider_requests: 0,

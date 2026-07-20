@@ -224,20 +224,10 @@ export default function lifecycleProbe(pi: ExtensionAPI): void {
   });
 
   pi.on("session_start", async (_event, ctx) => {
-    await snapshot("session_start", ctx);
     ctx.ui.notify(`phase0-session-start:${ctx.sessionManager.getSessionId()}`, "info");
   });
-  pi.on("before_agent_start", async (_event, ctx) => {
-    await snapshot("before_agent_start", ctx);
-  });
-  pi.on("turn_start", async (_event, ctx) => {
-    await snapshot("turn_start", ctx);
-  });
-  pi.on("context", async (_event, ctx) => {
-    await snapshot("context", ctx);
-  });
-  pi.on("turn_end", async (_event, ctx) => {
-    await snapshot("turn_end", ctx);
+  pi.on("agent_settled", async (_event, ctx) => {
+    await snapshot("agent_settled", ctx);
     ctx.ui.notify(`phase0-turn-end:${ctx.sessionManager.getSessionId()}`, "info");
   });
   pi.on("session_before_compact", async (_event, ctx) => {

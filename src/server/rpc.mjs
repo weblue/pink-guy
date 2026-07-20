@@ -1,6 +1,51 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 
+export const DEFAULT_PI_SUPERVISION = Object.freeze({
+  hardDeadlineMs: 60 * 60 * 1_000,
+  inactivityTimeoutMs: 3 * 60 * 1_000,
+  settlementGraceMs: 30 * 1_000,
+});
+
+function duration(environment, name, fallback) {
+  const raw = environment[name];
+  if (raw === undefined || raw === "") return fallback;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw Object.assign(new Error(`${name} must be a positive integer number of milliseconds`), {
+      code: "invalid_configuration",
+    });
+  }
+  return value;
+}
+
+export function piSupervisionPolicy(environment = process.env) {
+  const policy = {
+    hardDeadlineMs: duration(
+      environment,
+      "PINK_GUY_PI_HARD_DEADLINE_MS",
+      DEFAULT_PI_SUPERVISION.hardDeadlineMs,
+    ),
+    inactivityTimeoutMs: duration(
+      environment,
+      "PINK_GUY_PI_INACTIVITY_TIMEOUT_MS",
+      DEFAULT_PI_SUPERVISION.inactivityTimeoutMs,
+    ),
+    settlementGraceMs: duration(
+      environment,
+      "PINK_GUY_PI_SETTLEMENT_GRACE_MS",
+      DEFAULT_PI_SUPERVISION.settlementGraceMs,
+    ),
+  };
+  if (policy.inactivityTimeoutMs >= policy.hardDeadlineMs + policy.settlementGraceMs) {
+    throw Object.assign(
+      new Error("Pi inactivity timeout must be shorter than the hard deadline plus settlement grace"),
+      { code: "invalid_configuration" },
+    );
+  }
+  return Object.freeze(policy);
+}
+
 export class PiRpcProcess {
   constructor({
     child = null,
@@ -84,7 +129,14 @@ export class PiRpcProcess {
     }
   }
 
-  waitFor(predicate, description, from = 0, timeoutMs = 30_000, inactivityTimeoutMs = null) {
+  waitFor(
+    predicate,
+    description,
+    from = 0,
+    timeoutMs = 30_000,
+    inactivityTimeoutMs = null,
+    settlementGraceMs = 0,
+  ) {
     for (let index = from; index < this.messages.length; index += 1) {
       if (predicate(this.messages[index])) return Promise.resolve(this.messages[index]);
     }
@@ -98,14 +150,29 @@ export class PiRpcProcess {
         timer: null,
         inactivityTimer: null,
         inactivityTimeoutMs,
+        settlementGraceMs,
+        hardDeadlineReached: false,
       };
-      waiter.timer = setTimeout(() => {
+      const rejectHardDeadline = () => {
         const index = this.waiters.indexOf(waiter);
         if (index >= 0) this.waiters.splice(index, 1);
         clearTimeout(waiter.inactivityTimer);
-        reject(Object.assign(new Error(`timed out waiting for ${description}`), {
+        reject(Object.assign(new Error(
+          `timed out waiting for ${description} after ${timeoutMs}ms`
+          + (settlementGraceMs ? ` plus ${settlementGraceMs}ms settlement grace` : ""),
+        ), {
           code: "hard_deadline",
+          hardDeadlineMs: timeoutMs,
+          settlementGraceMs,
         }));
+      };
+      waiter.timer = setTimeout(() => {
+        waiter.hardDeadlineReached = true;
+        if (settlementGraceMs > 0) {
+          waiter.timer = setTimeout(rejectHardDeadline, settlementGraceMs);
+        } else {
+          rejectHardDeadline();
+        }
       }, timeoutMs);
       if (inactivityTimeoutMs) {
         waiter.inactivityTimer = setTimeout(() => {

@@ -1,6 +1,6 @@
 # Phase 2 closure and adoption plan
 
-Status: Active — PR #17 merged; P2-4 in progress
+Status: Active — P2-4 live closure and P2-5 live continuity rehearsal remain
 
 Last updated: 2026-07-19
 
@@ -25,7 +25,14 @@ a time and healthy host pressure, but exposed two Phase 2 reliability gates:
 the fixed ten-minute hard deadline fenced active work while it was finishing,
 and tool-loop lifecycle snapshots amplified 3 MiB of final native sessions
 into about 79 MiB. Provider-failure/model-switch drills, corrected
-state-growth measurement, cleanup, and publication remain.
+state-growth measurement, cleanup, and publication remain. The owner approved
+D-057/D-058; their implementation and deterministic regressions pass.
+
+P2-5 is implemented behind a short live export gate. Its standalone,
+model-less probe proves checksummed export, credential exclusion, corruption
+rejection, Git reconstruction, isolated restore, audit preservation, and
+restored-task scheduling. A rehearsal against the current development state
+remains before the slice closes.
 
 ## 1. Close P2-4 — measured operating policy
 
@@ -34,8 +41,8 @@ defaults before measurement.
 
 1. Retain the measured three-idle-orchestrator envelope and serialized
    OAuth-backed task capacity of one.
-2. Resolve D-057 and D-058, implement the selected supervision and custody
-   cadence, and repeat the two-project serialized run. A task must safely pass
+2. Repeat the two-project serialized run against the accepted D-057/D-058
+   supervision and custody cadence. A task must safely pass
    ten minutes and retained growth must no longer copy full JSONL on each
    internal tool-loop turn.
 3. Keep OAuth-backed phase work globally serialized unless a controlled
@@ -135,11 +142,7 @@ broker, team accounts, and high availability.
 
 ## Pending owner decisions
 
-Two evidence-backed owner decisions now block the dogfood entry repair:
-
-- D-057: progress-aware configurable hard supervision and checkpoint recovery;
-- D-058: full native custody at meaningful boundaries instead of each internal
-  tool-loop turn.
+D-057 and D-058 are approved and no longer block implementation.
 
 The remaining P2-4 choices are:
 

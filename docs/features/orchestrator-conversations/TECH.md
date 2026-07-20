@@ -212,10 +212,11 @@ and owner task/decision/reconciliation controls. Deeper workspace inspectors
 and scope-transfer custody remain. See
 [RESULTS.md](./RESULTS.md).
 
-P2-4 found that both this runtime and task phases still pass a fixed ten-minute
-absolute ceiling to Pi RPC settlement. Proposed D-057 moves those settings
-behind one visible supervision policy, retains activity-aware inactivity as
-the normal detector, and adds bounded final-settlement grace. The persistent
+P2-4 found that both this runtime and task phases still passed a fixed
+ten-minute absolute ceiling to Pi RPC settlement. Accepted D-057 now places
+those settings behind one visible supervision policy, retains activity-aware
+inactivity as the normal detector, and adds bounded final-settlement grace.
+The persistent
 conversation and reconnect contract does not resend context when a turn runs
 long.
 

@@ -16,6 +16,7 @@ const probes = [
   "probe-phase2-provider-catalog.mjs",
   "probe-phase2-execution-recovery.mjs",
   "probe-phase2-git-retention.mjs",
+  "probe-phase2-continuity.mjs",
   "probe-phase1-command-loop.mjs",
   "probe-phase1-local-task-controls.mjs",
   "probe-phase1-orchestrator-conversations.mjs",
