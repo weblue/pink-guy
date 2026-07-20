@@ -77,6 +77,8 @@ const corruptedPath = join(root, "corrupted-bundle");
 const restoredRoot = join(root, "restored-state");
 const canary = "PINK_GUY_CREDENTIAL_CANARY_9f12a0";
 const originalHead = await git(fixture, "rev-parse", "HEAD");
+const linkedWorktree = join(root, "linked-worktree");
+await git(fixture, "worktree", "add", "--detach", linkedWorktree, originalHead);
 const plane = new DirectControlPlane({
   databasePath: join(stateRoot, "pink-guy.sqlite"),
   stateRoot,
@@ -325,5 +327,6 @@ try {
   }, null, 2)}\n`);
 } finally {
   await plane.close().catch(() => undefined);
+  await git(fixture, "worktree", "remove", "--force", linkedWorktree).catch(() => undefined);
   await rm(root, { recursive: true, force: true });
 }

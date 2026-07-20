@@ -308,15 +308,12 @@ async function addGitPayload(store, pendingRoot, files) {
       );
     }
     const head = (await git(project.repository_path, ["rev-parse", "HEAD"])).stdout.trim();
-    const refs = (await git(
-      project.repository_path,
-      ["for-each-ref", "--format=%(refname)%00%(objectname)"],
-    )).stdout.split("\n").filter(Boolean).sort();
     const relativePath = `git/${project.id}.bundle`;
     const destination = join(pendingRoot, relativePath);
     await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
     await git(project.repository_path, ["bundle", "create", destination, "--all"]);
     await verifyGitBundle(destination);
+    const refs = await gitBundleRefs(destination);
     await chmod(destination, 0o600);
     const content = await readFile(destination);
     files.push({ path: relativePath, size: content.byteLength, sha256: sha256(content) });
