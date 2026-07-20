@@ -249,6 +249,23 @@ docker build \
 
 The cockpit, terminal client, and orchestrators do not require Docker.
 
+## Measure local capacity
+
+P2-4 calibration is an explicit, model-less window rather than permanent
+telemetry. Raw JSON stays under ignored `artifacts/benchmarks/`:
+
+```sh
+npm run calibrate -- \
+  --label idle \
+  --duration 60 \
+  --interval 5 \
+  --state "$HOME/.local/share/pink-guy/dev"
+```
+
+For a live run, repeat `--pid LABEL:PID` to separate the control plane and
+project orchestrators from unrelated Node processes. `Ctrl-C` writes the
+samples collected so far as an owner-stopped artifact.
+
 The preferred product command, package name, state directory, image tag, and
 new runtime identifiers are `pink`/`pink-guy`. Legacy `boss`,
 `BOSS_MAN_*`, database/schema identifiers, and old state/image references are

@@ -19,6 +19,11 @@ provider/model selectors, non-secret authentication state, and a host-TTY
 `/login` handoff. Capacity/resource measurement and the remaining live
 side-effect drills are next.
 
+The first P2-4 live lifecycle now passes on the target Mac. It also found and
+preserved a sub-second missing-runtime-image failure caused by the old
+`boss-man:` Docker tag. Multi-project serialized work, provider-failure/model
+switch drills, storage-policy selection, cleanup, and publication remain.
+
 ## 1. Close P2-4 — measured operating policy
 
 Use the target 64 GB M1 Max and normal Docker/Pi authentication. Do not widen

@@ -69,6 +69,9 @@ These features are merged on `main`.
 - [Provider catalog and authentication guidance](features/provider-catalog-controls/)
   — the first P2-4 increment discovers Pi models, replaces model-ID text
   fields with selectors, and exposes a secret-safe host-TTY `/login` handoff.
+- [Capacity calibration](features/capacity-calibration/) — explicit,
+  model-less host/Docker/state sampling for measured P2-4 concurrency and
+  storage policy.
 
 ## Adoption checkpoints
 

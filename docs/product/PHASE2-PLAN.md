@@ -162,6 +162,13 @@ The first increment is implemented on the active P2-4 branch:
 - retain automatic dispatch's configured-route boundary and serialized OAuth
   default.
 
+Initial target-host calibration is recorded in
+[`../features/capacity-calibration/RESULTS.md`](../features/capacity-calibration/RESULTS.md):
+idle API/orchestrator overhead is small, and one real `doc-map`
+implementation→test→review lifecycle completed with a single container at a
+time. This does not yet justify widening the OAuth/task lane or selecting
+storage thresholds.
+
 - record per-run peak RSS/CPU, container count, disk growth, duration, model
   route, provider wait/failure class, and OAuth/API-key/local-route class;
 - establish a 64 GB M1 Max safety envelope with reserved headroom for macOS,
