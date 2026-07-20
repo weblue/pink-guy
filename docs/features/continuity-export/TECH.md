@@ -1,6 +1,6 @@
 # Model-less continuity export and isolated restore
 
-Status: Implemented; deterministic acceptance passes, live rehearsal pending
+Status: Validated — deterministic and live same-host acceptance pass
 
 Last updated: 2026-07-19
 

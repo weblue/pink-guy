@@ -1,6 +1,6 @@
 # Phase 2 closure and adoption plan
 
-Status: Active — P2-4 live closure and P2-5 live continuity rehearsal remain
+Status: Active — P2-5 complete; P2-4 live closure remains before Phase 2D
 
 Last updated: 2026-07-19
 
@@ -28,11 +28,12 @@ into about 79 MiB. Provider-failure/model-switch drills, corrected
 state-growth measurement, cleanup, and publication remain. The owner approved
 D-057/D-058; their implementation and deterministic regressions pass.
 
-P2-5 is implemented behind a short live export gate. Its standalone,
+P2-5 is complete behind a short live export gate. Its standalone,
 model-less probe proves checksummed export, credential exclusion, corruption
 rejection, Git reconstruction, isolated restore, audit preservation, and
-restored-task scheduling. A rehearsal against the current development state
-remains before the slice closes.
+restored-task scheduling. The live rehearsal passed with 3 projects, 3,603
+files, preserved audit/count evidence, zero source-path findings, and one
+retained task queued on the isolated API with no provider or container start.
 
 ## 1. Close P2-4 — measured operating policy
 
@@ -62,9 +63,9 @@ orchestrator/task concurrency, OAuth lane size, allowed provider responses,
 storage thresholds, publication method, and any policy left deliberately
 conservative.
 
-## 2. Close P2-5 — bounded continuity
+## 2. P2-5 — bounded continuity (complete)
 
-Implement and verify the accepted D-054 scope:
+The accepted D-054 scope is implemented and verified:
 
 1. Export a consistent SQLite snapshot, Pi-native session JSONL,
    custody/context manifests, retained artifacts, prompt/model-route
@@ -75,6 +76,9 @@ Implement and verify the accepted D-054 scope:
 4. Confirm tasks, sessions, artifacts, Git custody, and audit hashes, then
    resume one retained task from the restored root.
 5. Retain the export/restore report and cleanup instructions.
+
+All five checks pass. Evidence is in
+[`../features/continuity-export/RESULTS.md`](../features/continuity-export/RESULTS.md).
 
 Cloud backup, scheduled encryption/retention, cross-platform migration, and a
 second physical host are not Phase 2 exit requirements.

@@ -1,6 +1,6 @@
 # Pink Guy v2 current state
 
-Status: Phase 2 active — P2-4 live closure and P2-5 live rehearsal remain
+Status: Phase 2 active — P2-5 complete; P2-4 live closure remains
 
 Last updated: 2026-07-19
 
@@ -127,8 +127,10 @@ and captures clean committed Git refs as verified bundles. Standalone
 verification rejects any extra, missing, or changed file. Isolated restore
 reconstructs repositories, rebases path authority, revokes capabilities and
 leases, preserves audit digests, and starts no work. Its deterministic
-acceptance probe passes with zero model calls; a live current-state rehearsal
-remains.
+acceptance probe passes with zero model calls. The live current-state
+rehearsal also passes: 3 projects, 3,603 files, preserved audit/count
+evidence, zero source-root path findings, and one retained task queued on the
+isolated API without a provider request or container.
 
 ## Capability map
 
@@ -140,7 +142,7 @@ remains.
 | Git and workspaces | Every phase worktree starts from the task revision. Host checkpoints carry provenance and invalidate stale validation/review. Project policy defaults to prepare-only and supports merge/squash/rebase, guarded local integration, optional normal push/PR, deterministic conflicts, compare-and-swap publication, and no force push. | Live credentialed remote push/PR acceptance and dogfood policy calibration remain. |
 | Credentials | A human-owned auth file is materialized read-only per run, copied into private writable Pi state, checksum-verified, concurrency-limited to one for OAuth, and both run copies are deleted on a normal stop. Synthetic canaries and one owner-authorized OpenAI Codex turn pass without changing the canonical source. Reconciliation deletes known per-run copies. | Parallel OAuth-backed execution remains disabled until a simpler independently verifiable refresh strategy is proven. API-key and local-model routes may use separate explicit limits. |
 | RTK and command evidence | RTK 0.42.3 is pinned with telemetry disabled. Supervisor-managed commands and an actual Pi Bash tool call execute once and produce filtered output, redacted raw output, indexed artifacts, and receipts. | Production quotas, savings presentation, and operator bypass UX remain. |
-| Context custody | Task bundles retain native Pi bytes, branch, task/audit/context, decisions, memory/retrieval, artifacts, Git, manifest, and checksums. Conversation bundles retain topic, turns/events/runs, tasks/origins, prompts, and native bytes. Retention holds, explicit session deletion manifests/tombstones, storage inventory, and the checksummed model-less continuity export/verify/isolated-restore path pass deterministic acceptance. | A live current-state continuity rehearsal and later needs-driven backup destination policy remain. |
+| Context custody | Task bundles retain native Pi bytes, branch, task/audit/context, decisions, memory/retrieval, artifacts, Git, manifest, and checksums. Conversation bundles retain topic, turns/events/runs, tasks/origins, prompts, and native bytes. Retention holds, explicit session deletion manifests/tombstones, storage inventory, and the checksummed model-less continuity export/verify/isolated-restore path pass deterministic and live acceptance. | Later backup destinations, encryption, and rotation remain needs-driven rather than Phase 2 work. |
 | Memory and retrieval | Canonical memory/evidence and artifact records are integrated into the central SQLite store. Eligibility is filtered before FTS5/BM25 rank; receipts retain filters, scores, revisions, source refs, exclusions, excerpt checksums, and token use. A clean import rebuilds FTS from canonical JSON. | Promotion UI and production mutation policy remain. Retrieval changes require a measured dogfood failure; retrieval never becomes storage authority. |
 | Restart recovery | SQLite records execution identity/events, mutation generations, action/stop receipts, side-effect reconciliation, and quarantined late checkpoints. Startup fences nonterminal executions before cleanup, never replays uncertain work, pauses proven retained runs, and fails or quarantines other boundaries. Both live P2-1 drills pass. | Host/Docker power-cycle coverage remains. True Pi RPC process reattachment is intentionally out of scope; retained native custody supplies resume. |
 | Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
@@ -211,8 +213,9 @@ manifest does not promise that the referenced temporary file still exists.
 Complete sessions and artifacts remain retained until explicit deletion.
 Holds, safe resource cleanup, session deletion manifests/tombstones, storage
 inventory, hard-pressure dispatch pause, and model-less continuity
-export/verify/isolated restore are implemented. The live current-state
-rehearsal and any later production backup destination policy remain.
+export/verify/isolated restore are implemented and pass live current-state
+acceptance. Any later production backup destination policy remains
+needs-driven.
 
 ## Next steps
 
@@ -228,16 +231,14 @@ remains in [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
    provider failure, one explicitly authorized
    normal push or pull-request publication without widening default policy.
    Verify cleanup against a settled disposable Docker task.
-3. **Rehearse P2-5 against current state.** Export, independently verify, and
-   restore the live development state into an isolated root, then retain the
-   report and cleanup instructions.
-4. **Enter Phase 2D dogfood.** Exercise long conversations and at least ten
+3. **Enter Phase 2D dogfood after P2-4 closes.** Exercise long conversations
+   and at least ten
    tasks across multiple repositories while logging every direct-client exit
    and recurring UX friction.
-5. **Run Phase 2U UX review.** Interview the owner, mock up changes from the
+4. **Run Phase 2U UX review.** Interview the owner, mock up changes from the
    existing cockpit, and fix accepted high-frequency scrolling,
    comprehension, and navigation problems.
-6. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
+5. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
    configured password verifier or API-key hash after the local product is
    mature.
 

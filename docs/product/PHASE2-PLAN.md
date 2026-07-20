@@ -1,6 +1,6 @@
 # Phase 2 delivery plan
 
-Status: Active — P2-1 through P2-3 merged; P2-4 closure and P2-5 live rehearsal remain
+Status: Active — P2-1 through P2-3 and P2-5 complete; P2-4 live closure remains
 
 Last updated: 2026-07-19
 
@@ -38,7 +38,7 @@ is [`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md).
 | **P2-2 Governed Git integration — implemented** | Prepare and optionally execute merge/rebase/push/PR under project/branch policy, with conflict and reconciliation attention. | P2-1 settlement/fencing | Model-less merge/squash/rebase and conflict probes pass. Remote push/PR remains an owner-credential live drill in P2-4. |
 | **P2-3 Runtime lifecycle and retention operations — implemented** | Retire settled worktrees/containers safely, implement explicit session artifact deletion, quotas, storage-pressure visibility, and restore-friendly manifests. | P2-1; coordinates with P2-2 worktree custody | Holds, cleanup, deletion manifests, idempotent retry, and storage-pressure dispatch blocking pass model-less acceptance. |
 | **P2-4 Capacity, credentials, and provider resilience** | Measure host/provider limits, widen concurrency only where safe, exercise model switching and local routes, and classify provider exhaustion/failure. | P2-1; P2-3 quotas useful | Sustained mixed-project run stays within measured CPU/RAM/Docker/provider budgets; provider loss pauses or reroutes only under explicit policy. |
-| **P2-5 Continuity export and restore — implemented, live rehearsal pending** | Export canonical state/custody/artifacts without a model and restore into an isolated state root. | P2-1 through P2-4 storage/config contracts | Same-host isolated restore recovers tasks, native sessions, prompts/routes, artifacts, Git custody, and audit checksums; one retained task resumes. |
+| **P2-5 Continuity export and restore — complete** | Export canonical state/custody/artifacts without a model and restore into an isolated state root. | P2-1 through P2-4 storage/config contracts | Same-host isolated restore recovers tasks, native sessions, prompts/routes, artifacts, Git custody, and audit checksums; one retained task resumes. |
 
 P2-1 through P2-3 now fix the authority, Git, and retention contracts needed
 for measurement. P2-4 is deliberately collaborative: the owner selects the
@@ -228,13 +228,16 @@ work to prove that its own durable authority is recoverable:
 5. defer a second-physical-Mac rehearsal and cloud-backup destination until
    the same-host restore proves an actual need and format stability.
 
-The `pink-guy-continuity-v1` implementation now provides a live-API export
+The `pink-guy-continuity-v1` implementation provides a live-API export
 gate plus standalone verify/restore commands. Its model-less probe rejects
 active work and dirty Git, excludes a credential canary, detects corruption,
 reconstructs Git, preserves audit digests and source bytes, revokes ephemeral
 authority, and schedules a retained task from the isolated copy with zero
-provider calls. A live export/verify/restore of the current development state
-is the remaining P2-5 acceptance step.
+provider calls. The live rehearsal then exported 3 projects and 3,603 files,
+restored all authority into a clean root, preserved declared audit digests and
+row counts, found no source-root path authority, and queued a retained task
+without a provider call or container. See
+[`../features/continuity-export/RESULTS.md`](../features/continuity-export/RESULTS.md).
 
 This scope creates real portability and recovery value without building
 encryption, scheduling, cloud retention, or cross-platform migration before

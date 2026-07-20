@@ -15,8 +15,8 @@ evidence inspectors, deterministic Ready scheduling, managed
 worktrees/containers, and model-less context custody.
 Authenticated remote access is a later phase.
 
-Phase 2 is active. P2-1 through P2-3 are merged; P2-4 live closure and the
-P2-5 continuity rehearsal remain. Recovery now provides
+Phase 2 is active. P2-1 through P2-3 and P2-5 are complete; P2-4 live closure
+remains before sustained dogfood. Recovery now provides
 durable command execution identity, central asynchronous settlement, mutation
 fencing, restart reconciliation, explicit pause/retry/cancel actions, and
 owner-only late-checkpoint recovery. Governed Git adds prepare-only defaults,
