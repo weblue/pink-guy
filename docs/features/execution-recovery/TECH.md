@@ -1,8 +1,8 @@
 # Execution recovery and late-evidence contract
 
-Status: Implemented and accepted
+Status: Implemented; D-057 long-turn deadline remediation verified
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 ## Context
 
@@ -208,6 +208,15 @@ frequency. Process exit triggers immediate fencing. Inactivity and hard
 deadline timers call the same fence/stop path, so all failure triggers share
 one cleanup and classification contract.
 
+P2-4 found that the implementation's fixed ten-minute `waitFor` ceiling does
+not meet this design: one healthy run committed a checkpoint and was still
+streaming its final response when the ceiling fired, while another healthy
+run settled only five seconds earlier. D-057 proposes configuration shared by
+task-phase and orchestrator-turn supervision, a bounded final-settlement
+grace, and an absolute ceiling that remains visible without acting as the
+ordinary detector. The regression probe must use a synthetic clock/event
+stream rather than spend a provider hour.
+
 ### 6. Record and resolve late evidence
 
 Add `recovery_candidates`:
@@ -236,6 +245,11 @@ Store the proof even when ineligible. Acceptance is an owner-only transaction
 that rechecks every proof and expected version, advances the task revision,
 invalidates stale validation/review, records an audit event, and invokes the
 existing automatic coordinator so fresh validation can be scheduled.
+
+A checkpoint committed before fencing also enters this verifier when later
+provider settlement times out. The failure path must not discard or hide
+fixed Git evidence merely because the provider-response receipt remains
+uncertain.
 
 Rejection changes only the candidate state and audit history. Physical branch
 or worktree cleanup is a later retention action.
@@ -286,7 +300,7 @@ RPC process. Native Pi JSONL and context custody supply the safe resume path.
 
 The attention API joins task, command, execution, run, process/container
 inspection, side effects, and recovery candidates into one sanitized
-projection. The cockpit and `boss` client render:
+projection. The cockpit and `pink` client render:
 
 - current state and failure class;
 - last meaningful activity;

@@ -111,6 +111,13 @@ export class PinkGuyClient {
     return result.profiles;
   }
 
+  async providerCatalog({ refresh = false } = {}) {
+    return this.request(
+      refresh ? "/api/provider-catalog/refresh" : "/api/provider-catalog",
+      refresh ? { method: "POST" } : {},
+    );
+  }
+
   async importProject(
     repositoryUrl,
     { name = null, idempotencyKey = `terminal-import-${randomUUID()}` } = {},

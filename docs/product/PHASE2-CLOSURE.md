@@ -1,6 +1,6 @@
 # Phase 2 closure and adoption plan
 
-Status: Active — execute after PR #17 merges
+Status: Active — P2-5 complete; P2-4 live closure remains before Phase 2D
 
 Last updated: 2026-07-19
 
@@ -13,30 +13,49 @@ order, evidence, and stop conditions for closure, dogfood, and UX acceptance.
 
 ## Current gate
 
-[PR #17](https://github.com/weblue/pink-guy/pull/17) contains P2-1 execution
-recovery, P2-2 governed Git, P2-3 runtime retention, and their documentation.
-Merge it before collecting calibration or dogfood evidence so results refer to
-one mainline revision. Then update the local checkout, run `npm test`, start
-the normal loopback stack, and retain the tested revision in the evidence log.
+[PR #17](https://github.com/weblue/pink-guy/pull/17) is merged. P2-4 began from
+merge revision `760b43d`. Its first increment adds Pi-backed model discovery,
+provider/model selectors, non-secret authentication state, and a host-TTY
+`/login` handoff. Capacity/resource measurement and the remaining live
+side-effect drills are next.
+
+The first P2-4 lifecycle and the three-orchestrator idle window pass on the
+target Mac. A serialized two-project maintenance window kept one container at
+a time and healthy host pressure, but exposed two Phase 2 reliability gates:
+the fixed ten-minute hard deadline fenced active work while it was finishing,
+and tool-loop lifecycle snapshots amplified 3 MiB of final native sessions
+into about 79 MiB. Provider-failure/model-switch drills, corrected
+state-growth measurement, cleanup, and publication remain. The owner approved
+D-057/D-058; their implementation and deterministic regressions pass.
+
+P2-5 is complete behind a short live export gate. Its standalone,
+model-less probe proves checksummed export, credential exclusion, corruption
+rejection, Git reconstruction, isolated restore, audit preservation, and
+restored-task scheduling. The live rehearsal passed with 3 projects, 3,603
+files, preserved audit/count evidence, zero source-path findings, and one
+retained task queued on the isolated API with no provider or container start.
 
 ## 1. Close P2-4 — measured operating policy
 
 Use the target 64 GB M1 Max and normal Docker/Pi authentication. Do not widen
 defaults before measurement.
 
-1. Run one, then two, then a justified higher number of active project
-   orchestrators and phase agents while recording peak RSS/CPU, container
-   count, disk growth, duration, route, and failure/wait class.
-2. Keep OAuth-backed phase work globally serialized unless a controlled
+1. Retain the measured three-idle-orchestrator envelope and serialized
+   OAuth-backed task capacity of one.
+2. Repeat the two-project serialized run against the accepted D-057/D-058
+   supervision and custody cadence. A task must safely pass
+   ten minutes and retained growth must no longer copy full JSONL on each
+   internal tool-loop turn.
+3. Keep OAuth-backed phase work globally serialized unless a controlled
    overlapping two-run authentication/refresh test passes without shared
    writable credentials or lost refresh state.
-3. Exercise a safe-boundary model switch, provider exhaustion, and—when the
+4. Exercise a safe-boundary model switch, provider exhaustion, and—when the
    owner configures one—a Pi-compatible local-model route. No silent fallback.
-4. Select warning/hard storage limits from observed growth; hard pressure must
+5. Select warning/hard storage limits from corrected observed growth; hard pressure must
    pause dispatch and preserve retained evidence.
-5. Perform one owner-authorized normal remote Git publication using either SSH
+6. Perform one owner-authorized normal remote Git publication using either SSH
    Git or `gh`, while prepare-only remains the default for other projects.
-6. Perform the pending live Docker cleanup drill against a settled disposable
+7. Perform the pending live Docker cleanup drill against a settled disposable
    task and verify its manifest, receipt, retry behavior, and retained audit.
 
 Exit evidence is a dated calibration record containing the selected
@@ -44,9 +63,9 @@ orchestrator/task concurrency, OAuth lane size, allowed provider responses,
 storage thresholds, publication method, and any policy left deliberately
 conservative.
 
-## 2. Close P2-5 — bounded continuity
+## 2. P2-5 — bounded continuity (complete)
 
-Implement and verify the accepted D-054 scope:
+The accepted D-054 scope is implemented and verified:
 
 1. Export a consistent SQLite snapshot, Pi-native session JSONL,
    custody/context manifests, retained artifacts, prompt/model-route
@@ -57,6 +76,9 @@ Implement and verify the accepted D-054 scope:
 4. Confirm tasks, sessions, artifacts, Git custody, and audit hashes, then
    resume one retained task from the restored root.
 5. Retain the export/restore report and cleanup instructions.
+
+All five checks pass. Evidence is in
+[`../features/continuity-export/RESULTS.md`](../features/continuity-export/RESULTS.md).
 
 Cloud backup, scheduled encryption/retention, cross-platform migration, and a
 second physical host are not Phase 2 exit requirements.
@@ -124,8 +146,9 @@ broker, team accounts, and high availability.
 
 ## Pending owner decisions
 
-No architecture decision blocks the next implementation slice. P2-4 produces
-the evidence needed for these bounded choices:
+D-057 and D-058 are approved and no longer block implementation.
+
+The remaining P2-4 choices are:
 
 - measured concurrency and OAuth lane size;
 - allowed pause/retry/manual-route behavior per provider class;

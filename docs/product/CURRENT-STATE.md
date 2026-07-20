@@ -1,8 +1,8 @@
 # Pink Guy v2 current state
 
-Status: Phase 2 active — P2-1 through P2-3 implemented in PR #17
+Status: Phase 2 active — P2-5 complete; P2-4 live closure remains
 
-Last updated: 2026-07-19
+Last updated: 2026-07-20
 
 ## Current position
 
@@ -96,7 +96,7 @@ The retained UI dogfood queue verified the migration: its umbrella, superseded
 review child, and bootstrap intake are now inspectable under Archived and the
 Ready column is empty.
 
-The final pre-dogfood gates are implemented. Every task phase resolves its own
+The final Phase 1 gates are implemented. Every task phase resolves its own
 provider/model/thinking/billing route before command creation, the orchestrator
 can select that route for a sub-agent, and the effective route is checked
 against Pi and retained on the run. Orchestrator compaction blocks on verified
@@ -110,6 +110,28 @@ under `scripts/`, and current documentation is indexed from `docs/`. Completed
 feasibility plans and evidence remain available as history without defining
 the runtime structure.
 
+P2-4 now has clean target-host evidence for three simultaneous idle project
+orchestrators and serialized maintenance work across Pink Guy and
+inspector-gadget. Host/Docker capacity remained healthy and only one task
+container ran at a time. The workload also found two pre-dogfood reliability
+defects: a fixed ten-minute hard deadline fenced active finishing work, and
+internal Pi tool-loop snapshots copied growing native sessions 188 times. The
+owner approved D-057/D-058. Configurable progress-aware supervision, bounded
+final settlement, proven timeout-checkpoint recovery, and full custody at
+owner/mandatory boundaries now pass targeted and core regressions.
+
+P2-5 now has an implemented `pink-guy-continuity-v1` format and operator
+command. Export establishes a short central dispatch/claim gate, takes a
+transactional SQLite backup, copies only allowlisted custody/artifact state,
+and captures clean committed Git refs as verified bundles. Standalone
+verification rejects any extra, missing, or changed file. Isolated restore
+reconstructs repositories, rebases path authority, revokes capabilities and
+leases, preserves audit digests, and starts no work. Its deterministic
+acceptance probe passes with zero model calls. The live current-state
+rehearsal also passes: 3 projects, 3,603 files, preserved audit/count
+evidence, zero source-root path findings, and one retained task queued on the
+isolated API without a provider request or container.
+
 ## Capability map
 
 | Area | Current capability | Remaining boundary |
@@ -120,7 +142,7 @@ the runtime structure.
 | Git and workspaces | Every phase worktree starts from the task revision. Host checkpoints carry provenance and invalidate stale validation/review. Project policy defaults to prepare-only and supports merge/squash/rebase, guarded local integration, optional normal push/PR, deterministic conflicts, compare-and-swap publication, and no force push. | Live credentialed remote push/PR acceptance and dogfood policy calibration remain. |
 | Credentials | A human-owned auth file is materialized read-only per run, copied into private writable Pi state, checksum-verified, concurrency-limited to one for OAuth, and both run copies are deleted on a normal stop. Synthetic canaries and one owner-authorized OpenAI Codex turn pass without changing the canonical source. Reconciliation deletes known per-run copies. | Parallel OAuth-backed execution remains disabled until a simpler independently verifiable refresh strategy is proven. API-key and local-model routes may use separate explicit limits. |
 | RTK and command evidence | RTK 0.42.3 is pinned with telemetry disabled. Supervisor-managed commands and an actual Pi Bash tool call execute once and produce filtered output, redacted raw output, indexed artifacts, and receipts. | Production quotas, savings presentation, and operator bypass UX remain. |
-| Context custody | Task bundles retain native Pi bytes, branch, task/audit/context, decisions, memory/retrieval, artifacts, Git, manifest, and checksums. Conversation bundles retain topic, turns/events/runs, tasks/origins, prompts, and native bytes. Retention holds, explicit session deletion manifests/tombstones, and storage inventory are model-less. | A complete continuity export and isolated-root restore remain. |
+| Context custody | Task bundles retain native Pi bytes, branch, task/audit/context, decisions, memory/retrieval, artifacts, Git, manifest, and checksums. Conversation bundles retain topic, turns/events/runs, tasks/origins, prompts, and native bytes. Retention holds, explicit session deletion manifests/tombstones, storage inventory, and the checksummed model-less continuity export/verify/isolated-restore path pass deterministic and live acceptance. | Later backup destinations, encryption, and rotation remain needs-driven rather than Phase 2 work. |
 | Memory and retrieval | Canonical memory/evidence and artifact records are integrated into the central SQLite store. Eligibility is filtered before FTS5/BM25 rank; receipts retain filters, scores, revisions, source refs, exclusions, excerpt checksums, and token use. A clean import rebuilds FTS from canonical JSON. | Promotion UI and production mutation policy remain. Retrieval changes require a measured dogfood failure; retrieval never becomes storage authority. |
 | Restart recovery | SQLite records execution identity/events, mutation generations, action/stop receipts, side-effect reconciliation, and quarantined late checkpoints. Startup fences nonterminal executions before cleanup, never replays uncertain work, pauses proven retained runs, and fails or quarantines other boundaries. Both live P2-1 drills pass. | Host/Docker power-cycle coverage remains. True Pi RPC process reattachment is intentionally out of scope; retained native custody supplies resume. |
 | Remote edge | A disposable SWAG-style contract passes HTTP, WebSocket/reconnect, streaming, upload, Host/Origin, outer/inner auth, CSRF, and revocation cases. | Retained as Phase 3 research evidence. No production SWAG, DNS, router, authentication, or launch-service work blocks local Phase 1. |
@@ -190,8 +212,10 @@ The durable evidence manifest is the checked-in claim; a disposable path in a
 manifest does not promise that the referenced temporary file still exists.
 Complete sessions and artifacts remain retained until explicit deletion.
 Holds, safe resource cleanup, session deletion manifests/tombstones, storage
-inventory, and hard-pressure dispatch pause are implemented; continuity
-export/restore and production backup policy remain.
+inventory, hard-pressure dispatch pause, and model-less continuity
+export/verify/isolated restore are implemented and pass live current-state
+acceptance. Any later production backup destination policy remains
+needs-driven.
 
 ## Next steps
 
@@ -200,22 +224,19 @@ The active delivery map is
 sequence is [`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md). Phase 1 dogfood evidence
 remains in [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
-1. **Merge PR #17 and verify main.** Run the complete model-less suite and
-   local cockpit smoke against one recorded mainline revision.
-2. **Calibrate P2-4 together.** Measure host, Docker, provider, credential, and
-   local-model behavior before changing concurrency/fallback policy.
-3. **Run the remaining live side-effect drills.** Exercise one explicitly authorized
-   normal push or pull-request publication without widening default policy.
-   Verify cleanup against a settled disposable Docker task.
-4. **Build the bounded P2-5 continuity proof.** Export and restore into an
-   isolated state root on this Mac, excluding credentials and containers.
-5. **Enter Phase 2D dogfood.** Exercise long conversations and at least ten
+1. **Close P2-4.** Repeat the serialized two-project benchmark against
+   D-057/D-058, exercise safe model switching and provider failure, perform one
+   explicitly authorized normal push or pull-request publication, verify
+   cleanup against a settled disposable Docker task, and select storage limits
+   from corrected growth.
+2. **Enter Phase 2D dogfood after P2-4 closes.** Exercise long conversations
+   and at least ten
    tasks across multiple repositories while logging every direct-client exit
    and recurring UX friction.
-6. **Run Phase 2U UX review.** Interview the owner, mock up changes from the
+3. **Run Phase 2U UX review.** Interview the owner, mock up changes from the
    existing cockpit, and fix accepted high-frequency scrolling,
    comprehension, and navigation problems.
-7. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
+4. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
    configured password verifier or API-key hash after the local product is
    mature.
 

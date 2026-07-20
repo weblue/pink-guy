@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { chmod, copyFile, mkdir, rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 
-import { PiRpcProcess } from "./rpc.mjs";
+import { PiRpcProcess, piSupervisionPolicy } from "./rpc.mjs";
 import { composeAgentSystemPrompt } from "./prompt-profiles.mjs";
 
 async function responseJson(response) {
@@ -31,6 +31,7 @@ export class ConversationOrchestratorRuntime {
     this.piExtension = resolve(piExtension);
     this.credentialSource = credentialSource ? resolve(credentialSource) : null;
     this.environment = environment;
+    this.piSupervision = piSupervisionPolicy(environment);
     this.leaseSeconds = leaseSeconds;
     this.pollMs = pollMs;
     this.sessions = new Map();
@@ -220,6 +221,7 @@ export class ConversationOrchestratorRuntime {
             promptProfileKey: managed.promptProfile.profile_key,
             promptProfileVersion: managed.promptProfile.active_version,
             promptSha256: managed.promptProfile.prompt_sha256,
+            piSupervision: this.piSupervision,
           },
         },
       });
@@ -237,7 +239,9 @@ export class ConversationOrchestratorRuntime {
         (message) => message.type === "agent_settled",
         "Pi agent to settle",
         from,
-        10 * 60 * 1_000,
+        this.piSupervision.hardDeadlineMs,
+        this.piSupervision.inactivityTimeoutMs,
+        this.piSupervision.settlementGraceMs,
       );
       await eventChain;
       const [last, stats, state] = await Promise.all([

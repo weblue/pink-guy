@@ -7,6 +7,10 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import { RtkArtifactIngestor } from "./artifacts.mjs";
+import {
+  continuityBlockers,
+  exportBundle as exportContinuityBundle,
+} from "./continuity.mjs";
 import { ContextCustodyService } from "./context-service.mjs";
 import { redactValue, RunCredentialVault } from "./credentials.mjs";
 import { HostGitService } from "./git-service.mjs";
@@ -17,7 +21,8 @@ import {
   resolveModelRoute,
 } from "./model-routes.mjs";
 import { composeAgentSystemPrompt, phaseKickoffPrompt } from "./prompt-profiles.mjs";
-import { PiRpcProcess, WorkspaceShell } from "./rpc.mjs";
+import { PiProviderCatalog } from "./provider-catalog.mjs";
+import { PiRpcProcess, piSupervisionPolicy, WorkspaceShell } from "./rpc.mjs";
 import {
   canonicalSha256,
   deleteDeclaredPaths,
@@ -243,11 +248,14 @@ export class DirectControlPlane {
     faultInjector = async () => undefined, enforceOrchestratorLease = false,
     schedulerProjectCapacity = 1, schedulerGlobalCapacity = 1,
     storageWarningBytes = null, storageHardBytes = null,
+    providerCatalog = null,
+    continuityExporter = exportContinuityBundle,
   }) {
     this.store = new Phase0Store(databasePath);
     this.stateRoot = stateRoot;
     this.fixturePath = fixturePath;
     this.environment = environment;
+    this.piSupervision = piSupervisionPolicy(environment);
     this.runtimeImage = runtimeImage;
     this.dockerCommand = dockerCommand;
     this.runtimeProvider = runtimeProvider;
@@ -271,6 +279,11 @@ export class DirectControlPlane {
       ? configuredWarning : null;
     this.storageHardBytes = Number.isFinite(configuredHard) && configuredHard > 0
       ? configuredHard : null;
+    this.providerCatalog = providerCatalog ?? new PiProviderCatalog({
+      credentialSource: credentialProfile?.sourcePath ?? null,
+      environment,
+    });
+    this.continuityExporter = continuityExporter;
     this.credentialVault = new RunCredentialVault({ stateRoot, profile: credentialProfile });
     this.gitServices = new Map();
     this.git = fixturePath ? this.gitService(fixturePath) : null;
@@ -282,6 +295,7 @@ export class DirectControlPlane {
     this.recoveryResults = [];
     this.recoveryChecked = false;
     this.exposureProfile = null;
+    this.continuityExportActive = false;
   }
 
   resolveModelRoute(phase, route = null) {
@@ -294,6 +308,14 @@ export class DirectControlPlane {
   }
 
   reconcileAutomaticProject(projectId) {
+    if (this.continuityExportActive) {
+      return [{
+        action: "wait",
+        reason: "continuity_export_active",
+        projectId,
+        scheduled: false,
+      }];
+    }
     const directives = this.store.automaticPipelineDirectives(projectId);
     const receipts = [];
     for (const directive of directives) {
@@ -335,6 +357,9 @@ export class DirectControlPlane {
   }
 
   async reconcileReadyProject(projectId) {
+    if (this.continuityExportActive) {
+      return { scheduled: false, reason: "continuity_export_active", projectId };
+    }
     if (this.storageWarningBytes || this.storageHardBytes) {
       await this.storageInventory();
     }
@@ -354,6 +379,65 @@ export class DirectControlPlane {
       throw Object.assign(new Error("local owner mutations require the loopback local-smoke profile"), {
         code: "local_operator_denied",
       });
+    }
+  }
+
+  assertContinuityDispatchAvailable() {
+    if (this.continuityExportActive) {
+      throw Object.assign(new Error("continuity export temporarily pauses new work"), {
+        code: "continuity_export_active",
+      });
+    }
+  }
+
+  async exportContinuity(outputPath) {
+    this.assertLocalOwnerProfile();
+    if (this.continuityExportActive) {
+      throw Object.assign(new Error("another continuity export is already active"), {
+        code: "continuity_export_active",
+      });
+    }
+    const initialBlockers = continuityBlockers(this.store);
+    if (initialBlockers.length) {
+      throw Object.assign(new Error("continuity export requires a quiescent control plane"), {
+        code: "continuity_not_quiescent",
+        blockers: initialBlockers,
+      });
+    }
+    this.continuityExportActive = true;
+    let queryOnly = false;
+    try {
+      const blockers = continuityBlockers(this.store);
+      if (blockers.length) {
+        throw Object.assign(new Error("continuity export did not establish quiescence"), {
+          code: "continuity_not_quiescent",
+          blockers,
+        });
+      }
+      this.store.database.exec("PRAGMA query_only=ON");
+      queryOnly = true;
+      let platformRevision = null;
+      try {
+        platformRevision = execFileSync(
+          "git",
+          ["-C", resolve(moduleDirectory, "../.."), "rev-parse", "HEAD"],
+          { encoding: "utf8" },
+        ).trim();
+      } catch {
+        // A source archive without Git metadata can still create a valid continuity bundle.
+      }
+      return await this.continuityExporter({
+        store: this.store,
+        stateRoot: this.stateRoot,
+        outputPath,
+        platformRevision,
+      });
+    } finally {
+      try {
+        if (queryOnly) this.store.database.exec("PRAGMA query_only=OFF");
+      } finally {
+        this.continuityExportActive = false;
+      }
     }
   }
 
@@ -1074,6 +1158,7 @@ export class DirectControlPlane {
     executionId = null,
     executionGeneration = null,
   } = {}) {
+    this.assertContinuityDispatchAvailable();
     const task = this.store.getTask(taskId);
     if (!task) throw new Error(`unknown task: ${taskId}`);
     if (task.archived_at || task.task_kind !== "executable") {
@@ -1381,8 +1466,9 @@ export class DirectControlPlane {
       (event) => event.type === "agent_settled",
       "agent settlement",
       from,
-      10 * 60 * 1_000,
-      90 * 1_000,
+      this.piSupervision.hardDeadlineMs,
+      this.piSupervision.inactivityTimeoutMs,
+      this.piSupervision.settlementGraceMs,
     );
     await this.faultInjector("provider_after_settled", { sideEffectId: journal.id, runId: managed.run.id, sessionId });
     await this.ingestSnapshots(managed);
@@ -1534,6 +1620,7 @@ export class DirectControlPlane {
     }
 
     execution = this.store.commandExecution(executionId);
+    const triggerFailureClass = failure ? this.classifyExecutionFailure(failure) : null;
     const priorAction = this.store.database.prepare(`SELECT action,reason FROM execution_action_receipts
       WHERE execution_id=? ORDER BY created_at DESC,id DESC LIMIT 1`).get(executionId);
     if (execution && ["starting", "running"].includes(execution.state)) {
@@ -1541,7 +1628,7 @@ export class DirectControlPlane {
         executionId,
         expectedVersion: execution.version,
         reason: failure ? "execution_failure" : "phase_outcome_recorded",
-        failureClass: failure ? this.classifyExecutionFailure(failure) : null,
+        failureClass: triggerFailureClass,
         failure: failure ? {
           code: failure.code ?? null,
           message: clippedText(failure.message, 2_000),
@@ -1592,6 +1679,9 @@ export class DirectControlPlane {
         },
       );
     }
+    const checkpointRecovery = ["hard_deadline", "rpc_inactive"].includes(triggerFailureClass)
+      ? this.store.checkpointRecoveryAfterTimeout(executionId)
+      : null;
     const failureClass = failure
       ? cleanupFailure || unsettledSideEffects.length
         ? "side_effect_uncertain"
@@ -1611,6 +1701,9 @@ export class DirectControlPlane {
         phaseOutcome: result.phaseOutcome,
         taskVersion: result.task.version,
         revision: result.task.revision,
+      } : checkpointRecovery ? {
+        recoveryCandidateId: checkpointRecovery.candidate.id,
+        checkpointRevision: checkpointRecovery.candidate.revision,
       } : {},
     });
     if (desiredState === "succeeded") {
@@ -2078,6 +2171,27 @@ export class DirectControlPlane {
   async route(request, response) {
     try {
       const url = new URL(request.url, "http://phase0.invalid");
+      if (this.continuityExportActive && request.method !== "GET") {
+        if ([
+          "/api/orchestrators/commands/claim",
+          "/api/orchestration/turns/claim",
+        ].includes(url.pathname)) {
+          response.writeHead(204, { "x-pink-guy-wait-reason": "continuity_export_active" });
+          return response.end();
+        }
+        if ([
+          "/api/orchestrators/heartbeat",
+          "/api/orchestration/leases/heartbeat",
+        ].includes(url.pathname)) {
+          return json(response, 202, {
+            deferred: true,
+            reason: "continuity_export_active",
+          });
+        }
+        throw Object.assign(new Error("continuity export temporarily freezes durable mutations"), {
+          code: "continuity_export_active",
+        });
+      }
       if (request.method === "GET" && url.pathname === "/") {
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         return response.end(BOARD_HTML);
@@ -2093,7 +2207,14 @@ export class DirectControlPlane {
           compatibility_authority: "boss_man_central_api",
           exposure: "localhost_only",
           orchestrator_policy: "one_active_lease_per_project",
+          pi_supervision: this.piSupervision,
+          continuity_export_active: this.continuityExportActive,
         });
+      }
+      if (request.method === "POST" && url.pathname === "/api/continuity/exports") {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        return json(response, 201, await this.exportContinuity(body.outputPath));
       }
       if (request.method === "GET" && url.pathname === "/api/board") return json(response, 200, this.store.board());
       if (request.method === "GET" && url.pathname === "/api/projects") {
@@ -2244,6 +2365,20 @@ export class DirectControlPlane {
       }
       if (request.method === "GET" && url.pathname === "/api/model-routes") {
         return json(response, 200, publicModelRoutePolicy(this.modelRoutePolicy));
+      }
+      if (request.method === "GET" && url.pathname === "/api/provider-catalog") {
+        const catalog = await this.providerCatalog.discover();
+        return json(response, 200, {
+          ...catalog,
+          configured_routes: publicModelRoutePolicy(this.modelRoutePolicy),
+        });
+      }
+      if (request.method === "POST" && url.pathname === "/api/provider-catalog/refresh") {
+        this.assertLocalOwnerProfile();
+        return json(response, 200, {
+          ...await this.providerCatalog.discover({ refresh: true }),
+          configured_routes: publicModelRoutePolicy(this.modelRoutePolicy),
+        });
       }
       const agentPromptProfile = url.pathname.match(/^\/api\/agent-profiles\/([^/]+)$/);
       if (request.method === "GET" && agentPromptProfile) {
@@ -2451,6 +2586,10 @@ export class DirectControlPlane {
         });
       }
       if (request.method === "POST" && url.pathname === "/api/orchestration/turns/claim") {
+        if (this.continuityExportActive) {
+          response.writeHead(204, { "x-pink-guy-wait-reason": "continuity_export_active" });
+          return response.end();
+        }
         const turn = this.store.claimConversationTurn(bearerToken(request));
         if (!turn) {
           response.writeHead(204);
@@ -2530,6 +2669,7 @@ export class DirectControlPlane {
         /^\/api\/orchestration\/conversations\/([^/]+)\/task-schedules$/,
       );
       if (request.method === "POST" && activeConversationTaskSchedule) {
+        this.assertContinuityDispatchAvailable();
         const body = await readBody(request);
         const active = this.store.activeConversationTurnForConversation(
           bearerToken(request),
@@ -2623,6 +2763,10 @@ export class DirectControlPlane {
         return json(response, 200, { released: true });
       }
       if (request.method === "POST" && url.pathname === "/api/orchestrators/commands/claim") {
+        if (this.continuityExportActive) {
+          response.writeHead(204, { "x-pink-guy-wait-reason": "continuity_export_active" });
+          return response.end();
+        }
         const token = bearerToken(request);
         this.reconcileAutomaticPipelines(token);
         await this.reconcileReadyDispatch(token);
@@ -2830,6 +2974,7 @@ export class DirectControlPlane {
       const scheduleTask = url.pathname.match(/^\/api\/tasks\/([^/]+)\/schedule$/);
       if (request.method === "POST" && scheduleTask) {
         this.assertLocalOwnerProfile();
+        this.assertContinuityDispatchAvailable();
         const body = await readBody(request);
         const phase = body.phase ?? "implementation";
         const modelRoute = this.resolveModelRoute(phase, {
@@ -2888,6 +3033,7 @@ export class DirectControlPlane {
       const resumeTask = url.pathname.match(/^\/api\/tasks\/([^/]+)\/resume$/);
       if (request.method === "POST" && resumeTask) {
         this.assertLocalOwnerProfile();
+        this.assertContinuityDispatchAvailable();
         const body = await readBody(request);
         const phase = body.phase ?? "implementation";
         const result = this.store.resumeOwnerTaskRun({
@@ -3093,6 +3239,7 @@ export class DirectControlPlane {
 
       const start = url.pathname.match(/^\/api\/tasks\/([^/]+)\/sessions$/);
       if (request.method === "POST" && start) {
+        this.assertContinuityDispatchAvailable();
         const body = await readBody(request);
         const phase = body.phase ?? "implementation";
         const options = {
@@ -3171,9 +3318,13 @@ export class DirectControlPlane {
     } catch (error) {
       const status = error.code === "not_found" ? 404
         : ["capability_denied", "self_approval_denied", "orchestrator_denied", "local_operator_denied"].includes(error.code) ? 403
-          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict", "project_required", "custody_required", "confirmation_mismatch", "deletion_blocked", "reconciliation_required", "execution_managed", "execution_fenced", "execution_scope_conflict", "revision_required"].includes(error.code) ? 409
+          : ["version_conflict", "revision_conflict", "idempotency_conflict", "transition_denied", "completion_blocked", "git_no_changes", "workspace_tampered", "orchestrator_conflict", "orchestrator_unavailable", "command_conflict", "project_required", "custody_required", "confirmation_mismatch", "deletion_blocked", "reconciliation_required", "execution_managed", "execution_fenced", "execution_scope_conflict", "revision_required", "continuity_export_active", "continuity_not_quiescent", "continuity_repository_dirty", "continuity_target_exists"].includes(error.code) ? 409
             : 400;
-      return json(response, status, { error: error.code ?? "request_failed", message: error.message });
+      return json(response, status, {
+        error: error.code ?? "request_failed",
+        message: error.message,
+        ...(Array.isArray(error.blockers) ? { blockers: error.blockers } : {}),
+      });
     }
   }
 }

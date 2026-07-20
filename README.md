@@ -1,72 +1,57 @@
 # Pink Guy
 
-Pink Guy is a local-first, remote-ready developer cockpit for orchestrating
-[Pi](https://pi.dev/) across multiple Git repositories. One central API owns
-projects, tasks, audit history, worktrees, agent runs, and context artifacts.
-Each project can run one orchestrator plus phase-scoped implementation, test,
-and review agents.
+Pink Guy is a local-first developer cockpit for orchestrating
+[Pi](https://pi.dev/) across multiple Git repositories. One loopback control
+plane owns projects, tasks, conversations, agent runs, worktrees, Git actions,
+artifacts, retention, and audit history. The browser and `pink` terminal client
+are views of that same durable state.
 
-Phase 1 is complete and includes a loopback web cockpit, durable SQLite state,
-persistent Pi RPC conversations, an agile task board, a shared terminal
-client, host-owned repository intake, editable agent profiles, safe model
-switching, task/reconciliation controls, fixed-revision implementation/test/
-review handoffs, automatic model-less phase continuation, task workspace
-evidence inspectors, deterministic Ready scheduling, managed
-worktrees/containers, and model-less context custody.
-Authenticated remote access is a later phase.
+Pink Guy is usable today for **supervised local development**. Phase 1 and the
+P2-1, P2-2, P2-3, and P2-5 slices are complete. P2-4 still needs live
+provider, publication, cleanup, storage-limit, and corrected long-turn
+calibration before sustained dogfood begins. Authenticated remote access is
+planned for Phase 3; the current server is loopback-only and has no application
+authentication.
 
-Phase 2 is active. P2-1 through P2-3 are implemented on the current Phase 2
-branch and are awaiting merge in
-[PR #17](https://github.com/weblue/pink-guy/pull/17). Recovery now provides
-durable command execution identity, central asynchronous settlement, mutation
-fencing, restart reconciliation, explicit pause/retry/cancel actions, and
-owner-only late-checkpoint recovery. Governed Git adds prepare-only defaults,
-owner-selected merge/squash/rebase policy, conflict attention, and optional
-local/remote publication without force push. Retention adds holds, safe
-worktree/container cleanup, explicit session deletion manifests, storage
-inventory, and dispatch blocking under configured hard pressure. P2-4 host and
-provider calibration is next. See the
-[Phase 2 delivery map](docs/product/PHASE2-PLAN.md).
-The operational sequence from merge through calibration, continuity, dogfood,
-and UX acceptance is in the
-[Phase 2 closure plan](docs/product/PHASE2-CLOSURE.md).
+See [current state](docs/product/CURRENT-STATE.md) for the exact capability and
+readiness boundary, or use the [documentation index](docs/README.md).
 
-After continuity work, Phase 2D will collect long-turn reliability and
-UX-friction evidence through sustained dogfood. A Phase 2U owner interview and
-mockup built from the existing cockpit will then drive accepted scrolling,
-comprehension, and navigation improvements before the full-time switch.
+## How it works
 
-## Objectives
+```text
+browser / pink CLI
+        |
+loopback control plane + SQLite authority
+        |
+        +-- one persistent Pi orchestrator per active project or intake scope
+        +-- deterministic Ready scheduler
+        +-- phase-scoped implementation, test, and review runs
+        +-- host-owned Git, worktrees, artifacts, custody, and retention
+                 |
+                 +-- managed Docker container per task phase
+```
 
-- Turn a conversation, repository, or refined work item into observable tasks.
-- Run multiple repository orchestrators without splitting durable authority.
-- Let agents implement, test, review, commit, and merge within explicit risk
-  boundaries.
-- Preserve complete sessions and portable context so work can resume across
-  provider limits, model changes, and new sessions.
-- Provide the same project state through the browser, terminal, cmux/tmux, and
-  future remote access.
-
-## Values
-
-- **Durability over transcript replay.** Pi-native sessions and model-less
-  artifacts preserve context; clients never rebuild prompts from chat history.
-- **Observable autonomy.** Tasks, assumptions, decisions, tests, reviews, and
-  side effects are structured and auditable.
-- **One authority.** The central API owns leases, task state, artifacts, Git
-  operations, and session projections.
-- **Constrained execution.** Task agents are phase-scoped and run in managed
-  worktrees and containers; high-risk decisions remain human-owned.
-- **Model choice without silent routing.** Provider, model, and thinking policy
-  are centrally selected and recorded for every conversation and run.
+The central API, not an LLM or client transcript, decides task eligibility,
+phase transitions, recovery state, and side effects. Implementation records a
+fixed Git revision; test and independent review run from that revision.
+Provider, model, thinking level, prompt revision, and provenance are recorded
+per conversation and phase.
 
 ## Run locally
 
-Requirements: macOS on Apple Silicon, Node.js 24+, Git, and an authenticated
-Pi installation. Docker Desktop is needed only for sandboxed task agents.
-There are currently no npm dependencies to install.
+Requirements:
 
-### 1. Start the API and cockpit
+- macOS on Apple Silicon;
+- Node.js 24 or newer;
+- Git;
+- Pi installed on `PATH` and authenticated for the routes you intend to use;
+- Docker Desktop only for sandboxed task-phase runs.
+
+There are no npm dependencies to install.
+
+### 1. Start the control plane
+
+From the repository root:
 
 ```sh
 npm start -- \
@@ -77,13 +62,17 @@ npm start -- \
   --credential-source "$HOME/.pi/agent/auth.json"
 ```
 
-Repeat `--repo /absolute/path` to register more repositories. Open
+Repeat `--repo /absolute/path` for additional existing repositories. Open
 [http://127.0.0.1:4310](http://127.0.0.1:4310).
 
-The local profile binds only to `127.0.0.1` and has no application
-authentication. Do not expose it publicly.
+`--repo` must name a Git worktree root. `--credential-source` is required for
+OAuth-backed task-agent runs; Pink Guy copies it into private per-run Pi state
+and does not let Pi mutate the canonical file.
 
-### 2. Start orchestrators
+The local profile binds only to `127.0.0.1`. Do not expose it through a public
+listener or reverse proxy.
+
+### 2. Start an orchestrator
 
 Run one project orchestrator per active repository, preferably in its own
 cmux/tmux pane:
@@ -96,8 +85,8 @@ npm run orchestrator:project -- \
   --credential-source "$HOME/.pi/agent/auth.json"
 ```
 
-Run the shared intake orchestrator for topics that do not yet have a
-repository:
+For a topic that does not yet have a repository, run the single system-intake
+orchestrator:
 
 ```sh
 npm run orchestrator:system -- \
@@ -107,105 +96,53 @@ npm run orchestrator:system -- \
   --credential-source "$HOME/.pi/agent/auth.json"
 ```
 
-### 3. Use browser or terminal
+Closing a browser or terminal chat does not stop Pi or lose the conversation.
+Stopping the orchestrator releases its lease; queued turns remain durable.
 
-The browser and terminal are projections of the same durable conversation:
+### 3. Use the cockpit or terminal
 
 ```sh
 npm run pink -- status
 npm run pink -- topics
 npm run pink -- chat --repo "$PWD"
-npm run pink -- chat --topic TOPIC_ID
-npm run pink -- chat --repo "$PWD" --message "Refine the next task."
 npm run pink -- chat --new-topic "Prototype a new tool"
-npm run pink -- import --repo-url git@github.com:OWNER/REPO.git
-npm run pink -- delete-project --project PROJECT_ID \
-  --confirm "Exact project name" --reason "Canceled unused import"
-npm run pink -- dispatch --task TASK_ID --policy automatic --priority 0
-npm run pink -- dispatch --task TASK_ID --policy paused
 npm run pink -- attention
-npm run pink -- recover --execution EXECUTION_ID --action retry \
-  --reason "Retry from the authoritative revision"
-npm run pink -- candidate --candidate CANDIDATE_ID --action accept \
-  --reason "Verified checkpoint; rerun validation and review"
-npm run pink -- git-policy --project PROJECT_ID
-npm run pink -- integrate --task TASK_ID --action prepare
-npm run pink -- storage
-npm run pink -- cleanup --task TASK_ID
-npm run pink -- hold --project PROJECT_ID --scope-type task \
-  --scope-id TASK_ID --reason "Retain for audit"
-npm run pink -- delete-session --session SESSION_ID
-npm run pink -- bind --topic TOPIC_ID --project PROJECT_ID
-npm run pink -- profiles
 ```
 
-A practical cmux layout is one central-API pane, one orchestrator pane per
-active repository, and optional `pink chat` panes. Closing a chat pane does
-not stop Pi or lose history.
+The normal flow is conversational refinement followed by explicit task
+release. The model-less scheduler selects eligible Ready tasks by priority,
+release time, and task ID, then automatically continues successful
+implementation through fixed-revision test and independent review. Manual
+phase start is a recovery override.
 
-After the orchestrator refines and explicitly releases concrete work, the
-central model-less scheduler selects eligible Ready tasks by priority, release
-time, then task ID. It waits visibly for lease or capacity rather than failing.
-After implementation records a fixed review-requested revision, the API
-automatically schedules test and independent review from durable evidence.
-Failed validation, non-approved review, missing phase evidence, decisions, and
-dependencies stop the pipeline for explicit recovery. The cockpit's
-**Manually start phase** action is an override, not the normal flow.
+The cockpit also exposes task evidence, model routes, recovery actions, Git
+policy and integration, cleanup, retention holds, session deletion, storage,
+and project intake. The [local development runbook](docs/operations/local-development.md)
+documents those controls.
 
-The active board distinguishes executable work from umbrella and intake
-artifacts. Optional task tags are organizational only. Settled planning records
-can be archived with an audited reason, remain fully inspectable, and can be
-restored without automatically scheduling work.
+## Models and provider authentication
 
-Only an unused Pink Guy-managed import can be deleted. The control plane
-refuses direct repositories and imports with tasks, source/context records,
-conversation activity, commands, evidence, or active leases. Successful
-deletion removes the managed checkout while retaining a tombstone and audited
-receipt.
-
-Git integration is also two-step by design: preparation is model-less and
-non-mutating, while execution requires an owner-enabled project policy and
-fresh completion/validation/review gates. Cleanup and session deletion first
-return a preview; execution requires an explicit reason, and session deletion
-also requires the exact session ID. The cockpit provides the same controls.
-
-## Select and swap models
-
-Model selection is a central, observable policy—not an agent-controlled
-choice. Pink Guy persists the provider, model, and thinking level when a
-conversation is created and passes that exact route to Pi.
-
-Conversation routes can be selected and changed. Every task phase also resolves
-and records its own provider, model, thinking level, policy source, and billing
-class. The owner can select that route in the task workspace, and the
-orchestrator can select it when scheduling a sub-agent.
-
-List models available to the authenticated Pi installation:
+Pink Guy discovers the configured Pi catalog directly:
 
 ```sh
 pi --list-models
+npm run pink -- models
+npm run pink -- models --refresh
 ```
 
-A local model uses the same provider/model fields when it is exposed by the
-configured Pi installation; Pink Guy does not require a separate routing
-service.
+To add or refresh a subscription or API-key provider, use **Models + provider
+authentication** in the cockpit. It gives a copyable command that opens Pi
+against the same owner-managed credential directory. Run that command in a
+host TTY, enter `/login`, finish Pi's provider flow, then refresh the catalog.
+Pink Guy never accepts a raw API key or OAuth token in the browser.
 
-Edit [`config/model-routes.json`](config/model-routes.json) to set the default
-and optional `orchestrator`, `implementation`, `test`, or `review` overrides.
-Command-line values override only the configured default:
+Defaults and optional phase overrides live in
+[`config/model-routes.json`](config/model-routes.json). Startup
+`--provider`, `--model`, and `--thinking` flags override only the configured
+default. A Pi-compatible local model uses the same route fields; there is no
+separate Pink Guy routing service or silent fallback.
 
-```sh
-npm start -- \
-  --repo "$PWD" \
-  --model-config "$PWD/config/model-routes.json" \
-  --provider PROVIDER \
-  --model MODEL_ID \
-  --thinking low
-```
-
-Safely switch an existing conversation. This first writes and verifies a
-model-less custody snapshot, then restarts Pi against the same native session
-before its next turn:
+Switch an existing conversation only at the custody-backed boundary:
 
 ```sh
 npm run pink -- model \
@@ -215,23 +152,35 @@ npm run pink -- model \
   --thinking medium
 ```
 
-Edit the orchestrator or phase-agent role guidance without changing source:
+Pink Guy first verifies a model-less custody snapshot, then restarts Pi
+against the same native session before the next turn. Each task phase resolves
+and records its own route independently.
+
+## Continuity
+
+Export uses the live API so it can briefly block new claims and require a
+quiescent control plane:
 
 ```sh
-npm run pink -- profiles
-npm run pink -- profile --key orchestrator
-npm run pink -- profile \
-  --key implementation \
-  --prompt-file ./config/prompts/profiles/implementation.txt
+npm run continuity -- export \
+  --output "/absolute/backups/pink-guy-$(date +%Y%m%d)"
+npm run continuity -- verify \
+  --bundle /absolute/backups/pink-guy-YYYYMMDD
+npm run continuity -- restore \
+  --bundle /absolute/backups/pink-guy-YYYYMMDD \
+  --target /absolute/restores/pink-guy
 ```
 
-Human-readable defaults live under `config/prompts/`. Profile files are
-owner-editable guidance; policy-envelope and kickoff files are source-controlled
-platform behavior. Apply an edited profile through the command above or the
-cockpit. Prompt edits apply to new or restarted processes, and every run records
-the exact profile version and checksum it consumed.
+The export and restore destinations must not already exist. Export must be
+outside the live state root and managed repositories. Restore is standalone:
+it verifies checksums, reconstructs Git into a new isolated state root,
+revokes ephemeral leases/capabilities, and starts no agent or container.
+Credentials and ephemeral containers are excluded.
 
-## Optional task-agent image
+## Task-agent image
+
+The cockpit, terminal client, and host orchestrators do not need Docker. Build
+the pinned ARM64 image before running task phases:
 
 ```sh
 docker build \
@@ -240,12 +189,8 @@ docker build \
   ./infra/container
 ```
 
-The cockpit, terminal client, and orchestrators do not require Docker.
-
-The preferred product command, package name, state directory, image tag, and
-new runtime identifiers are `pink`/`pink-guy`. Legacy `boss`,
-`BOSS_MAN_*`, database/schema identifiers, and old state/image references are
-accepted only as compatibility inputs so existing sessions remain readable.
+Containers are damage containment, not a malicious-code security boundary.
+They receive minimal mounts and no Docker socket.
 
 ## Verify
 
@@ -256,18 +201,18 @@ npm run test:baseline
 curl --fail http://127.0.0.1:4310/api/health
 ```
 
-The core and workflow observer suites are model-less and make no provider
-requests. `test:workflow` prints each implementation, checkpoint, test, review,
-and completion transition as it verifies fixed-revision custody.
+The core and workflow suites are deterministic, model-less, and make no
+provider request. See [testing and probes](docs/operations/testing.md) for
+focused, container-backed, and opt-in live checks.
 
-## Documentation
+## Project status and documentation
 
-Start with [the documentation index](docs/README.md), then see:
-
-- [current capabilities and next steps](docs/product/CURRENT-STATE.md)
-- [delivery roadmap](docs/product/ROADMAP.md)
-- [architecture decisions](docs/architecture/DECISIONS.md)
-- [local development runbook](docs/operations/local-development.md)
+- [Documentation index](docs/README.md)
+- [Current state and adoption readiness](docs/product/CURRENT-STATE.md)
+- [Local development runbook](docs/operations/local-development.md)
+- [Technical architecture](docs/architecture/TECH.md)
+- [Roadmap](docs/product/ROADMAP.md)
+- [Phase 2 closure plan](docs/product/PHASE2-CLOSURE.md)
 
 Tracked files never contain credentials, SSH keys, provider transcripts,
 native user sessions, runtime databases, unredacted command logs, worktrees,

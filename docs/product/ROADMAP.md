@@ -2,7 +2,7 @@
 
 Status: Active
 
-Last updated: 2026-07-19
+Last updated: 2026-07-20
 
 This is the canonical phase sequence. Phase 0 research artifacts remain useful evidence, but they no longer make remote authentication or second-host reproduction prerequisites for local product development.
 
@@ -57,7 +57,7 @@ managed persistent Pi RPC bridge, sanitized reconnect stream, and audited
 create/update/split/dependency/assumption/decision task mutations are
 implemented. The first New topic/Ask orchestrator workspace, conversation
 stream, navigable change cards, and synchronized board projection are also
-implemented. The `boss` terminal client now reopens that same durable
+implemented. The `pink` terminal client now reopens that same durable
 conversation by topic, project, or repository and exposes the cockpit deep
 link plus orchestrator tmux/process endpoint. Versioned agent prompts,
 custody-backed model switching, repository/source intake, task detail and
@@ -115,7 +115,7 @@ direct coding client remains the emergency fallback.
 
 ## Phase 2 — autonomy, recovery, and portability
 
-Status: Active — P2-1 through P2-3 implemented; P2-4 calibration next
+Status: Active — P2-1 through P2-3 and P2-5 complete; P2-4 live closure remains
 
 Purpose: make unattended local operation dependable before adding a public edge.
 
@@ -158,7 +158,7 @@ itself authorize the full switch from Codex.
 
 ## Phase 2D — sustained dogfood and long-turn parity
 
-Status: Planned after P2-5
+Status: Planned after P2-4 closes
 
 Purpose: prove the completed local platform through meaningful work before
 making it the default coding environment.

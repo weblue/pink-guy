@@ -2,7 +2,7 @@
 
 Status: Active decision log
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 This file separates owner direction, accepted working decisions, technical hypotheses that require spikes, and the remaining implementation questions.
 
@@ -60,6 +60,9 @@ This file separates owner direction, accepted working decisions, technical hypot
 | D-053 | Completing Phase 2 starts a sustained Phase 2D dogfood gate before Pink Guy replaces Codex as the default coding environment. Long-turn parity, multi-repository work, recovery drills, and direct-client escape frequency determine adoption. | Direction given | Requested by the owner on 2026-07-19. Feature completion alone does not prove the Codex-like long-turn experience that motivates the platform. |
 | D-054 | Keep P2-5 to a model-less continuity export and isolated same-host restore first; defer cloud backup, encryption scheduling, and a second physical host until the format and need are proven. | Accepted | Approved by the owner on 2026-07-19. Produces real portability/backup value beyond Codex sync without turning Phase 2 into a general backup product. |
 | D-055 | Run a dogfood-informed UX review after the Phase 2D evidence window and before the full-time switch. Begin with an owner interview and a mockup built from the existing cockpit; prioritize observed friction instead of replacing the established information architecture speculatively. | Direction given | The owner reports orchestrator-chat scroll bouncebacks, populated regions that grow/scroll indefinitely, and high information density with unclear meaning. Dogfood will expose frequency and context before redesign decisions harden. |
+| D-056 | Pink Guy discovers available providers/models through the configured Pi installation and exposes provider authentication as an explicit host-TTY `/login` handoff. The cockpit does not accept raw OAuth tokens or API keys; it shows non-secret auth metadata, the exact cmux/tmux/SSH command, and a catalog refresh action. | Validated Phase 2 decision | Requested during P2-4 on 2026-07-19. This removes model-name memorization and makes provider setup discoverable without creating a second browser credential store or expanding Pink Guy's secret-custody boundary. |
+| D-057 | Task-phase and orchestrator-turn supervision use immediate process/protocol failure signals and an activity-aware inactivity watchdog as the normal detector. A configurable hard ceiling is only a final safety bound, includes a bounded final-settlement grace, and preserves any proven checkpoint as late-evidence recovery. | Accepted | Approved by the owner on 2026-07-19. Two healthy maintenance implementations took 9m55s or longer; the fixed 10-minute ceiling fenced one while its final response was streaming and failed to project its proven checkpoint. This refines the already accepted P2-1 behavior rather than weakening fencing. |
+| D-058 | Retain one canonical native Pi session plus immutable full captures at owner-message settlement and mandatory custody boundaries (pre-compaction, model/provider/scope switch, pause/stop, fork/handoff). Internal Pi tool-loop turn events retain bounded manifests/checksums, not another full growing JSONL copy. | Accepted | Approved by the owner on 2026-07-19. Two ten-minute implementations created 188 immutable native copies and about 79 MiB of snapshot data from final sessions totaling 3 MiB. This preserves D-005/D-017 recovery guarantees without quadratic routine retention. |
 
 ## Recorded deployment assumptions
 
@@ -107,8 +110,8 @@ Agents may produce alternatives, prototypes, migration plans, threat models, and
 ## Remaining decision gates
 
 - P2-4 measured orchestrator/container/provider concurrency, OAuth lane size,
-  local-model outage route, storage thresholds, and first remote Git
-  publication method.
+  local-model outage route, storage thresholds, first remote Git publication
+  method, and confirmation of D-057/D-058 under the repeated live benchmark.
 - Phase 2U visual hierarchy and interaction choices after the Phase 2D
   evidence log and owner interview identify concrete scrolling, navigation,
   comprehension, and evidence-density failures.

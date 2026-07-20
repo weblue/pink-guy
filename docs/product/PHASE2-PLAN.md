@@ -1,6 +1,6 @@
 # Phase 2 delivery plan
 
-Status: Active — P2-1 through P2-3 implemented in PR #17; P2-4 calibration next
+Status: Active — P2-1 through P2-3 and P2-5 complete; P2-4 live closure remains
 
 Last updated: 2026-07-19
 
@@ -38,7 +38,7 @@ is [`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md).
 | **P2-2 Governed Git integration — implemented** | Prepare and optionally execute merge/rebase/push/PR under project/branch policy, with conflict and reconciliation attention. | P2-1 settlement/fencing | Model-less merge/squash/rebase and conflict probes pass. Remote push/PR remains an owner-credential live drill in P2-4. |
 | **P2-3 Runtime lifecycle and retention operations — implemented** | Retire settled worktrees/containers safely, implement explicit session artifact deletion, quotas, storage-pressure visibility, and restore-friendly manifests. | P2-1; coordinates with P2-2 worktree custody | Holds, cleanup, deletion manifests, idempotent retry, and storage-pressure dispatch blocking pass model-less acceptance. |
 | **P2-4 Capacity, credentials, and provider resilience** | Measure host/provider limits, widen concurrency only where safe, exercise model switching and local routes, and classify provider exhaustion/failure. | P2-1; P2-3 quotas useful | Sustained mixed-project run stays within measured CPU/RAM/Docker/provider budgets; provider loss pauses or reroutes only under explicit policy. |
-| **P2-5 Continuity export and restore** | Export canonical state/custody/artifacts without a model and restore into an isolated state root. | P2-1 through P2-4 storage/config contracts | Same-host isolated restore recovers tasks, native sessions, prompts/routes, artifacts, Git custody, and audit checksums; one retained task resumes. |
+| **P2-5 Continuity export and restore — complete** | Export canonical state/custody/artifacts without a model and restore into an isolated state root. | P2-1 through P2-4 storage/config contracts | Same-host isolated restore recovers tasks, native sessions, prompts/routes, artifacts, Git custody, and audit checksums; one retained task resumes. |
 
 P2-1 through P2-3 now fix the authority, Git, and retention contracts needed
 for measurement. P2-4 is deliberately collaborative: the owner selects the
@@ -151,6 +151,28 @@ Implemented behavior:
 
 Start with measurement, not optimistic limits:
 
+The first increment is implemented on the active P2-4 branch:
+
+- discover the authenticated model catalog through `pi --list-models`;
+- expose non-secret provider/authentication metadata;
+- replace conversation and manual phase provider/model text fields with
+  catalog selectors;
+- hand provider authentication to Pi's host-TTY `/login` flow and refresh the
+  catalog without restarting Pink Guy;
+- retain automatic dispatch's configured-route boundary and serialized OAuth
+  default.
+
+Initial target-host calibration is recorded in
+[`../features/capacity-calibration/RESULTS.md`](../features/capacity-calibration/RESULTS.md):
+idle API/orchestrator overhead is small, three idle project orchestrators fit
+comfortably, and serialized work across two projects kept one container at a
+time. The same run rejects the fixed ten-minute hard deadline and exposes
+full-session copying on every internal Pi tool-loop turn. Accepted D-057 and
+D-058 now replace that fixed supervision bound and internal-turn copy cadence;
+their targeted and core regressions pass. The serialized live benchmark must
+still confirm the corrected long-turn and storage behavior before widening the
+OAuth/task lane or selecting storage limits.
+
 - record per-run peak RSS/CPU, container count, disk growth, duration, model
   route, provider wait/failure class, and OAuth/API-key/local-route class;
 - establish a 64 GB M1 Max safety envelope with reserved headroom for macOS,
@@ -180,6 +202,11 @@ M1 Max:
 6. Should normal remote publication use SSH Git, `gh`, or remain prepare-only
    until the post-Phase-2 dogfood gate?
 
+The owner approved D-057 and D-058 on 2026-07-19. Their progress-aware
+supervision, bounded final-settlement grace, timeout-checkpoint recovery, and
+owner-boundary custody regressions pass. A concurrent-provider benchmark is
+optional; reliable serialized execution is the Phase 2 requirement.
+
 Pink Guy already exposes storage totals and accepts explicit warning/hard
 limits through `PINK_GUY_STORAGE_WARN_BYTES` and
 `PINK_GUY_STORAGE_HARD_BYTES`. Resource concurrency defaults will not change
@@ -200,6 +227,17 @@ work to prove that its own durable authority is recoverable:
 4. run one resumed task from the restored root;
 5. defer a second-physical-Mac rehearsal and cloud-backup destination until
    the same-host restore proves an actual need and format stability.
+
+The `pink-guy-continuity-v1` implementation provides a live-API export
+gate plus standalone verify/restore commands. Its model-less probe rejects
+active work and dirty Git, excludes a credential canary, detects corruption,
+reconstructs Git, preserves audit digests and source bytes, revokes ephemeral
+authority, and schedules a retained task from the isolated copy with zero
+provider calls. The live rehearsal then exported 3 projects and 3,603 files,
+restored all authority into a clean root, preserved declared audit digests and
+row counts, found no source-root path authority, and queued a retained task
+without a provider call or container. See
+[`../features/continuity-export/RESULTS.md`](../features/continuity-export/RESULTS.md).
 
 This scope creates real portability and recovery value without building
 encryption, scheduling, cloud retention, or cross-platform migration before

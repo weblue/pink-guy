@@ -1,6 +1,6 @@
 # Safe managed-project deletion — product specification
 
-Status: Approved for implementation
+Status: Implemented Phase 1 contract; see `RESULTS.md`
 
 Last updated: 2026-07-18
 

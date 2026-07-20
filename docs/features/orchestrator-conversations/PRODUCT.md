@@ -1,8 +1,8 @@
 # Phase 1 orchestrator conversations and project intake
 
-Status: Approved for implementation
+Status: Implemented Phase 1 conversation and transfer contract
 
-Last updated: 2026-07-17
+Last updated: 2026-07-19
 
 ## Summary
 
@@ -117,6 +117,11 @@ Figma: none provided.
     required. Reconnect preserves streamed output and structured task changes.
     A second submit cannot race the same conversation turn; it queues behind
     the active turn or the owner cancels the active turn first.
+
+    Long orchestrator turns use the same accepted D-057 supervision boundary
+    as task phases: immediate process/protocol failures, activity-aware
+    inactivity, a visible configurable final ceiling, and bounded settlement
+    grace. A fixed ten-minute browser/API wait is not the long-turn contract.
 
 20. Orchestrator messages, tool calls, source snapshots, assumptions, task
     mutations, and decision events are retained as canonical evidence. The

@@ -1,104 +1,93 @@
 # Pink Guy documentation
 
-This index separates current operating truth from feature contracts, research,
-and retained history.
+This index separates current operating truth from product contracts, feature
+evidence, and retained history.
 
 ## Start here
 
-- [Local development runbook](operations/local-development.md) — start, access,
-  verify, and stop the platform.
-- [Current state](product/CURRENT-STATE.md) — implemented capabilities, stored
-  artifacts, known gaps, and the next delivery slices.
-- [Roadmap](product/ROADMAP.md) — canonical phase and exposure sequence.
-- [Phase 2 delivery plan](product/PHASE2-PLAN.md) — recovery-first sequence,
-  dependencies, exit evidence, and deferred work.
-- [Phase 2 closure and adoption plan](product/PHASE2-CLOSURE.md) — the
-  executable path from PR #17 through calibration, continuity, sustained
-  dogfood, and the owner-reviewed UX redesign.
-- [Phase 1 dogfood plan](product/DOGFOOD-PLAN.md) — entry gates, two real-work
-  scenarios, evidence, and explicit non-requirements; retained as the completed
-  Phase 1 record.
-- [Decision log](architecture/DECISIONS.md) — owner-approved, proposed, and
-  deferred decisions.
+1. [Repository README](../README.md) — shortest setup and usage path.
+2. [Current state](product/CURRENT-STATE.md) — implemented capabilities,
+   limits, readiness, and next gates.
+3. [Local development runbook](operations/local-development.md) — complete
+   local operation, model/auth handoff, task controls, recovery, Git, retention,
+   and continuity.
+4. [Testing and probes](operations/testing.md) — deterministic, Docker-backed,
+   and opt-in live checks.
 
-## Product and architecture
+For delivery status, use the [roadmap](product/ROADMAP.md). The
+[Phase 2 closure plan](product/PHASE2-CLOSURE.md) owns the remaining P2-4 live
+gates and the entry criteria for sustained dogfood. The more detailed
+[Phase 2 plan](product/PHASE2-PLAN.md) is the implementation record.
 
-- [Product contract](product/PRODUCT.md)
-- [Developer cockpit/UI direction](product/UI.md)
+## Current product and architecture
+
+- [Product contract](product/PRODUCT.md) — target behavior; consult Current
+  State before assuming every requirement is implemented.
+- [Developer cockpit/UI contract](product/UI.md)
 - [Technical architecture](architecture/TECH.md)
+- [Decision log](architecture/DECISIONS.md)
 
-## Implemented Phase 1 feature contracts
+## Implemented feature contracts
 
-Each feature directory contains its product behavior, technical design, and
-verification results.
+Each feature keeps three kinds of record:
 
-- [Local control loop](features/local-control-loop/)
-- [Local task controls](features/local-task-controls/)
-- [Orchestrator conversations](features/orchestrator-conversations/)
-- [Editable agent prompt profiles](features/agent-prompt-profiles/)
-- [Conversation custody and model switching](features/conversation-custody/)
-- [Repository intake and dogfood controls](features/dogfood-controls/)
-- [Workspace inspectors and phase flow](features/workspace-phase-flow/)
-- [Automatic phase continuation](features/automatic-phase-continuation/)
-- [Task lifecycle and planning artifacts](features/task-lifecycle-artifacts/)
-- [Safe managed-project deletion](features/safe-project-deletion/)
-- [Deterministic Ready scheduler](features/deterministic-ready-scheduler/) —
-  accepted D-046 moves eligibility, ordering, capacity, and sub-agent dispatch
-  out of the LLM while keeping conversational task refinement and release.
+- `PRODUCT.md` defines intended behavior and boundaries;
+- `TECH.md` records design and implementation shape;
+- `RESULTS.md` records verification and is the source for acceptance claims.
 
-P1-1 through P1-3 are usable. P1-4 now has its fixed-revision phase protocol,
-model-less automatic test/review continuation, workspace inspector, and
-observer baseline and deterministic initial Ready dispatch. A live
-orchestrator-release task passed implementation, fixed-revision validation,
-independent review, and completion, so Phase 1 is complete.
+Phase 1:
 
-## Active Phase 2 features
+- [Local control loop](features/local-control-loop/PRODUCT.md)
+- [Local task controls](features/local-task-controls/PRODUCT.md)
+- [Orchestrator conversations and intake](features/orchestrator-conversations/PRODUCT.md)
+- [Editable agent prompt profiles](features/agent-prompt-profiles/PRODUCT.md)
+- [Conversation custody and model switching](features/conversation-custody/PRODUCT.md)
+- [Repository intake and dogfood controls](features/dogfood-controls/PRODUCT.md)
+- [Workspace inspectors and phase flow](features/workspace-phase-flow/PRODUCT.md)
+- [Automatic phase continuation](features/automatic-phase-continuation/PRODUCT.md)
+- [Task lifecycle and planning artifacts](features/task-lifecycle-artifacts/PRODUCT.md)
+- [Safe managed-project deletion](features/safe-project-deletion/PRODUCT.md)
+- [Deterministic Ready scheduler](features/deterministic-ready-scheduler/PRODUCT.md)
 
-These features are implemented on the current Phase 2 branch and await merge
-in [PR #17](https://github.com/weblue/pink-guy/pull/17).
+Phase 2:
 
-- [Execution recovery and late evidence](features/execution-recovery/) —
-  central accepted-execution settlement, mutation fencing, paused/recovery
-  states, and owner-governed checkpoint recovery are implemented and accepted.
-- [Governed Git integration](features/governed-git-integration/) —
-  prepare-only defaults, owner policy, merge/squash/rebase simulation,
-  compare-and-swap local integration, optional push/PR, and conflict/restart
-  attention are implemented.
-- [Runtime retention](features/runtime-retention/) — retention holds, safe
-  worktree/container cleanup, session deletion manifests/tombstones, storage
-  inventory, and hard-pressure dispatch blocking are implemented.
+- [Execution recovery and late evidence](features/execution-recovery/PRODUCT.md)
+- [Governed Git integration](features/governed-git-integration/PRODUCT.md)
+- [Runtime lifecycle and retention](features/runtime-retention/PRODUCT.md)
+- [Provider catalog and authentication guidance](features/provider-catalog-controls/PRODUCT.md)
+- [Host and provider capacity calibration](features/capacity-calibration/PRODUCT.md)
+- [Continuity export and isolated restore](features/continuity-export/PRODUCT.md)
 
-## Adoption checkpoints
+P2-1, P2-2, P2-3, and P2-5 are complete. P2-4 has implemented catalog and
+measurement tooling plus an initial serialized calibration; its remaining
+live provider, long-turn, publication, cleanup, and storage-policy gates are
+not complete.
 
-- **Supervised daily driver:** Phase 1 is complete; prefer Pink Guy for
-  noncritical supervised local work while retaining a direct client for
-  recovery.
-- **Sustained dogfood:** complete P2-4 host/provider calibration and P2-5
-  isolated-root continuity restore, then enter Phase 2D.
-- **UX acceptance:** use Phase 2D evidence in a Phase 2U owner interview and
-  existing-cockpit mockup; fix accepted scrolling, comprehension, and
-  navigation friction.
-- **Full-time local replacement:** pass Phase 2D and Phase 2U without routine
-  direct-client repair.
-- **Remote-first operation:** complete Phase 3 authentication and SWAG
-  deployment.
+## Adoption records
 
-## Operations and testing
+- [Phase 1 dogfood record](product/DOGFOOD-PLAN.md) — completed historical
+  acceptance for supervised local use.
+- [Phase 2 closure and adoption plan](product/PHASE2-CLOSURE.md) — current
+  P2-4, Phase 2D, and Phase 2U sequence.
+- [UI friction schema](product/UI.md#phase-2d-friction-evidence) — evidence to
+  capture during sustained dogfood.
 
-- [Local development](operations/local-development.md)
-- [Testing and probes](operations/testing.md)
+Pink Guy is ready for supervised local work. It is not yet the recommended
+full-time replacement for a direct coding client, and it must not be exposed
+remotely before the Phase 3 authentication profile exists.
 
-## Research and history
+## Research and retained history
 
-- [Phase 0 ecosystem and provider research](research/phase0-landscape.md)
-- [Pi persistent-intelligence assessment](research/pi-persistent-intelligence-assessment.md)
 - [Phase 0 foundation record](history/phase0/)
 - [Phase 0 evidence manifests](history/phase0/evidence/)
+- [Phase 0 ecosystem/provider research](research/phase0-landscape.md)
+- [Pi persistent-intelligence assessment](research/pi-persistent-intelligence-assessment.md)
 
-Historical evidence manifests intentionally preserve the paths and command
-strings recorded when the evidence was produced. Current executable paths are
-listed in the testing guide.
+Research and Phase 0 documents explain earlier decisions; they do not define
+current setup, paths, status, or runtime behavior. Historical evidence
+manifests intentionally preserve the commands and disposable paths recorded
+when they were produced.
 
 Runtime databases, native sessions, credentials, unredacted provider or
-command output, temporary worktrees, and generated custody bundles stay
-outside Git.
+command output, temporary worktrees, generated custody bundles, and benchmark
+JSON remain outside Git.

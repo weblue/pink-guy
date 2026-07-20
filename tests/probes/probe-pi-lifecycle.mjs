@@ -196,8 +196,7 @@ let firstSessionFile;
 let secondSessionFile;
 let initialSessionId;
 let secondSessionId;
-let headerSnapshot;
-let userSnapshot;
+let settledSnapshot;
 try {
   const startupNotification = await first.waitFor(
     (message) =>
@@ -217,21 +216,7 @@ try {
   assert(!(await exists(firstSessionFile)), "header-only Pi session unexpectedly existed on disk");
 
   let manifests = await readManifests();
-  headerSnapshot = manifests.find(
-    (manifest) =>
-      manifest.value.session_id === initialSessionId && manifest.value.trigger === "session_start",
-  );
-  assert(headerSnapshot, "session_start snapshot was not committed");
-  assert(headerSnapshot.value.source_file_existed === false, "header snapshot did not use memory state");
-  assert(headerSnapshot.value.message_roles.length === 0, "pre-conversation snapshot contained a message");
-  const headerNative = parseJsonl((await verifyManifest(headerSnapshot)).toString("utf8"));
-  assert(headerNative[0]?.type === "session", "pre-conversation snapshot is invalid");
-  assert(
-    headerNative.slice(1).every((entry) =>
-      ["model_change", "thinking_level_change"].includes(entry.type),
-    ),
-    "pre-conversation snapshot contained unexpected runtime state",
-  );
+  assert(manifests.length === 0, "session startup copied native state before a custody boundary");
 
   const available = await first.command({ type: "get_available_models" });
   const localModelIds = available.models
@@ -262,29 +247,19 @@ try {
   }
 
   manifests = await readManifests();
-  userSnapshot = manifests.find(
+  settledSnapshot = manifests.find(
     (manifest) =>
       manifest.value.session_id === initialSessionId &&
-      manifest.value.trigger === "context" &&
-      manifest.value.message_roles.length === 1,
-  );
-  assert(userSnapshot, "user-only snapshot was not committed");
-  assert(userSnapshot.value.source_file_existed === false, "user-only snapshot did not use memory state");
-  assert(
-    JSON.stringify(userSnapshot.value.message_roles) === JSON.stringify(["user"]),
-    "user-only snapshot contained an assistant record",
-  );
-  await verifyManifest(userSnapshot);
-
-  const turnSnapshot = manifests.find(
-    (manifest) =>
-      manifest.value.session_id === initialSessionId &&
-      manifest.value.trigger === "turn_end" &&
+      manifest.value.trigger === "agent_settled" &&
       manifest.value.message_roles.includes("assistant"),
   );
-  assert(turnSnapshot, "turn-end snapshot was not committed");
-  assert(turnSnapshot.value.source_file_existed === true, "turn-end snapshot did not use native JSONL");
-  await verifyManifest(turnSnapshot);
+  assert(settledSnapshot, "agent-settled snapshot was not committed");
+  assert(settledSnapshot.value.source_file_existed === true, "settled snapshot did not use native JSONL");
+  await verifyManifest(settledSnapshot);
+  assert(
+    manifests.filter((manifest) => manifest.value.session_id === initialSessionId).length === 1,
+    "one owner-level turn produced more than one native custody copy",
+  );
   assert(await exists(firstSessionFile), "completed turn did not flush native JSONL");
 
   const selectedSlow = await first.command({
@@ -342,13 +317,10 @@ try {
   assert(secondSessionFile && !(await exists(secondSessionFile)), "new session was not initially unflushed");
 
   manifests = await readManifests();
-  const newHeaderSnapshot = manifests.find(
-    (manifest) =>
-      manifest.value.session_id === secondSessionId && manifest.value.trigger === "session_start",
+  assert(
+    !manifests.some((manifest) => manifest.value.session_id === secondSessionId),
+    "new session copied native state before its first owner-level settlement",
   );
-  assert(newHeaderSnapshot, "new session header snapshot was not committed");
-  assert(newHeaderSnapshot.value.source_file_existed === false, "new header snapshot was not synthesized");
-  await verifyManifest(newHeaderSnapshot);
   assert(
     manifests.some(
       (manifest) =>
@@ -407,16 +379,13 @@ try {
 const piExecutable = await realpath(execFileSync("which", ["pi"], { encoding: "utf8" }).trim());
 const piPackageRoot = dirname(dirname(piExecutable));
 const { SessionManager } = await import(pathToFileURL(join(piPackageRoot, "dist/index.js")));
-const headerManager = SessionManager.open(join(snapshots, headerSnapshot.value.native.path));
+const settledManager = SessionManager.open(join(snapshots, settledSnapshot.value.native.path));
+const settledContext = settledManager.buildSessionContext();
 assert(
-  headerManager.buildSessionContext().messages.length === 0,
-  "Pi could not reopen the pre-conversation snapshot",
-);
-const userManager = SessionManager.open(join(snapshots, userSnapshot.value.native.path));
-const userContext = userManager.buildSessionContext();
-assert(
-  userContext.messages.length === 1 && userContext.messages[0].role === "user",
-  "Pi could not reopen the user-only snapshot",
+  settledContext.messages.length === 2
+    && settledContext.messages[0].role === "user"
+    && settledContext.messages[1].role === "assistant",
+  "Pi could not reopen the owner-level settled snapshot",
 );
 
 const providerInvocations = parseJsonl(
@@ -438,8 +407,7 @@ process.stdout.write(
       pi_version: piVersion,
       external_network_request_made: false,
       local_provider_invocations: providerInvocations.length,
-      header_only_snapshot_reopenable: true,
-      user_only_snapshot_reopenable: true,
+      owner_settled_snapshot_reopenable: true,
       rpc_prompt_notifications_complete: true,
       rpc_abort_safe: true,
       model_selection_persisted: true,
@@ -447,8 +415,7 @@ process.stdout.write(
       exact_restart_no_replay: true,
       initial_session_id: initialSessionId,
       child_session_id: secondSessionId,
-      header_snapshot_sha256: headerSnapshot.value.native.sha256,
-      user_snapshot_sha256: userSnapshot.value.native.sha256,
+      settled_snapshot_sha256: settledSnapshot.value.native.sha256,
       isolated_root: root,
     },
     null,

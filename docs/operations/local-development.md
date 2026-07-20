@@ -1,6 +1,7 @@
 # Pink Guy local development runbook
 
-Status: Current local cockpit and shared terminal client; P2-1 through P2-3 implemented in PR #17
+Status: Current local cockpit and shared terminal client; P2-4 live closure in
+progress
 
 The current application can be served locally for multi-project observability
 and durable project-orchestrator command delivery. The local-smoke profile
@@ -15,6 +16,8 @@ network-listener profile.
 - Git;
 - Pi on `PATH`;
 - Docker Desktop only when running task-container probes or starting a managed task run.
+
+There are no npm dependencies to install.
 
 SQLite is embedded, project orchestrators are dynamic per-project processes,
 and the host daemon creates task containers per run. Task containers do not
@@ -56,6 +59,19 @@ Provider/model/thinking defaults and phase overrides live in
 configured default. Existing conversations change route through the
 custody-backed browser or `pink model`; task and phase controls pin their
 resolved route independently.
+
+Discover models and refresh the catalog after authentication:
+
+```sh
+pi --list-models
+npm run pink -- models
+npm run pink -- models --refresh
+```
+
+The cockpit's **Models + provider authentication** panel gives the exact Pi
+command for the configured credential directory. Run it in a host TTY, enter
+`/login`, complete Pi's subscription or API-key flow, and refresh. Do not paste
+credentials into Pink Guy; the browser never accepts secret values.
 
 Useful checks:
 
@@ -174,11 +190,18 @@ topics and boards at once. Closing a chat pane does not stop Pi or lose
 history. Stopping an orchestrator pane releases that project's lease, while
 the queued conversation remains durable.
 
-## Create and schedule phase-scoped work
+## Release work and use manual phase controls
 
-In the cockpit, use **Create task** to choose a project, provide a title and
-optional acceptance criteria, and add a `ready` task. On its board card,
-choose `implementation`, `test`, or `review` and select **Schedule**.
+The normal path is to refine an executable task, resolve dependencies and
+protected decisions, and explicitly release it to automatic dispatch. The
+central scheduler selects eligible Ready work deterministically, then
+continues a successful implementation through fixed-revision test and
+independent review.
+
+Direct phase scheduling is an owner recovery/override path. In the cockpit,
+use **Create task** to choose a project, provide a title and optional acceptance
+criteria, and add a `ready` task. On its board card, choose `implementation`,
+`test`, or `review` and select **Schedule**.
 
 Scheduling is one authoritative transaction: it assigns a phase-scoped task
 agent, moves the task to `in_progress`, and queues its `start_task` command.
@@ -311,6 +334,25 @@ npm start -- --repo "$PWD"
 These values are examples, not current recommendations. P2-4 will select
 limits from measured disk growth. A configured hard threshold pauses automatic
 dispatch and never deletes evidence.
+
+## Export and restore continuity
+
+Export through the live API only while the control plane is quiescent:
+
+```sh
+npm run continuity -- export --output /absolute/backups/pink-guy-YYYYMMDD
+npm run continuity -- verify --bundle /absolute/backups/pink-guy-YYYYMMDD
+npm run continuity -- restore \
+  --bundle /absolute/backups/pink-guy-YYYYMMDD \
+  --target /absolute/restores/pink-guy
+```
+
+The output and restore target must be new absolute paths. Export must be
+outside the live state root and managed repositories. Restore verifies the
+bundle, reconstructs repositories in an isolated state root, revokes
+ephemeral authority, and starts no Pi process or container. Credentials and
+ephemeral containers are not exported. See the
+[continuity acceptance results](../features/continuity-export/RESULTS.md).
 
 ## Later remote connection
 

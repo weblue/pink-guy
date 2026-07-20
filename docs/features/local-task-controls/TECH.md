@@ -1,6 +1,6 @@
 # Phase 1 local task controls — technical specification
 
-Status: Approved for implementation
+Status: Implemented Phase 1 design; see `RESULTS.md`
 
 Last updated: 2026-07-17
 

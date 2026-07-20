@@ -1,8 +1,8 @@
 # Automatic phase continuation
 
-Status: Implemented and verified
+Status: Implemented; D-057 long-turn supervision remediation verified
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 Figma: none provided; this changes workflow behavior and existing cockpit copy,
 not the visual design.
@@ -87,7 +87,8 @@ conversation—determine each transition.
 14. Provider/process failures continue to block the task and remain eligible
     for explicit owner recovery. Failure detection uses process exit and
     inactivity supervision; the ten-minute hard ceiling is not the expected
-    detection path.
+    detection path. Accepted D-057 corrects the implementation after P2-4
+    observed that ceiling fencing healthy finishing work.
 
 15. The cockpit's manual phase action remains available only as an explicit
     override or recovery control. Its label and explanatory copy must not imply

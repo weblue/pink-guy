@@ -12,8 +12,11 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const temporaryRoot = await mkdtemp(join(tmpdir(), "boss-man-core-tests-"));
 const fixture = join(temporaryRoot, "fixture");
 const probes = [
+  "probe-phase2-capacity-calibration.mjs",
+  "probe-phase2-provider-catalog.mjs",
   "probe-phase2-execution-recovery.mjs",
   "probe-phase2-git-retention.mjs",
+  "probe-phase2-continuity.mjs",
   "probe-phase1-command-loop.mjs",
   "probe-phase1-local-task-controls.mjs",
   "probe-phase1-orchestrator-conversations.mjs",
