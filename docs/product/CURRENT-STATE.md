@@ -110,6 +110,14 @@ under `scripts/`, and current documentation is indexed from `docs/`. Completed
 feasibility plans and evidence remain available as history without defining
 the runtime structure.
 
+P2-4 now has clean target-host evidence for three simultaneous idle project
+orchestrators and serialized maintenance work across Pink Guy and
+inspector-gadget. Host/Docker capacity remained healthy and only one task
+container ran at a time. The workload also found two pre-dogfood reliability
+defects: a fixed ten-minute hard deadline fenced active finishing work, and
+internal Pi tool-loop snapshots copied growing native sessions 188 times.
+Proposed D-057/D-058 define the bounded supervision and custody corrections.
+
 ## Capability map
 
 | Area | Current capability | Remaining boundary |
@@ -200,9 +208,11 @@ The active delivery map is
 sequence is [`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md). Phase 1 dogfood evidence
 remains in [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
-1. **Calibrate P2-4 together.** Measure host, Docker, provider, credential, and
-   local-model behavior before changing concurrency/fallback policy.
-2. **Run the remaining live side-effect drills.** Exercise one explicitly authorized
+1. **Close the P2-4 reliability gates.** Approve or revise D-057/D-058,
+   implement long-turn supervision and bounded custody cadence, then repeat
+   the serialized two-project benchmark.
+2. **Run the remaining P2-4 live drills.** Exercise safe model switching and
+   provider failure, one explicitly authorized
    normal push or pull-request publication without widening default policy.
    Verify cleanup against a settled disposable Docker task.
 3. **Build the bounded P2-5 continuity proof.** Export and restore into an

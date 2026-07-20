@@ -24,7 +24,10 @@ owner-selected merge/squash/rebase policy, conflict attention, and optional
 local/remote publication without force push. Retention adds holds, safe
 worktree/container cleanup, explicit session deletion manifests, storage
 inventory, and dispatch blocking under configured hard pressure. P2-4 host and
-provider calibration is next. See the
+provider calibration has established a healthy three-idle-orchestrator,
+single-task-container baseline. It also found two gates before sustained
+dogfood: the fixed ten-minute phase deadline and excessive full-session
+snapshot cadence. See the
 [Phase 2 delivery map](docs/product/PHASE2-PLAN.md).
 The operational sequence from merge through calibration, continuity, dogfood,
 and UX acceptance is in the

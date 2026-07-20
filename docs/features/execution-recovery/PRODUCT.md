@@ -1,8 +1,8 @@
 # Execution recovery and late-evidence contract
 
-Status: Implemented and accepted
+Status: Implemented; P2-4 found a long-turn deadline regression
 
-Last updated: 2026-07-18
+Last updated: 2026-07-19
 
 Figma: none provided. This contract uses the existing cockpit and terminal
 surfaces; detailed visual styling is not part of this slice.
@@ -127,6 +127,11 @@ authority for execution settlement and explicit treatment of late evidence.
     inactivity as the trigger. A longer hard deadline remains a final bound,
     not the normal failure detector.
 
+    The hard bound is explicit, configurable, and long enough for the measured
+    coding workload. A final assistant response already streaming at the bound
+    receives a bounded settlement grace; trickle activity cannot remove the
+    absolute safety ceiling.
+
 14. Beginning a stop, cancel, timeout, or uncertain-effect recovery fences the
     execution before waiting for processes to exit. Subsequent task, review,
     validation, artifact-promotion, or task-revision mutations using that
@@ -169,6 +174,11 @@ authority for execution settlement and explicit treatment of late evidence.
     commit identity, and relevant Git side-effect receipt. An ambiguous,
     missing, cross-task, or non-descendant commit remains evidence but cannot
     be accepted.
+
+    A timeout after a proven same-generation checkpoint must project that
+    checkpoint as a candidate or retain an explicit proof explaining why it is
+    ineligible. An unresolved provider-response receipt alone does not make
+    already-fixed Git evidence disappear.
 
 23. Only the human owner may accept or reject a late checkpoint in this
     contract. An orchestrator or sub-agent may summarize evidence and recommend

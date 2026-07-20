@@ -44,8 +44,17 @@ will decide whether durable API/SQLite projection adds operational value.
 
 ## Staged runs
 
-1. idle host with Codex and Docker Desktop;
-2. Pink Guy API plus one project orchestrator;
-3. one task execution;
-4. multiple project orchestrators with serialized OAuth task work;
-5. controlled overlap only after the earlier evidence is healthy.
+1. idle host with Codex and Docker Desktop — complete;
+2. Pink Guy API plus one project orchestrator — complete;
+3. one task execution — complete;
+4. multiple project orchestrators with serialized OAuth task work — complete,
+   with deadline and custody-retention defects recorded;
+5. controlled overlap — deferred until the serialized path is reliable and an
+   overlap would answer a concrete policy question.
+
+Aggregate `du` growth is followed by model-less classification of SQLite
+payloads, run directories, native session files, custody snapshots, and
+worktrees. Transcript content is not printed or copied during that analysis.
+macOS `memory_pressure` is the primary host-memory safety signal; raw free
+memory alone includes reclaimable cache and is not used as an out-of-memory
+proxy.

@@ -164,10 +164,11 @@ The first increment is implemented on the active P2-4 branch:
 
 Initial target-host calibration is recorded in
 [`../features/capacity-calibration/RESULTS.md`](../features/capacity-calibration/RESULTS.md):
-idle API/orchestrator overhead is small, and one real `doc-map`
-implementation→test→review lifecycle completed with a single container at a
-time. This does not yet justify widening the OAuth/task lane or selecting
-storage thresholds.
+idle API/orchestrator overhead is small, three idle project orchestrators fit
+comfortably, and serialized work across two projects kept one container at a
+time. The same run rejects the fixed ten-minute hard deadline and exposes
+full-session copying on every internal Pi tool-loop turn. Those defects must
+be corrected before widening the OAuth/task lane or selecting storage limits.
 
 - record per-run peak RSS/CPU, container count, disk growth, duration, model
   route, provider wait/failure class, and OAuth/API-key/local-route class;
@@ -197,6 +198,11 @@ M1 Max:
 5. What observed disk-growth rate justifies warning and hard storage limits?
 6. Should normal remote publication use SSH Git, `gh`, or remain prepare-only
    until the post-Phase-2 dogfood gate?
+
+P2-4 also produced proposed D-057 and D-058. The owner must approve or revise
+the long-turn supervision and native-custody cadence before the serialized
+benchmark is repeated. A concurrent-provider benchmark is optional; reliable
+serialized execution is the Phase 2 requirement.
 
 Pink Guy already exposes storage totals and accepts explicit warning/hard
 limits through `PINK_GUY_STORAGE_WARN_BYTES` and

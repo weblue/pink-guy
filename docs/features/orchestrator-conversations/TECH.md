@@ -2,7 +2,7 @@
 
 Status: Implemented Phase 1 conversation and transfer contract
 
-Last updated: 2026-07-17
+Last updated: 2026-07-19
 
 ## Context
 
@@ -211,6 +211,13 @@ also implement repository/source endpoints, custody-backed model switching,
 and owner task/decision/reconciliation controls. Deeper workspace inspectors
 and scope-transfer custody remain. See
 [RESULTS.md](./RESULTS.md).
+
+P2-4 found that both this runtime and task phases still pass a fixed ten-minute
+absolute ceiling to Pi RPC settlement. Proposed D-057 moves those settings
+behind one visible supervision policy, retains activity-aware inactivity as
+the normal detector, and adds bounded final-settlement grace. The persistent
+conversation and reconnect contract does not resend context when a turn runs
+long.
 
 The cockpit adds a prominent **New topic** action and an **Ask orchestrator**
 action within each project. The main topic/project workspace uses a

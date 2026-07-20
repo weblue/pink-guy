@@ -30,6 +30,9 @@ it is not permanent telemetry.
    silently omitted.
 8. Calibration itself performs no provider/model request and starts no
    workload.
+9. Workload interpretation separates host pressure from retained-state
+   amplification. A healthy RAM window does not make quadratic session or
+   event retention acceptable.
 
 ## Acceptance
 
@@ -37,3 +40,6 @@ it is not permanent telemetry.
   artifact output.
 - A short idle run succeeds on the target M1 Max.
 - Later controlled workload runs use the same recorder and revision.
+- A multi-project run classifies state growth by database, native session,
+  custody snapshot, artifact, and workspace rather than selecting a quota
+  from the aggregate alone.
