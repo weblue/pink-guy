@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import {
+  access,
   cp,
   mkdtemp,
   mkdir,
@@ -16,7 +17,11 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 
-import { restoreBundle, verifyBundle } from "../../src/server/continuity.mjs";
+import {
+  exportBundle,
+  restoreBundle,
+  verifyBundle,
+} from "../../src/server/continuity.mjs";
 import { DirectControlPlane } from "../../src/server/control-plane.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -74,6 +79,8 @@ const root = await mkdtemp(join(tmpdir(), "pink-guy-phase2-continuity-"));
 const stateRoot = join(root, "source-state");
 const bundlePath = join(root, "continuity-bundle");
 const corruptedPath = join(root, "corrupted-bundle");
+const projectMismatchPath = join(root, "project-mismatch-bundle");
+const verificationFailurePath = join(root, "verification-failure-bundle");
 const restoredRoot = join(root, "restored-state");
 const canary = "PINK_GUY_CREDENTIAL_CANARY_9f12a0";
 const originalHead = await git(fixture, "rev-parse", "HEAD");
@@ -214,8 +221,36 @@ try {
     gatedReady.reason === "continuity_export_active",
     "ready dispatch was not paused by continuity gate",
   );
+  const gatedImport = await request(origin, "/api/projects/import", {
+    method: "POST",
+    body: { repositoryUrl: fixture, name: "Mutation during continuity export" },
+    idempotencyKey: "continuity-gated-project-import",
+  });
+  assert(
+    gatedImport.response.status === 409
+      && gatedImport.value.error === "continuity_export_active"
+      && plane.store.projects().length === 1,
+    "durable project mutation was not frozen by continuity export",
+  );
   plane.continuityExportActive = false;
 
+  let databaseWriteFrozen = false;
+  plane.continuityExporter = async (options) => {
+    try {
+      plane.store.database.prepare(`INSERT INTO projects(
+        id,name,repository_path,created_at,repository_id
+      ) VALUES(?,?,?,?,?)`).run(
+        "racing-project",
+        "Racing project",
+        fixture,
+        new Date().toISOString(),
+        "racing-repository",
+      );
+    } catch {
+      databaseWriteFrozen = !plane.store.getProject("racing-project", { includeDeleted: true });
+    }
+    return exportBundle(options);
+  };
   const exported = await request(origin, "/api/continuity/exports", {
     method: "POST",
     body: { outputPath: bundlePath },
@@ -224,6 +259,7 @@ try {
     exported.response.status === 201 && exported.value.verified,
     `continuity export failed: ${JSON.stringify(exported.value)}`,
   );
+  assert(databaseWriteFrozen, "continuity export did not freeze direct durable writes");
   const verified = await verifyBundle(bundlePath);
   assert(verified.verified && verified.projectCount === 1, "standalone verification failed");
   assert(!(await treeContains(bundlePath, Buffer.from(canary))), "credential canary entered the bundle");
@@ -245,6 +281,55 @@ try {
     corruptionRejected = error.code === "continuity_checksum_mismatch";
   }
   assert(corruptionRejected, "standalone verification accepted a corrupted bundle");
+
+  await cp(bundlePath, projectMismatchPath, { recursive: true });
+  const mismatchedManifestPath = join(projectMismatchPath, "manifest.json");
+  const mismatchedManifest = JSON.parse(await readFile(mismatchedManifestPath, "utf8"));
+  mismatchedManifest.projects = [];
+  const mismatchedManifestContent = `${JSON.stringify(mismatchedManifest, null, 2)}\n`;
+  await writeFile(mismatchedManifestPath, mismatchedManifestContent);
+  const mismatchedChecksumsPath = join(projectMismatchPath, "checksums.sha256");
+  const mismatchedChecksums = (await readFile(mismatchedChecksumsPath, "utf8")).replace(
+    /^[a-f0-9]{64}  manifest\.json$/m,
+    `${sha256(mismatchedManifestContent)}  manifest.json`,
+  );
+  await writeFile(mismatchedChecksumsPath, mismatchedChecksums);
+  let projectMismatchRejected = false;
+  try {
+    await verifyBundle(projectMismatchPath);
+  } catch (error) {
+    projectMismatchRejected = error.code === "continuity_database_mismatch";
+  }
+  assert(
+    projectMismatchRejected,
+    "verification accepted a Git project set that disagreed with SQLite",
+  );
+
+  let prepublishFailureCleaned = false;
+  try {
+    await exportBundle({
+      store: plane.store,
+      stateRoot,
+      outputPath: verificationFailurePath,
+      platformRevision: originalHead,
+      verifier: async () => {
+        throw Object.assign(new Error("injected pre-publish verification failure"), {
+          code: "continuity_verification_injected",
+        });
+      },
+    });
+  } catch (error) {
+    try {
+      await access(verificationFailurePath);
+    } catch (accessError) {
+      prepublishFailureCleaned = error.code === "continuity_verification_injected"
+        && accessError.code === "ENOENT";
+    }
+  }
+  assert(
+    prepublishFailureCleaned,
+    "failed pre-publish verification stranded the requested destination",
+  );
 
   await plane.close();
   const sourceDatabaseSha256 = sha256(await readFile(join(stateRoot, "pink-guy.sqlite")));
@@ -335,8 +420,11 @@ try {
     activeRunBlocked: true,
     dirtyRepositoryBlocked: true,
     dispatchGateObserved: true,
+    databaseWriteFrozen: true,
     credentialCanaryExcluded: true,
     corruptionRejected: true,
+    projectSetMismatchRejected: true,
+    prepublishFailureCleaned: true,
     sourceUnchanged: true,
     auditDigestsPreserved: true,
     tableCountsPreserved: true,

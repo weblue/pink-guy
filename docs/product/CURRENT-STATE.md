@@ -2,7 +2,7 @@
 
 Status: Phase 2 active — P2-5 complete; P2-4 live closure remains
 
-Last updated: 2026-07-19
+Last updated: 2026-07-20
 
 ## Current position
 
@@ -96,7 +96,7 @@ The retained UI dogfood queue verified the migration: its umbrella, superseded
 review child, and bootstrap intake are now inspectable under Archived and the
 Ready column is empty.
 
-The final pre-dogfood gates are implemented. Every task phase resolves its own
+The final Phase 1 gates are implemented. Every task phase resolves its own
 provider/model/thinking/billing route before command creation, the orchestrator
 can select that route for a sub-agent, and the effective route is checked
 against Pi and retained on the run. Orchestrator compaction blocks on verified
@@ -224,21 +224,19 @@ The active delivery map is
 sequence is [`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md). Phase 1 dogfood evidence
 remains in [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
-1. **Close the P2-4 live gates.** Repeat the serialized two-project benchmark
-   against accepted D-057/D-058, then complete provider/model, publication,
-   cleanup, and storage-limit drills.
-2. **Run the remaining P2-4 live drills.** Exercise safe model switching and
-   provider failure, one explicitly authorized
-   normal push or pull-request publication without widening default policy.
-   Verify cleanup against a settled disposable Docker task.
-3. **Enter Phase 2D dogfood after P2-4 closes.** Exercise long conversations
+1. **Close P2-4.** Repeat the serialized two-project benchmark against
+   D-057/D-058, exercise safe model switching and provider failure, perform one
+   explicitly authorized normal push or pull-request publication, verify
+   cleanup against a settled disposable Docker task, and select storage limits
+   from corrected growth.
+2. **Enter Phase 2D dogfood after P2-4 closes.** Exercise long conversations
    and at least ten
    tasks across multiple repositories while logging every direct-client exit
    and recurring UX friction.
-4. **Run Phase 2U UX review.** Interview the owner, mock up changes from the
+3. **Run Phase 2U UX review.** Interview the owner, mock up changes from the
    existing cockpit, and fix accepted high-frequency scrolling,
    comprehension, and navigation problems.
-5. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
+4. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
    configured password verifier or API-key hash after the local product is
    mature.
 

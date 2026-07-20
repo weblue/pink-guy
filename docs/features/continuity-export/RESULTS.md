@@ -66,6 +66,14 @@ directories were removed and source state was unchanged.
 
 The probe is part of the 20-probe `npm test` core suite.
 
+A release-readiness review added three race regressions after the live
+rehearsal: API imports and direct SQLite writes are rejected throughout the
+capture boundary, SQLite and manifest project sets must agree, and a failed
+pre-publication verification leaves no final bundle behind. Early
+`pink-guy-continuity-v1` bundles remain verifiable by deriving the project-set
+evidence from their manifest when that evidence predates the dedicated
+database field.
+
 ## Limits retained by D-054
 
 This proves an explicit same-host format and recovery path. It does not add

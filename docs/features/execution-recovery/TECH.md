@@ -1,6 +1,6 @@
 # Execution recovery and late-evidence contract
 
-Status: Implemented; P2-4 found a long-turn deadline regression
+Status: Implemented; D-057 long-turn deadline remediation verified
 
 Last updated: 2026-07-19
 
@@ -300,7 +300,7 @@ RPC process. Native Pi JSONL and context custody supply the safe resume path.
 
 The attention API joins task, command, execution, run, process/container
 inspection, side effects, and recovery candidates into one sanitized
-projection. The cockpit and `boss` client render:
+projection. The cockpit and `pink` client render:
 
 - current state and failure class;
 - last meaningful activity;

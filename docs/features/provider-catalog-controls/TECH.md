@@ -1,6 +1,6 @@
 # Provider catalog and authentication guidance
 
-Status: Approved for P2-4 implementation
+Status: Implemented; deterministic and local-browser acceptance complete
 
 Last updated: 2026-07-19
 

@@ -4,6 +4,10 @@ Status: Current product contract; Phase 1 accepted and Phase 2 active
 
 Last updated: 2026-07-19
 
+This is the target product contract. It includes later-phase behavior; use
+[`CURRENT-STATE.md`](CURRENT-STATE.md) for implemented scope and
+[`ROADMAP.md`](ROADMAP.md) for sequencing.
+
 ## Summary
 
 Pink Guy v2 is a single-owner control plane for planning, running, observing, handing off, and resuming software-development work performed by Pi agents on an always-on Mac. Implementation is local-first; authenticated remote access is a later delivery phase.
@@ -14,7 +18,9 @@ The defining capability is lossless session custody. Pink Guy preserves the comp
 
 ## Problem
 
-The current Pink Guy proves several useful ideas—SQL-backed task tracking, an agile board, containerized agents, and worktree-backed changes—but its product and runtime contracts are too implicit:
+The pre-v2 Pink Guy proved several useful ideas—SQL-backed task tracking, an
+agile board, containerized agents, and worktree-backed changes—but its product
+and runtime contracts were too implicit:
 
 - The UI is organized around chat rather than work requiring attention.
 - Discovery always asks about eight fixed topics instead of resolving only material ambiguity.
@@ -79,17 +85,28 @@ A task can have multiple sequential runs and sessions. A session may be attached
 
 1.3 A scoped orchestrator conversation is the primary intake surface for creating and refining topics, projects, and tasks. It is presented beside the structured work it changes. The global dashboard and task workspaces do not default to a blank chat or require reading transcripts to understand state.
 
-1.4 A task workspace provides direct access to Overview, Changes, Tests, Review, Artifacts, Timeline, Conversation, and Terminal surfaces. The default surface is Overview or the last non-conversation surface used for that task.
+1.4 A task workspace provides direct access to Overview, Changes, Tests,
+Review, Artifacts, Timeline, Conversation, and developer-access information.
+The default surface is Overview or the last non-conversation surface used for
+that task.
 
 1.5 The desktop interface supports a project/task/session navigator, a central work surface, and a resizable inspector. The inspector can show task state, context snapshots, validation, review, model, cost, and workspace status without obscuring the work surface.
 
-1.6 A real interactive terminal is available for developer inspection and smoke testing. Terminal state survives browser navigation and reconnects, and the user can distinguish an agent terminal, a workspace shell, and a read-only captured log.
+1.6 Developer inspection and smoke testing use explicit tmux/cmux/SSH process
+endpoints plus retained command evidence. A browser terminal remains deferred
+unless dogfood demonstrates a workflow the structured cockpit and external
+attach path cannot satisfy.
 
 1.7 The Changes surface provides a changed-file tree, diff navigation, commit/checkpoint provenance, and review findings. The Tests surface shows commands, results, duration, raw output access, and which task acceptance criteria they cover.
 
-1.8 The interface provides a command palette and keyboard navigation for switching projects, tasks, sessions, work surfaces, and terminal focus. Destructive or paid actions remain confirmable and are not triggered by single ambiguous shortcuts.
+1.8 The interface provides keyboard navigation for switching projects, tasks,
+sessions, work surfaces, and conversation focus. Destructive or paid actions
+remain confirmable and are not triggered by single ambiguous shortcuts.
 
-1.9 The interface remains functional on a phone-sized viewport for checking attention items, reviewing a task summary or diff, answering a question, pausing a run, and opening a full-screen terminal. Dense multi-pane layouts collapse into navigable single-pane views rather than shrinking unreadably.
+1.9 The interface remains functional on a phone-sized viewport for checking
+attention items, reviewing a task summary or diff, answering a question, and
+pausing a run. Dense multi-pane layouts collapse into navigable single-pane
+views rather than shrinking unreadably.
 
 1.10 When a configured browser IDE or external workspace client is available, the task workspace provides an explicit “Open workspace” action. Returning to Pink Guy preserves the selected task and session.
 

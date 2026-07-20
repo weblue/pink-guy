@@ -249,6 +249,7 @@ export class DirectControlPlane {
     schedulerProjectCapacity = 1, schedulerGlobalCapacity = 1,
     storageWarningBytes = null, storageHardBytes = null,
     providerCatalog = null,
+    continuityExporter = exportContinuityBundle,
   }) {
     this.store = new Phase0Store(databasePath);
     this.stateRoot = stateRoot;
@@ -282,6 +283,7 @@ export class DirectControlPlane {
       credentialSource: credentialProfile?.sourcePath ?? null,
       environment,
     });
+    this.continuityExporter = continuityExporter;
     this.credentialVault = new RunCredentialVault({ stateRoot, profile: credentialProfile });
     this.gitServices = new Map();
     this.git = fixturePath ? this.gitService(fixturePath) : null;
@@ -403,6 +405,7 @@ export class DirectControlPlane {
       });
     }
     this.continuityExportActive = true;
+    let queryOnly = false;
     try {
       const blockers = continuityBlockers(this.store);
       if (blockers.length) {
@@ -411,6 +414,8 @@ export class DirectControlPlane {
           blockers,
         });
       }
+      this.store.database.exec("PRAGMA query_only=ON");
+      queryOnly = true;
       let platformRevision = null;
       try {
         platformRevision = execFileSync(
@@ -421,14 +426,18 @@ export class DirectControlPlane {
       } catch {
         // A source archive without Git metadata can still create a valid continuity bundle.
       }
-      return await exportContinuityBundle({
+      return await this.continuityExporter({
         store: this.store,
         stateRoot: this.stateRoot,
         outputPath,
         platformRevision,
       });
     } finally {
-      this.continuityExportActive = false;
+      try {
+        if (queryOnly) this.store.database.exec("PRAGMA query_only=OFF");
+      } finally {
+        this.continuityExportActive = false;
+      }
     }
   }
 
@@ -2162,6 +2171,27 @@ export class DirectControlPlane {
   async route(request, response) {
     try {
       const url = new URL(request.url, "http://phase0.invalid");
+      if (this.continuityExportActive && request.method !== "GET") {
+        if ([
+          "/api/orchestrators/commands/claim",
+          "/api/orchestration/turns/claim",
+        ].includes(url.pathname)) {
+          response.writeHead(204, { "x-pink-guy-wait-reason": "continuity_export_active" });
+          return response.end();
+        }
+        if ([
+          "/api/orchestrators/heartbeat",
+          "/api/orchestration/leases/heartbeat",
+        ].includes(url.pathname)) {
+          return json(response, 202, {
+            deferred: true,
+            reason: "continuity_export_active",
+          });
+        }
+        throw Object.assign(new Error("continuity export temporarily freezes durable mutations"), {
+          code: "continuity_export_active",
+        });
+      }
       if (request.method === "GET" && url.pathname === "/") {
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         return response.end(BOARD_HTML);

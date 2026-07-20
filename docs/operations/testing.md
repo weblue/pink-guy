@@ -2,7 +2,7 @@
 
 ## Core regression suite
 
-Run the 17 deterministic core probes together:
+Run the 20 deterministic core probes together:
 
 ```sh
 npm test
@@ -27,6 +27,14 @@ and storage-pressure dispatch blocking:
 
 ```sh
 npm run test:git-retention
+```
+
+The core suite also includes the P2-4 calibration/provider-catalog probes and
+the P2-5 model-less continuity probe. Run the focused P2-4 checks with:
+
+```sh
+npm run test:calibration
+npm run test:providers
 ```
 
 Run only the P2-1 recovery matrix:

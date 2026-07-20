@@ -1,6 +1,6 @@
 # Execution recovery and late-evidence contract
 
-Status: Implemented; P2-4 found a long-turn deadline regression
+Status: Implemented; D-057 long-turn deadline remediation verified
 
 Last updated: 2026-07-19
 
@@ -256,7 +256,7 @@ authority for execution settlement and explicit treatment of late evidence.
     old execution, preserves custody, and exposes resume/retry after
     reconciliation.
 
-36. Cockpit and `boss` terminal views present the same state, last activity,
+36. Cockpit and `pink` terminal views present the same state, last activity,
     failure class, process/container evidence, late candidates, allowed
     actions, and action receipts. tmux output is supplementary diagnostics,
     not execution authority.

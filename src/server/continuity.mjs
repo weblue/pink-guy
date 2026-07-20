@@ -181,6 +181,9 @@ function databaseEvidence(database) {
   return {
     integrity: "ok",
     foreignKeyViolations: 0,
+    liveProjectIds: database.prepare(
+      "SELECT id FROM projects WHERE deleted_at IS NULL ORDER BY id",
+    ).all().map(({ id }) => id),
     tableCounts,
     auditDigests,
   };
@@ -295,9 +298,9 @@ async function addStatePayload(stateRoot, pendingRoot, files) {
   }
 }
 
-async function addGitPayload(store, pendingRoot, files) {
+async function addGitPayload(sourceProjects, pendingRoot, files) {
   const projects = [];
-  for (const project of store.projects()) {
+  for (const project of sourceProjects) {
     assertProjectId(project.id);
     const status = (await git(project.repository_path, ["status", "--porcelain"])).stdout;
     if (status.trim()) {
@@ -378,6 +381,7 @@ export async function exportBundle({
   stateRoot,
   outputPath,
   platformRevision = null,
+  verifier = verifyBundle,
 }) {
   const sourceRoot = resolve(stateRoot);
   const target = assertAbsoluteNewPath(outputPath, "continuity output");
@@ -405,6 +409,7 @@ export async function exportBundle({
   await mkdir(dirname(target), { recursive: true, mode: 0o700 });
   const pendingRoot = join(dirname(target), `.${basename(target)}.pending-${randomUUID()}`);
   const files = [];
+  const sourceProjects = store.projects();
   const exportedAt = new Date().toISOString();
   try {
     await mkdir(pendingRoot, { recursive: true, mode: 0o700 });
@@ -419,7 +424,7 @@ export async function exportBundle({
       sha256: sha256(databaseContent),
     });
     await addStatePayload(sourceRoot, pendingRoot, files);
-    const projects = await addGitPayload(store, pendingRoot, files);
+    const projects = await addGitPayload(sourceProjects, pendingRoot, files);
     const databaseSnapshot = await databaseEvidenceFromFile(databaseDestination);
     const manifest = {
       format: FORMAT,
@@ -452,8 +457,8 @@ export async function exportBundle({
       files: [],
     };
     const manifestSha256 = await writeManifest(pendingRoot, manifest, files);
+    const receipt = await verifier(pendingRoot);
     await rename(pendingRoot, target);
-    const receipt = await verifyBundle(target);
     return {
       bundleId: manifest.bundleId,
       path: target,
@@ -538,14 +543,27 @@ export async function verifyBundle(bundlePath) {
       throw codedError("continuity_checksum_mismatch", `checksum mismatch: ${declaredFile.path}`);
     }
   }
+  const manifestProjectIds = manifest.projects.map(({ id }) => id).sort();
+  if (new Set(manifestProjectIds).size !== manifestProjectIds.length) {
+    throw codedError("continuity_manifest_invalid", "manifest contains duplicate project IDs");
+  }
   const observedDatabase = await databaseEvidenceFromFile(join(root, manifest.database.path));
   if (stableJson(observedDatabase) !== stableJson({
     integrity: manifest.database.integrity,
     foreignKeyViolations: manifest.database.foreignKeyViolations,
     tableCounts: manifest.database.tableCounts,
     auditDigests: manifest.database.auditDigests,
+    // Early format-v1 bundles did not persist this evidence. Their manifest
+    // project list expresses the same invariant and remains verifiable.
+    liveProjectIds: manifest.database.liveProjectIds ?? manifestProjectIds,
   })) {
     throw codedError("continuity_database_mismatch", "database evidence does not match the manifest");
+  }
+  if (stableJson(observedDatabase.liveProjectIds) !== stableJson(manifestProjectIds)) {
+    throw codedError(
+      "continuity_database_mismatch",
+      "live SQLite projects do not match the declared Git project set",
+    );
   }
   for (const project of manifest.projects) {
     assertProjectId(project.id);

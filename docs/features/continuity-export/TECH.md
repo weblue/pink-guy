@@ -2,7 +2,7 @@
 
 Status: Validated — deterministic and live same-host acceptance pass
 
-Last updated: 2026-07-19
+Last updated: 2026-07-20
 
 ## Context
 
@@ -76,13 +76,15 @@ URL or working-tree-only content enters the manifest.
    queued/running conversation turns, and unverified credential runs;
 3. flips the in-memory export gate;
 4. rechecks blockers;
-5. exports; and
-6. clears the gate in `finally`.
+5. enables SQLite `query_only` for the complete capture boundary;
+6. exports and verifies the pending bundle; and
+7. restores write access and clears the gate in `finally`.
 
-Automatic reconciliation/Ready dispatch, direct task scheduling/session start,
-and orchestration-turn claim return `continuity_export_active` while gated.
-Heartbeats, reads, task-run settlement, and stop/recovery actions remain
-available so an already-closing boundary cannot deadlock.
+All API mutations return `continuity_export_active` while gated. Claims return
+their normal empty response and heartbeats are acknowledged as deferred so
+existing daemons wait rather than treating the maintenance window as a
+failure. Reads remain available. SQLite `query_only` is the final guard
+against an internal or already-admitted asynchronous write racing the backup.
 
 Add:
 
@@ -99,7 +101,10 @@ counts, project count, and verification result.
 Verification enumerates the bundle without following links and requires exact
 agreement with the manifest. It opens the bundled database read-only, runs
 integrity/foreign-key checks, recomputes counts/audit digests, and invokes
-`git bundle verify` for every declared project.
+`git bundle verify` for every declared project. The active project IDs in
+SQLite must exactly match the unique project IDs with declared Git bundles.
+The pending bundle is verified before its atomic rename, so failed
+verification never occupies the requested destination.
 
 Restore writes to a pending sibling directory. It copies the declared state,
 clones each Git bundle into `repositories/<project-id>`, then updates a bounded
@@ -137,11 +142,16 @@ Add `tests/probes/probe-phase2-continuity.mjs` to cover PRODUCT invariants:
 - build a fixture state with a managed repository, retained task/session,
   prompt/model route, artifact, custody file, and audit history (1, 5, 8);
 - prove active execution/turn and dirty repository blockers (2, 3, 6);
+- attempt both an API project import and a direct SQLite write during export,
+  proving the full capture boundary rejects durable mutations;
 - plant a credential canary only in excluded directories and assert it is not
   present in the bundle (7, 9);
 - export and independently verify SQLite, files, audit digests, and Git
   history with zero provider calls (4, 10–11);
 - corrupt a copied file and prove verification fails (10);
+- rewrite a copied manifest with a mismatched project set and prove
+  verification fails, then inject a pre-publication verification failure and
+  prove the requested destination remains reusable;
 - restore into a new root, assert the source hashes are unchanged, paths never
   reference the source state, ephemeral authority is inactive, and no process
   starts (12–16, 18–20);

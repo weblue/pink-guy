@@ -84,6 +84,14 @@ assert.deepEqual(summary, {
   state_root_growth_bytes: 500,
   sample_error_count: 1,
 });
+assert.equal(
+  summarizeCalibration([
+    sample(1_000, 100, firstProcesses, 200, 10_000),
+    sample(800, 120, firstProcesses, 200, null, [{ source: "state_root", code: "failed" }]),
+  ], { stateRoot: true }).state_root_growth_bytes,
+  null,
+  "missing state-root samples must not be coerced into a fabricated growth measurement",
+);
 
 const serialized = JSON.stringify({ summary, samples: [] });
 for (const forbidden of ["argv", "command", "environment", "access_token", "api_key"]) {

@@ -91,6 +91,8 @@ export function summarizeCalibration(samples, { stateRoot = false } = {}) {
     );
   }
   const allContainers = samples.flatMap((sample) => sample.docker.containers);
+  const initialStateRootBytes = samples[0]?.state_root_bytes;
+  const finalStateRootBytes = samples.at(-1)?.state_root_bytes;
   return {
     sample_count: samples.length,
     minimum_free_memory_bytes: Math.min(...samples.map((sample) => sample.host.free_memory_bytes)),
@@ -105,7 +107,9 @@ export function summarizeCalibration(samples, { stateRoot = false } = {}) {
     peak_container_cpu_percent: maximum(allContainers.map((container) => container.cpu_percent)),
     peak_pink_container_count: maximum(samples.map((sample) => sample.docker.pink_container_ids.length)),
     state_root_growth_bytes: stateRoot
-      ? samples.at(-1).state_root_bytes - samples[0].state_root_bytes
+      && Number.isFinite(initialStateRootBytes)
+      && Number.isFinite(finalStateRootBytes)
+      ? finalStateRootBytes - initialStateRootBytes
       : null,
     sample_error_count: samples.reduce((count, sample) => count + sample.errors.length, 0),
   };

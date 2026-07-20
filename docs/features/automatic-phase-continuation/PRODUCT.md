@@ -1,6 +1,6 @@
 # Automatic phase continuation
 
-Status: Implemented; P2-4 found a long-turn supervision regression
+Status: Implemented; D-057 long-turn supervision remediation verified
 
 Last updated: 2026-07-19
 

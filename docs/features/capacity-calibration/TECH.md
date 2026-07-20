@@ -1,6 +1,6 @@
 # Host and provider capacity calibration
 
-Status: Approved for P2-4 implementation
+Status: Recorder implemented; initial serialized calibration complete
 
 Last updated: 2026-07-19
 
