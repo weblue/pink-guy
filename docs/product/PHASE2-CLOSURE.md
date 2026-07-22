@@ -88,7 +88,10 @@ merge commit `2feb884` without direct SQLite edits or a remote push. A browser
 smoke test then found the desktop-breakpoint navigation hidden; Pink Guy
 created and completed a separate focused task with deterministic responsive
 coverage, independent validation/review, and final local integration at
-`b75c464`.
+`b75c464`. The owner then enabled project push policy and published that final
+revision to `origin/main`. Because publication occurred through an owner-side
+Git push after the governed integration had completed, it proves credentials
+and remote reachability but does not close the Pink Guy push/PR-adapter drill.
 
 These are tracked as P2-4 lifecycle closure work because this run required a
 direct-client artifact repair. The Denver DSA task now supplies the live

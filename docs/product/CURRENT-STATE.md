@@ -139,7 +139,11 @@ and independent review, and integrated the approved revision into canonical
 `main` as `2feb884`. A browser smoke test then found a responsive-navigation
 gap; Pink Guy created a focused follow-up, added deterministic mobile/1028px
 coverage, repeated independent test/review, and integrated the repair as final
-local `main` revision `b75c464`. The run also exposed remaining lifecycle hardening work:
+local `main` revision `b75c464`. After the owner enabled push in project policy,
+that final canonical revision was published to `origin/main`. This confirms the
+credentialed remote path, but the publication used an owner-side Git push after
+integration and therefore does not replace the pending live acceptance drill
+for Pink Guy's own push/PR adapter. The run also exposed remaining lifecycle hardening work:
 current-run phase evidence, stale ownership/attention reconciliation,
 heartbeat independence, bounded Git diff results, and startup inventory that
 does not reject the state root solely because an inactive dependency tree
