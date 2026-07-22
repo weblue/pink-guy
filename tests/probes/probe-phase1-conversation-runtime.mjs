@@ -183,12 +183,16 @@ assert(
 assert(
   events.value.events.some((event) => event.type === "pi_run_started")
     && events.value.events.some((event) => event.type === "pi_text_delta")
+    && events.value.events.some((event) => event.type === "pi_tool_end")
     && events.value.events.some((event) => event.type === "pi_agent_settled"),
   "sanitized Pi RPC lifecycle was not projected into durable conversation events",
 );
 assert(
-  events.value.events.every((event) => !JSON.stringify(event.payload).includes("thinking content")),
-  "private reasoning content leaked into projected conversation events",
+  events.value.events.every((event) => {
+    const payload = JSON.stringify(event.payload);
+    return !payload.includes("thinking content") && !payload.includes("PRIVATE-TOOL-RESULT");
+  }),
+  "private reasoning or oversized tool output leaked into projected conversation events",
 );
 
 await runtime.close();
@@ -211,6 +215,7 @@ process.stdout.write(`${JSON.stringify({
   model_switch_restart: true,
   context_resend: false,
   sanitized_stream_events: true,
+  oversized_tool_results_projected_before_transport: true,
   browser_terminal_required: false,
   canonical_credential_unchanged: true,
   private_credential_removed: true,

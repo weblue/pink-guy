@@ -57,6 +57,13 @@ function consume(command) {
       message: { role: "assistant", content: [{ type: "text", text }] },
       assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: text },
     });
+    send({
+      type: "tool_execution_end",
+      toolCallId: `oversized-tool-${promptCount}`,
+      toolName: "read",
+      result: `PRIVATE-TOOL-RESULT-${"x".repeat(128 * 1024)}`,
+      isError: false,
+    });
     send({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text }] } });
     send({ type: "turn_end", message: { role: "assistant", content: [{ type: "text", text }] }, toolResults: [] });
     send({ type: "agent_end", messages: [], willRetry: false });

@@ -69,6 +69,12 @@ Repeat `--repo /absolute/path` for additional existing repositories. Open
 OAuth-backed task-agent runs; Pink Guy copies it into private per-run Pi state
 and does not let Pi mutate the canonical file.
 
+Task execution defaults to one run globally. After a controlled concurrency
+drill validates the provider credential and host envelope, opt into bounded
+parallel work with `--project-capacity 2 --global-capacity 2
+--credential-capacity 2`. All three limits must allow a run; keep the default
+for an untested OAuth login.
+
 The local profile binds only to `127.0.0.1`. Do not expose it through a public
 listener or reverse proxy.
 

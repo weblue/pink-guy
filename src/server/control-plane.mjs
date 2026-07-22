@@ -21,6 +21,7 @@ import {
   resolveModelRoute,
 } from "./model-routes.mjs";
 import { composeAgentSystemPrompt, phaseKickoffPrompt } from "./prompt-profiles.mjs";
+import { clippedText, projectPiConversationEvent } from "./pi-event-projection.mjs";
 import { PiProviderCatalog } from "./provider-catalog.mjs";
 import { PiRpcProcess, piSupervisionPolicy, WorkspaceShell } from "./rpc.mjs";
 import {
@@ -73,90 +74,8 @@ function bearerToken(request) {
   return value?.startsWith("Bearer ") ? value.slice("Bearer ".length) : null;
 }
 
-function clippedText(value, limit = 16_000) {
-  if (typeof value !== "string") return null;
-  return value.length <= limit ? value : `${value.slice(0, limit)}…`;
-}
-
-function sanitizePiConversationEvent(event) {
-  if (!event || typeof event !== "object" || typeof event.type !== "string") return null;
-  if (event.type === "message_update") {
-    const update = event.assistantMessageEvent;
-    if (update?.type === "text_delta") {
-      return { type: "text_delta", payload: { delta: clippedText(update.delta) ?? "" } };
-    }
-    if (update?.type === "thinking_start" || update?.type === "thinking_end") {
-      return { type: update.type, payload: {} };
-    }
-    if (update?.type === "toolcall_end") {
-      return {
-        type: "tool_call",
-        payload: {
-          toolCallId: update.toolCall?.id ?? null,
-          toolName: update.toolCall?.name ?? null,
-        },
-      };
-    }
-    return null;
-  }
-  if (event.type === "tool_execution_start") {
-    return {
-      type: "tool_start",
-      payload: { toolCallId: event.toolCallId ?? null, toolName: event.toolName ?? null },
-    };
-  }
-  if (event.type === "tool_execution_end") {
-    return {
-      type: "tool_end",
-      payload: {
-        toolCallId: event.toolCallId ?? null,
-        toolName: event.toolName ?? null,
-        isError: Boolean(event.isError),
-      },
-    };
-  }
-  if (event.type === "compaction_start") {
-    return { type: "compaction_start", payload: { reason: event.reason ?? null } };
-  }
-  if (event.type === "compaction_end") {
-    return {
-      type: "compaction_end",
-      payload: {
-        reason: event.reason ?? null,
-        aborted: Boolean(event.aborted),
-        willRetry: Boolean(event.willRetry),
-        tokensBefore: event.result?.tokensBefore ?? null,
-        estimatedTokensAfter: event.result?.estimatedTokensAfter ?? null,
-      },
-    };
-  }
-  if (event.type === "auto_retry_start" || event.type === "auto_retry_end") {
-    return {
-      type: event.type,
-      payload: {
-        attempt: event.attempt ?? null,
-        maxAttempts: event.maxAttempts ?? null,
-        success: event.success ?? null,
-      },
-    };
-  }
-  if (["agent_start", "agent_end", "agent_settled", "turn_start", "turn_end"].includes(event.type)) {
-    return { type: event.type, payload: {} };
-  }
-  if (event.type === "extension_error") {
-    return {
-      type: "extension_error",
-      payload: {
-        event: event.event ?? null,
-        error: clippedText(event.error, 2_000),
-      },
-    };
-  }
-  return null;
-}
-
 export function sanitizePiTaskEvent(event) {
-  const projected = sanitizePiConversationEvent(event);
+  const projected = projectPiConversationEvent(event);
   if (projected) return projected;
   if (event?.type === "response") {
     return {
@@ -2618,7 +2537,7 @@ export class DirectControlPlane {
       const conversationRuntimeEvent = url.pathname.match(/^\/api\/orchestration\/turns\/([^/]+)\/events$/);
       if (request.method === "POST" && conversationRuntimeEvent) {
         const body = await readBody(request);
-        const event = sanitizePiConversationEvent(body.event);
+        const event = projectPiConversationEvent(body.event);
         if (!event) {
           return json(response, 202, { retained: false, reason: "event_not_projected" });
         }

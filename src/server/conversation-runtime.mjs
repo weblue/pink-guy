@@ -3,6 +3,7 @@ import { chmod, copyFile, mkdir, rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 
 import { PiRpcProcess, piSupervisionPolicy } from "./rpc.mjs";
+import { projectPiConversationEvent } from "./pi-event-projection.mjs";
 import { composeAgentSystemPrompt } from "./prompt-profiles.mjs";
 
 async function responseJson(response) {
@@ -197,9 +198,11 @@ export class ConversationOrchestratorRuntime {
   }
 
   async projectEvent(turnId, runId, eventKey, event) {
+    const projected = projectPiConversationEvent(event);
+    if (!projected) return { retained: false, reason: "event_not_projected" };
     return this.request(`/api/orchestration/turns/${encodeURIComponent(turnId)}/events`, {
       method: "POST",
-      body: { runId, eventKey, event },
+      body: { runId, eventKey, event: projected },
     });
   }
 

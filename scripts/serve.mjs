@@ -17,6 +17,7 @@ function usage() {
   [--state /absolute/state-directory] [--port 4310]
   [--model-config /absolute/model-routes.json]
   [--provider openai-codex] [--model gpt-5.4-mini] [--thinking medium]
+  [--project-capacity 1] [--global-capacity 1] [--credential-capacity 1]
   [--credential-source /absolute/pi-auth.json]`);
   process.exit(64);
 }
@@ -36,6 +37,9 @@ let runtimeProvider;
 let runtimeModel;
 let runtimeThinking;
 let credentialSource;
+let projectCapacity = 1;
+let globalCapacity = 1;
+let credentialCapacity = 1;
 for (let index = 2; index < process.argv.length; index += 1) {
   const argument = process.argv[index];
   if (argument === "--repo") repositories.push(resolve(process.argv[++index] ?? usage()));
@@ -48,11 +52,17 @@ for (let index = 2; index < process.argv.length; index += 1) {
   else if (argument === "--provider") runtimeProvider = process.argv[++index] ?? usage();
   else if (argument === "--model") runtimeModel = process.argv[++index] ?? usage();
   else if (argument === "--thinking") runtimeThinking = process.argv[++index] ?? usage();
+  else if (argument === "--project-capacity") projectCapacity = Number(process.argv[++index] ?? usage());
+  else if (argument === "--global-capacity") globalCapacity = Number(process.argv[++index] ?? usage());
+  else if (argument === "--credential-capacity") credentialCapacity = Number(process.argv[++index] ?? usage());
   else if (argument === "--credential-source") credentialSource = resolve(process.argv[++index] ?? usage());
   else usage();
 }
 if (
   repositories.length === 0 || !Number.isInteger(port) || port < 1 || port > 65535
+  || !Number.isInteger(projectCapacity) || projectCapacity < 1
+  || !Number.isInteger(globalCapacity) || globalCapacity < 1
+  || !Number.isInteger(credentialCapacity) || credentialCapacity < 1
   || (runtimeThinking && !["off", "minimal", "low", "medium", "high", "xhigh"].includes(runtimeThinking))
 ) usage();
 if (!stateExplicit) {
@@ -99,6 +109,8 @@ const authority = new DirectControlPlane({
   runtimeProvider: modelRoutePolicy.default.provider,
   runtimeModel: modelRoutePolicy.default.model,
   runtimeThinking: modelRoutePolicy.default.thinking,
+  schedulerProjectCapacity: projectCapacity,
+  schedulerGlobalCapacity: globalCapacity,
   modelRoutePolicy,
   runtimeOffline: false,
   credentialProfile: credentialSource ? {
@@ -106,7 +118,7 @@ const authority = new DirectControlPlane({
     authType: "oauth_snapshot",
     billingMode: modelRoutePolicy.default.billingClass,
     sourcePath: credentialSource,
-    maxConcurrentRuns: 1,
+    maxConcurrentRuns: credentialCapacity,
   } : null,
 });
 for (const repositoryPath of repositories) {
@@ -136,6 +148,7 @@ Projects: ${repositories.length}
 Default model: ${configuredRoutes.default.provider}/${configuredRoutes.default.model} (${configuredRoutes.default.thinking})
 Model routes: ${modelConfig}
 Task credentials: ${credentialSource ?? "none (local/no-auth routes only)"}
+Task capacity: project=${projectCapacity}, global=${globalCapacity}, credential=${credentialCapacity}
 Exposure: localhost only (local smoke profile; no application authentication)
 Execution: register one project-orchestrator lease through the central API before starting a task session
 Stop: Ctrl-C
