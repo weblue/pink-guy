@@ -207,6 +207,14 @@ supervision, bounded final-settlement grace, timeout-checkpoint recovery, and
 owner-boundary custody regressions pass. A concurrent-provider benchmark is
 optional; reliable serialized execution is the Phase 2 requirement.
 
+The Denver DSA dogfood run also live-verified guarded recovery-revision
+adoption and automatic implementation-to-test-to-review continuation through
+governed local integration. It added explicit P2-4 lifecycle hardening work:
+current-run-only phase evidence, stale ownership and attention reconciliation,
+lease heartbeats independent of child waits, bounded/binary-safe Git diff
+results, and startup inventory tolerant of generated dependency symlinks in
+inactive workspaces without relaxing custody validation.
+
 Pink Guy already exposes storage totals and accepts explicit warning/hard
 limits through `PINK_GUY_STORAGE_WARN_BYTES` and
 `PINK_GUY_STORAGE_HARD_BYTES`. Resource concurrency defaults will not change

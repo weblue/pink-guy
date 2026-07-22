@@ -35,7 +35,7 @@ restored-task scheduling. The live rehearsal passed with 3 projects, 3,603
 files, preserved audit/count evidence, zero source-path findings, and one
 retained task queued on the isolated API with no provider or container start.
 
-The first substantial website dogfood run exposed three blocking lifecycle
+The first substantial website dogfood run exposed blocking lifecycle
 defects before Phase 2D can be credited:
 
 1. An implementation session reached Pi's context-length stop after writing
@@ -72,19 +72,24 @@ defects before Phase 2D can be credited:
    implementation without its required phase outcome. Governed Git inspection
    must summarize binary changes and cap projected diff output before it enters
    the Pi transcript.
+7. Generated `node_modules/.bin` symlinks left in inactive task workspaces
+   caused startup inventory to reject the entire state root. Inventory must
+   classify or skip known generated dependency trees without weakening its
+   rejection of unexpected symlinks in retained custody and artifact paths.
 
 The current recovery branch adds audited reset of a task after a reconciled
 cancelled execution and guarded owner adoption of a clean retained workspace
 revision. Adoption requires the same terminal task execution, a clean retained
 workspace, a candidate equal to that workspace's `HEAD`, and ancestry from the
-current authoritative task revision. These mitigations remain provisional
-until the Denver DSA run completes automatic test, review, and integration.
+current authoritative task revision. The Denver DSA regression verified this
+recovery path end to end: revision `d57a221` was adopted, resumed, independently
+validated, independently approved, and locally integrated through Pink Guy as
+merge commit `2feb884` without direct SQLite edits or a remote push.
 
 These are tracked as P2-4 lifecycle closure work because this run required a
-direct-client artifact repair. The Denver DSA task is the live regression: it
-must produce a new checkpoint, pass a clean build and automated validation,
-receive an independent approved review, and integrate through Pink Guy before
-Phase 2D entry is reconsidered.
+direct-client artifact repair. The Denver DSA task now supplies the live
+recovery/integration evidence; defects 1-4, 6, and 7 remain platform hardening
+work before Phase 2D entry is reconsidered.
 
 ## 1. Close P2-4 — measured operating policy
 

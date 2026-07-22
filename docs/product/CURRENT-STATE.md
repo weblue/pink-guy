@@ -132,6 +132,16 @@ rehearsal also passes: 3 projects, 3,603 files, preserved audit/count
 evidence, zero source-root path findings, and one retained task queued on the
 isolated API without a provider request or container.
 
+The first substantial website dogfood task is delivered locally. Pink Guy
+adopted the host-preserved Denver DSA revision through its guarded recovery
+contract, automatically continued implementation to clean independent test
+and independent review, and integrated the approved revision into canonical
+`main` as `2feb884`. The run also exposed remaining lifecycle hardening work:
+current-run phase evidence, stale ownership/attention reconciliation,
+heartbeat independence, bounded Git diff results, and startup inventory that
+does not reject the state root solely because an inactive dependency tree
+contains generated `node_modules/.bin` symlinks.
+
 ## Capability map
 
 | Area | Current capability | Remaining boundary |
@@ -224,7 +234,10 @@ The active delivery map is
 sequence is [`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md). Phase 1 dogfood evidence
 remains in [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
-1. **Close the website-dogfood lifecycle regression.** Require phase evidence
+1. **Harden the lifecycle defects exposed by website dogfood.** The retained
+   Denver DSA task completed guarded revision adoption, automatic test/review,
+   and governed local integration at `2feb884`; retain that as the live
+   regression baseline. Require phase evidence
    to be newer than the current execution baseline; treat context-length or
    compaction settlement without a checkpoint as resumable/incomplete rather
    than success; clear stale worker ownership safely; and reconcile
@@ -233,12 +246,10 @@ remains in [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
    host-preserved recovery revision without exposing raw Git metadata. Bound
    binary Git-diff output before it reaches Pi; the Denver run produced an
    18 MB tool result that exceeded the provider limit and erased an otherwise
-   passing implementation phase outcome. The current branch contains guarded
-   cancelled-execution reset and retained-workspace revision adoption, pending
-   live closure verification.
-   Complete the retained Denver DSA task through a new
-   fixed revision, clean validation, independent review, and governed local
-   integration without editing SQLite.
+   passing implementation phase outcome. Prevent generated dependency symlinks
+   in inactive workspaces from blocking startup inventory while preserving
+   strict custody checks. Guarded cancelled-execution reset and
+   retained-workspace revision adoption are implemented and live-verified.
 2. **Close the remaining P2-4 calibration.** Repeat the serialized two-project benchmark against
    D-057/D-058, exercise safe model switching and provider failure, perform one
    explicitly authorized normal push or pull-request publication, verify
