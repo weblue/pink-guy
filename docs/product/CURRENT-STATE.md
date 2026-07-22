@@ -228,7 +228,10 @@ remains in [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
    to be newer than the current execution baseline; treat context-length or
    compaction settlement without a checkpoint as resumable/incomplete rather
    than success; clear stale worker ownership safely; and reconcile
-   superseded attention. Complete the retained Denver DSA task through a new
+   superseded attention. Keep lease heartbeats alive during long child runs,
+   fail-stop or renew expired daemons, and add a governed way to adopt a
+   host-preserved recovery revision without exposing raw Git metadata.
+   Complete the retained Denver DSA task through a new
    fixed revision, clean validation, independent review, and governed local
    integration without editing SQLite.
 2. **Close the remaining P2-4 calibration.** Repeat the serialized two-project benchmark against

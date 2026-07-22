@@ -54,6 +54,18 @@ defects before Phase 2D can be credited:
    after its retry succeeded. Historical attempts remain auditable, but a
    successful replacement must reconcile or collapse the older attention item
    so the owner sees the current actionable state first.
+4. A project orchestrator awaiting a long task execution stopped renewing its
+   lease. The lease expired while the child run remained active, after which
+   the daemon emitted repeated authorization failures instead of renewing or
+   exiting for supervised restart. Heartbeats and conversation polling must
+   remain independent of a long command wait, and an expired lease must have a
+   bounded self-recovery or fail-stop path.
+5. A host-preserved recovery commit could not be consumed in the task
+   container because raw Git metadata is intentionally unavailable and the
+   governed Git surface has no apply/adopt-recovery operation. Add a
+   checksummed recovery artifact or host-owned revision-adoption path so
+   resumable work does not require copying an ad-hoc patch into a live
+   workspace or promoting an intermediate baseline manually.
 
 These are tracked as P2-4 lifecycle closure work because this run required a
 direct-client artifact repair. The Denver DSA task is the live regression: it
@@ -84,7 +96,8 @@ defaults before measurement.
 7. Perform the pending live Docker cleanup drill against a settled disposable
    task and verify its manifest, receipt, retry behavior, and retained audit.
 8. Fix current-run phase evidence fencing, context-length/dirty-workspace
-   settlement, stale worker assignment, and superseded execution attention;
+   settlement, stale worker assignment, superseded execution attention,
+   long-command lease starvation, and governed recovery-artifact handoff;
    close the Denver DSA regression through implementation, test, review, and
    governed local integration without direct SQLite repair.
 
