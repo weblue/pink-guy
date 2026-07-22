@@ -3378,6 +3378,9 @@ export class Phase0Store {
     }
     const conversation = this.getConversation(conversationId);
     if (!conversation) throw codedError("not_found", `unknown conversation: ${conversationId}`);
+    if (conversation.state === "archived") {
+      throw codedError("transition_denied", "cannot switch model for an archived conversation");
+    }
     if (conversation.version !== expectedVersion) {
       throw codedError(
         "version_conflict",
@@ -3413,7 +3416,9 @@ export class Phase0Store {
     this.database.exec("BEGIN IMMEDIATE");
     try {
       const changed = this.database.prepare(`UPDATE orchestrator_conversations SET
-        model_provider=?,model_id=?,thinking_level=?,version=?,updated_at=?
+        model_provider=?,model_id=?,thinking_level=?,
+        state=CASE WHEN state='failed' THEN 'idle' ELSE state END,
+        version=?,updated_at=?
         WHERE id=? AND version=?`).run(
         provider,
         model,
@@ -3448,6 +3453,7 @@ export class Phase0Store {
         priorRoute,
         newRoute,
         custodySnapshotId,
+        recoveredFromState: conversation.state === "failed" ? "failed" : null,
       }, now);
       this.database.exec("COMMIT");
     } catch (error) {
@@ -5992,10 +5998,27 @@ export class Phase0Store {
     };
   }
 
+  supersedingExecution(execution) {
+    if (!execution || !["paused", "failed", "reconciliation_required"].includes(execution.state)) {
+      return null;
+    }
+    return this.database.prepare(`SELECT * FROM command_executions
+      WHERE task_id=? AND phase=? AND state='succeeded'
+        AND (accepted_at>? OR (accepted_at=? AND id>?))
+      ORDER BY accepted_at DESC,id DESC LIMIT 1`).get(
+      execution.task_id,
+      execution.phase,
+      execution.accepted_at,
+      execution.accepted_at,
+      execution.id,
+    ) ?? null;
+  }
+
   recoveryAttention({ projectId = null } = {}) {
     const executions = this.commandExecutions({ projectId }).filter((execution) =>
       ["starting", "running", "stopping", "paused", "failed", "reconciliation_required"]
         .includes(execution.state)
+      && !this.supersedingExecution(execution)
     );
     return executions.map((execution) => {
       const task = this.getTaskDetails(execution.task_id);
@@ -7472,7 +7495,7 @@ export class Phase0Store {
     return { allowed: reasons.length === 0, reasons, reviewedRevision: latestReview?.disposition === "approve" ? latestReview.revision : null };
   }
 
-  taskPhaseOutcome(taskId, phase) {
+  taskPhaseOutcome(taskId, phase, { runId = null } = {}) {
     if (!RUN_PHASES.has(phase)) {
       throw codedError("invalid_request", `unsupported run phase: ${phase}`);
     }
@@ -7486,20 +7509,48 @@ export class Phase0Store {
       ) ?? null
       : null;
     const review = task.revision
-      ? this.database.prepare(`SELECT * FROM reviews
-        WHERE task_id=? AND revision=? ORDER BY created_at DESC,rowid DESC LIMIT 1`).get(
-        taskId,
-        task.revision,
-      ) ?? null
+      ? runId
+        ? this.database.prepare(`SELECT * FROM reviews
+          WHERE task_id=? AND revision=? AND run_id=?
+          ORDER BY created_at DESC,rowid DESC LIMIT 1`).get(
+          taskId,
+          task.revision,
+          runId,
+        ) ?? null
+        : this.database.prepare(`SELECT * FROM reviews
+          WHERE task_id=? AND revision=? ORDER BY created_at DESC,rowid DESC LIMIT 1`).get(
+          taskId,
+          task.revision,
+        ) ?? null
+      : null;
+    const implementationEvent = runId
+      ? this.database.prepare(`SELECT sequence FROM task_events
+        WHERE task_id=? AND kind='review_requested' AND run_id=?
+        ORDER BY sequence DESC LIMIT 1`).get(taskId, runId) ?? null
+      : null;
+    const validationEvent = runId
+      ? this.database.prepare(`SELECT sequence FROM audit_events
+        WHERE task_id=? AND type='validation_recorded' AND run_id=?
+        ORDER BY sequence DESC LIMIT 1`).get(taskId, runId) ?? null
       : null;
     const recorded = phase === "implementation"
-      ? Boolean(task.revision && task.requested_review_revision === task.revision)
-      : phase === "test" ? Boolean(validation) : Boolean(review);
+      ? Boolean(
+        task.revision
+        && task.requested_review_revision === task.revision
+        && (!runId || implementationEvent)
+      )
+      : phase === "test"
+        ? Boolean(validation && (!runId || validationEvent))
+        : Boolean(review);
     return {
       taskId,
       phase,
       revision: task.revision,
       recorded,
+      evidenceRunId: runId,
+      evidenceSequence: phase === "implementation"
+        ? implementationEvent?.sequence ?? null
+        : phase === "test" ? validationEvent?.sequence ?? null : null,
       requestedReviewRevision: task.requested_review_revision,
       validation: validation ? {
         id: validation.id,

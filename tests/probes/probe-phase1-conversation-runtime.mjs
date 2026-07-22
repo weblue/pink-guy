@@ -195,6 +195,26 @@ assert(
   "private reasoning or oversized tool output leaked into projected conversation events",
 );
 
+authority.store.database.prepare(
+  "UPDATE orchestrator_conversations SET state='failed' WHERE id=?",
+).run(conversationId);
+const failureRecoverySwitch = await request(`/api/conversations/${conversationId}/model`, {
+  method: "POST",
+  idempotencyKey: "runtime-provider-failure-switch",
+  body: {
+    modelProvider: "openai",
+    modelId: "gpt-recovered",
+    thinkingLevel: "medium",
+    expectedVersion: 2,
+  },
+});
+assert(
+  failureRecoverySwitch.status === 201
+    && failureRecoverySwitch.value.change.conversation.state === "idle"
+    && failureRecoverySwitch.value.change.conversation.model_id === "gpt-recovered",
+  "custody-backed model switch did not recover a provider-failed conversation",
+);
+
 await runtime.close();
 assert(
   sha256(await readFile(credentialSource)) === credentialBefore,
@@ -213,6 +233,7 @@ process.stdout.write(`${JSON.stringify({
   prompt_provenance_recorded: true,
   custody_snapshot: modelSwitch.value.custodySnapshot.snapshot_id,
   model_switch_restart: true,
+  provider_failure_switch_recovery: true,
   context_resend: false,
   sanitized_stream_events: true,
   oversized_tool_results_projected_before_transport: true,

@@ -28,6 +28,7 @@ for (const [taskId, title] of [
   ["untouched-ready", "Remain ready until explicitly selected"],
   ["failed-validation", "Stop after failed validation"],
   ["decision-gated", "Stop for a protected decision"],
+  ["historical-evidence", "Reject phase evidence from an earlier run"],
 ]) {
   authority.seed({
     projectId: "auto-project",
@@ -55,18 +56,19 @@ async function request(path, { method = "GET", body, token, idempotencyKey } = {
   return { status: response.status, value: await response.json() };
 }
 
-function capability(role, actorId, taskId, actions) {
+function capability(role, actorId, taskId, actions, runId = null) {
   return authority.store.issueCapability({
     role,
     actorId,
     taskId,
     actions,
+    runId,
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
   });
 }
 
-function act(taskId, role, actorId, action, payload, key) {
-  const issued = capability(role, actorId, taskId, [action]);
+function act(taskId, role, actorId, action, payload, key, runId = null) {
+  const issued = capability(role, actorId, taskId, [action], runId);
   try {
     const task = authority.store.getTask(taskId);
     return authority.store.actOnTask({
@@ -270,6 +272,37 @@ assert(
 const missingImplementationOutcome = authority.store.taskPhaseOutcome("untouched-ready", "implementation");
 assert(!missingImplementationOutcome.recorded, "missing implementation outcome was treated as settled");
 
+act(
+  "historical-evidence",
+  "worker",
+  "historical-worker",
+  "claim",
+  {},
+  "historical-claim",
+  "historical-run",
+);
+act(
+  "historical-evidence",
+  "worker",
+  "historical-worker",
+  "request_review",
+  { revision: authority.store.getTask("historical-evidence").revision },
+  "historical-review-request",
+  "historical-run",
+);
+assert(
+  authority.store.taskPhaseOutcome("historical-evidence", "implementation", {
+    runId: "historical-run",
+  }).recorded,
+  "same-run implementation evidence was not recognized",
+);
+assert(
+  !authority.store.taskPhaseOutcome("historical-evidence", "implementation", {
+    runId: "replacement-run",
+  }).recorded,
+  "historical implementation evidence satisfied a replacement run",
+);
+
 process.stdout.write(`${JSON.stringify({
   status: "pass",
   automatic_test: true,
@@ -279,6 +312,7 @@ process.stdout.write(`${JSON.stringify({
   protected_decision_stops: true,
   untouched_ready_not_started: true,
   missing_phase_outcome_detected: true,
+  current_run_phase_evidence_required: true,
   provider_requests: 0,
   isolated_root: root,
 }, null, 2)}\n`);

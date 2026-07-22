@@ -219,8 +219,8 @@ export default function bossManExtension(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "boss_git_diff",
     label: "Inspect Pink Guy workspace diff",
-    description: "Read the complete host-generated workspace diff for the current revision.",
-    promptSnippet: "Inspect the assigned workspace diff through the host Git service",
+    description: "Read a bounded host-generated workspace diff with file statistics and binary-file summaries. Large output is truncated before it enters the Pi transcript.",
+    promptSnippet: "Inspect the bounded assigned-workspace diff and its summary through the host Git service",
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, signal) {
       return result(await gitRead("diff", signal));

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -134,6 +134,10 @@ const root = await mkdtemp(join(tmpdir(), "pink-guy-phase2-git-retention-"));
 const stateRoot = join(root, "state");
 const repositoryOne = await createRepository(root, "merge-repository");
 const repositoryTwo = await createRepository(root, "squash-repository");
+const repositoryDiff = await createRepository(root, "diff-repository");
+await writeFile(join(repositoryDiff, "binary.dat"), Buffer.alloc(4_096, 0));
+await git(repositoryDiff, "add", "binary.dat");
+await git(repositoryDiff, "commit", "-m", "add binary fixture");
 const plane = new DirectControlPlane({
   databasePath: join(stateRoot, "pink-guy.sqlite"),
   stateRoot,
@@ -459,8 +463,72 @@ assert(
   "completed session deletion did not replay its original receipt",
 );
 
+const diffBase = await git(repositoryDiff, "rev-parse", "main");
+plane.seed({
+  projectId: "project-diff",
+  repositoryId: "repository-diff",
+  projectName: "bounded diff repository",
+  taskId: "task-bounded-diff",
+  repositoryPath: repositoryDiff,
+  revision: diffBase,
+  title: "Bound large and binary Git output",
+  acceptanceCriteria: ["Diff output remains below the transcript limit."],
+});
+plane.store.createSession({
+  id: "bounded-diff-session",
+  taskId: "task-bounded-diff",
+  nativePath: join(stateRoot, "bounded-diff.jsonl"),
+  provider: "probe",
+  model: "model-less",
+});
+plane.store.createRun({
+  id: "bounded-diff-run",
+  sessionId: "bounded-diff-session",
+  phase: "implementation",
+});
+const boundedWorkspace = await plane.gitService(repositoryDiff).createWorkspace({
+  taskId: "task-bounded-diff",
+  runId: "bounded-diff-run",
+});
+await writeFile(join(boundedWorkspace.workspace_path, "value.txt"), `${"x".repeat(700_000)}\n`);
+await writeFile(join(boundedWorkspace.workspace_path, "binary.dat"), Buffer.alloc(4_096, 255));
+const boundedDiff = await plane.gitService(repositoryDiff).diff(boundedWorkspace, {
+  maxBytes: 64 * 1024,
+});
+assert(
+  boundedDiff.truncated
+    && boundedDiff.diff.length <= 64 * 1024
+    && boundedDiff.totalBytes > boundedDiff.maxBytes,
+  "large Git diff was not bounded before projection",
+);
+assert(
+  boundedDiff.summary.binaryFiles.includes("binary.dat")
+    && !boundedDiff.diff.includes("GIT binary patch"),
+  "binary Git content was not summarized without transcript payload",
+);
+plane.store.finishRun("bounded-diff-run");
+
+const generatedBin = join(stateRoot, "workspaces", "inactive", "node_modules", ".bin");
+await mkdir(generatedBin, { recursive: true });
+await writeFile(join(stateRoot, "generated-target.txt"), "generated dependency target\n");
+await symlink(join(stateRoot, "generated-target.txt"), join(generatedBin, "fixture-tool"));
 const storage = await plane.storageInventory();
 assert(storage.hardBlocked, "configured hard storage limit did not activate");
+assert(
+  storage.skippedGeneratedSymlinkCount === 1
+    && storage.skippedGeneratedSymlinks[0].endsWith("node_modules/.bin/fixture-tool"),
+  "generated dependency symlink was not classified safely during inventory",
+);
+const unexpectedSymlink = join(stateRoot, "unexpected-link");
+await symlink(join(stateRoot, "generated-target.txt"), unexpectedSymlink);
+let unexpectedSymlinkDenied = false;
+try {
+  await plane.storageInventory();
+} catch (error) {
+  unexpectedSymlinkDenied = error.code === "unsafe_symlink";
+}
+await rm(unexpectedSymlink, { force: true });
+assert(unexpectedSymlinkDenied, "inventory accepted a symlink outside a generated dependency tree");
 plane.store.setRuntimeFlag("storage_pressure", {
   hardBlocked: false,
   warning: false,
@@ -530,9 +598,11 @@ process.stdout.write(`${JSON.stringify({
   retention_scope_validated: true,
   workspace_retired: true,
   cleanup_retry: true,
+  bounded_binary_git_diff: true,
   session_manifest_retained: true,
   session_deletion_replay: true,
   storage_pressure_blocks_dispatch: true,
+  generated_dependency_symlinks_classified: true,
   integration_restart_automatic_replay: false,
   provider_requests: 0,
   task_containers_started: 0,

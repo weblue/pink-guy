@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { access, chmod, mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -13,6 +13,60 @@ function runGit(repositoryPath, args) {
       resolvePromise({ code: error?.code ?? 0, stdout, stderr });
     });
   });
+}
+
+const DEFAULT_DIFF_MAX_BYTES = 256 * 1024;
+const DIFF_STAT_MAX_CHARS = 32 * 1024;
+const DIFF_BINARY_PATH_LIMIT = 100;
+
+function runGitBounded(repositoryPath, args, { maxStdoutBytes = DEFAULT_DIFF_MAX_BYTES } = {}) {
+  return new Promise((resolvePromise) => {
+    const child = spawn("git", ["-C", repositoryPath, ...args], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const stdout = [];
+    const stderr = [];
+    let stdoutBytes = 0;
+    let retainedBytes = 0;
+    let stderrBytes = 0;
+    let spawnError = null;
+    child.stdout.on("data", (chunk) => {
+      stdoutBytes += chunk.length;
+      if (retainedBytes >= maxStdoutBytes) return;
+      const retained = chunk.subarray(0, maxStdoutBytes - retainedBytes);
+      stdout.push(retained);
+      retainedBytes += retained.length;
+    });
+    child.stderr.on("data", (chunk) => {
+      if (stderrBytes >= 64 * 1024) return;
+      const retained = chunk.subarray(0, 64 * 1024 - stderrBytes);
+      stderr.push(retained);
+      stderrBytes += retained.length;
+    });
+    child.once("error", (error) => { spawnError = error; });
+    child.once("close", (code) => resolvePromise({
+      code: spawnError?.code ?? code ?? 1,
+      stdout: Buffer.concat(stdout).toString("utf8"),
+      stderr: Buffer.concat(stderr).toString("utf8"),
+      stdoutBytes,
+      truncated: stdoutBytes > retainedBytes,
+    }));
+  });
+}
+
+function diffSummary(statResult, numstatResult) {
+  const rows = numstatResult.stdout.split("\n").filter(Boolean);
+  const binaryFiles = rows.filter((line) => line.startsWith("-\t-\t"))
+    .map((line) => line.split("\t").slice(2).join("\t"));
+  const stat = statResult.stdout.trim();
+  return {
+    stat: stat.slice(0, DIFF_STAT_MAX_CHARS),
+    statTruncated: stat.length > DIFF_STAT_MAX_CHARS,
+    filesChanged: rows.length,
+    binaryFileCount: binaryFiles.length,
+    binaryFiles: binaryFiles.slice(0, DIFF_BINARY_PATH_LIMIT),
+    binaryFilesTruncated: binaryFiles.length > DIFF_BINARY_PATH_LIMIT,
+  };
 }
 
 function runFile(command, args, options = {}) {
@@ -112,25 +166,52 @@ export class HostGitService {
     return { workspaceId: workspace.id, branch: workspace.branch, output: result.stdout, dirty: result.stdout.split("\n").some((line) => line && !line.startsWith("##")) };
   }
 
-  async diff(workspace) {
+  async diff(workspace, { maxBytes = DEFAULT_DIFF_MAX_BYTES } = {}) {
     await this.assertWorkspace(workspace);
-    const result = await runGit(workspace.workspace_path, ["diff", "--no-ext-diff", "--binary", "HEAD", "--"]);
+    const [result, statResult, numstatResult] = await Promise.all([
+      runGitBounded(workspace.workspace_path, ["diff", "--no-ext-diff", "--no-color", "HEAD", "--"], {
+        maxStdoutBytes: maxBytes,
+      }),
+      runGit(workspace.workspace_path, ["diff", "--no-ext-diff", "--stat", "HEAD", "--"]),
+      runGit(workspace.workspace_path, ["diff", "--no-ext-diff", "--numstat", "HEAD", "--"]),
+    ]);
     if (result.code !== 0) throw gitError("git diff", result);
-    return { workspaceId: workspace.id, revision: await this.revision(workspace), diff: result.stdout };
+    if (statResult.code !== 0) throw gitError("git diff stat", statResult);
+    if (numstatResult.code !== 0) throw gitError("git diff numstat", numstatResult);
+    return {
+      workspaceId: workspace.id,
+      revision: await this.revision(workspace),
+      diff: result.stdout,
+      truncated: result.truncated,
+      totalBytes: result.stdoutBytes,
+      maxBytes,
+      summary: diffSummary(statResult, numstatResult),
+    };
   }
 
-  async comparisonDiff(workspace) {
+  async comparisonDiff(workspace, { maxBytes = DEFAULT_DIFF_MAX_BYTES } = {}) {
     await this.assertWorkspace(workspace);
     const currentRevision = await this.revision(workspace);
-    const result = await runGit(workspace.workspace_path, [
-      "diff", "--no-ext-diff", "--binary", workspace.base_revision, currentRevision, "--",
+    const range = [workspace.base_revision, currentRevision, "--"];
+    const [result, statResult, numstatResult] = await Promise.all([
+      runGitBounded(workspace.workspace_path, [
+        "diff", "--no-ext-diff", "--no-color", ...range,
+      ], { maxStdoutBytes: maxBytes }),
+      runGit(workspace.workspace_path, ["diff", "--no-ext-diff", "--stat", ...range]),
+      runGit(workspace.workspace_path, ["diff", "--no-ext-diff", "--numstat", ...range]),
     ]);
     if (result.code !== 0) throw gitError("compare workspace revision", result);
+    if (statResult.code !== 0) throw gitError("compare workspace stat", statResult);
+    if (numstatResult.code !== 0) throw gitError("compare workspace numstat", numstatResult);
     return {
       workspaceId: workspace.id,
       baseRevision: workspace.base_revision,
       revision: currentRevision,
       diff: result.stdout,
+      truncated: result.truncated,
+      totalBytes: result.stdoutBytes,
+      maxBytes,
+      summary: diffSummary(statResult, numstatResult),
     };
   }
 

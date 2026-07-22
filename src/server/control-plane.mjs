@@ -1524,15 +1524,24 @@ export class DirectControlPlane {
     });
     try {
       const execution = await this.prompt(started.session.id, this.phaseKickoff(phase));
-      const phaseOutcome = this.store.taskPhaseOutcome(taskId, phase);
+      const phaseOutcome = this.store.taskPhaseOutcome(taskId, phase, {
+        runId: started.run.id,
+      });
       if (!phaseOutcome.recorded) {
+        const managed = this.sessions.get(started.session.id);
+        const workspaceStatus = managed
+          ? await managed.git.status(managed.workspace).catch(() => null)
+          : null;
         throw Object.assign(new Error(
-          `${phase} phase settled without recording its required authoritative outcome`,
+          `${phase} phase settled without recording a same-run authoritative outcome`,
         ), {
           code: "phase_protocol_violation",
           phase,
           taskId,
           revision: phaseOutcome.revision,
+          runId: started.run.id,
+          dirtyWorkspace: Boolean(workspaceStatus?.dirty),
+          resumable: phase === "implementation" && Boolean(workspaceStatus?.dirty),
         });
       }
       let completion = null;
@@ -1581,7 +1590,7 @@ export class DirectControlPlane {
   classifyExecutionFailure(error) {
     if (error?.code === "owner_stop") return "owner_stop";
     if (error?.code === "side_effect_uncertain") return "side_effect_uncertain";
-    if (error?.code === "phase_protocol_violation") return "phase_protocol_violation";
+    if (error?.code === "phase_protocol_violation") return "phase_incomplete";
     if (error?.code === "provider_rejected") return "provider_rejected";
     if (error?.code === "protocol_error") return "protocol_error";
     if (error?.code === "rpc_inactive") return "rpc_inactive";
@@ -1629,6 +1638,15 @@ export class DirectControlPlane {
 
     execution = this.store.commandExecution(executionId);
     const triggerFailureClass = failure ? this.classifyExecutionFailure(failure) : null;
+    const triggerFailureEvidence = failure ? {
+      code: failure.code ?? null,
+      message: clippedText(failure.message, 2_000),
+      ...(failure.runId ? { runId: failure.runId } : {}),
+      ...(failure.dirtyWorkspace !== undefined
+        ? { dirtyWorkspace: Boolean(failure.dirtyWorkspace) }
+        : {}),
+      ...(failure.resumable !== undefined ? { resumable: Boolean(failure.resumable) } : {}),
+    } : null;
     const priorAction = this.store.database.prepare(`SELECT action,reason FROM execution_action_receipts
       WHERE execution_id=? ORDER BY created_at DESC,id DESC LIMIT 1`).get(executionId);
     if (execution && ["starting", "running"].includes(execution.state)) {
@@ -1637,10 +1655,7 @@ export class DirectControlPlane {
         expectedVersion: execution.version,
         reason: failure ? "execution_failure" : "phase_outcome_recorded",
         failureClass: triggerFailureClass,
-        failure: failure ? {
-          code: failure.code ?? null,
-          message: clippedText(failure.message, 2_000),
-        } : null,
+        failure: triggerFailureEvidence,
       });
     }
     execution = this.store.commandExecution(executionId);
@@ -1695,14 +1710,20 @@ export class DirectControlPlane {
         ? "side_effect_uncertain"
         : this.classifyExecutionFailure(failure)
       : null;
+    const settlementFailureEvidence = failure ? {
+      code: failure.code ?? null,
+      message: clippedText(failure.message, 2_000),
+      ...(failure.runId ? { runId: failure.runId } : {}),
+      ...(failure.dirtyWorkspace !== undefined
+        ? { dirtyWorkspace: Boolean(failure.dirtyWorkspace) }
+        : {}),
+      ...(failure.resumable !== undefined ? { resumable: Boolean(failure.resumable) } : {}),
+    } : null;
     const settled = this.store.settleExecution({
       executionId,
       state: desiredState,
       failureClass,
-      failure: failure ? {
-        code: failure.code ?? null,
-        message: clippedText(failure.message, 2_000),
-      } : null,
+      failure: settlementFailureEvidence,
       result: result ? {
         sessionId: result.session.id,
         runId: result.run.id,

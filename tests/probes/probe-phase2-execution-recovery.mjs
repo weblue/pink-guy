@@ -337,6 +337,36 @@ assert(
   "shared recovery attention projection omitted execution evidence",
 );
 
+const replacement = authority.store.queueExecutionReplacement({
+  executionId: acceptedExecution.id,
+  action: "retry",
+  expectedVersion: authority.store.commandExecution(acceptedExecution.id).version,
+  reason: "prove a successful replacement supersedes actionable attention",
+  idempotencyKey: "retry-superseded-attention",
+});
+const replacementCommand = authority.store.claimOrchestratorCommand(registration.token);
+assert(replacementCommand.id === replacement.command.id, "replacement command was not claimable");
+const replacementExecution = authority.store.acceptCommandExecution({
+  token: registration.token,
+  commandId: replacementCommand.id,
+  idempotencyKey: `execute-command:${replacementCommand.id}`,
+}).execution;
+authority.store.fenceExecution({
+  executionId: replacementExecution.id,
+  expectedVersion: replacementExecution.version,
+  reason: "replacement phase outcome recorded",
+});
+authority.store.settleExecution({
+  executionId: replacementExecution.id,
+  state: "succeeded",
+  result: { probe: "replacement succeeded" },
+});
+const reconciledAttention = await request("/api/recovery/attention");
+assert(
+  !reconciledAttention.value.attention.some((item) => item.execution.id === acceptedExecution.id),
+  "successful replacement left the superseded failure in actionable attention",
+);
+
 const cancelledTask = authority.store.createOwnerTask({
   projectId: "recovery-project",
   title: "Reset a reconciled cancelled execution",

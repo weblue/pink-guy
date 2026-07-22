@@ -308,6 +308,8 @@ const delivered = [
 ];
 const deliveryCounts = new Map();
 const acceptances = [];
+let projectHeartbeatCount = 0;
+let invalidateProjectLease = false;
 let resolveAcceptances;
 const acceptancesReady = new Promise((resolvePromise) => {
   resolveAcceptances = resolvePromise;
@@ -336,6 +338,8 @@ const fakeServer = createServer(async (incoming, response) => {
   }
   if (incoming.method === "POST" && url.pathname === "/api/orchestrators/heartbeat") {
     await readRequestBody(incoming);
+    projectHeartbeatCount += 1;
+    if (invalidateProjectLease) return sendJson(response, 403, { error: "lease_expired" });
     return sendJson(response, 200, { id: "fake-lease", status: "active" });
   }
   if (incoming.method === "DELETE" && url.pathname === "/api/orchestrators/lease") {
@@ -355,6 +359,9 @@ const fakeServer = createServer(async (incoming, response) => {
   const accept = url.pathname.match(/^\/api\/orchestrators\/commands\/([^/]+)\/executions$/);
   if (incoming.method === "POST" && accept) {
     await readRequestBody(incoming);
+    if (acceptances.length === 0) {
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 5_500));
+    }
     acceptances.push({
       id: accept[1],
       idempotencyKey: incoming.headers["idempotency-key"],
@@ -387,9 +394,19 @@ await Promise.race([
   acceptancesReady,
   new Promise((_, rejectPromise) => setTimeout(() => rejectPromise(new Error("project orchestrator did not accept fixture executions")), 10_000)),
 ]);
-child.kill("SIGINT");
+assert(projectHeartbeatCount >= 1, "command acceptance blocked the independent project heartbeat");
+invalidateProjectLease = true;
 await new Promise((resolvePromise, rejectPromise) => {
-  child.once("exit", (code) => code === 0 ? resolvePromise() : rejectPromise(new Error(`project orchestrator exited ${code}: ${childOutput}`)));
+  const timeout = setTimeout(() => {
+    child.kill("SIGKILL");
+    rejectPromise(new Error(`project orchestrator did not fail-stop after lease rejection: ${childOutput}`));
+  }, 8_000);
+  child.once("exit", (code) => {
+    clearTimeout(timeout);
+    code === 1
+      ? resolvePromise()
+      : rejectPromise(new Error(`project orchestrator exited ${code}: ${childOutput}`));
+  });
 });
 await new Promise((resolvePromise) => fakeServer.close(resolvePromise));
 assert(deliveryCounts.get("fake-success") === 1 && deliveryCounts.get("fake-failure") === 1, "consumer retried a terminal command");
@@ -416,6 +433,8 @@ const result = {
   assigned_worker_claim_confirmation: true,
   automatic_replay: false,
   consumer_acceptance_only: true,
+  independent_heartbeat_during_acceptance: true,
+  rejected_lease_fail_stop: true,
   terminal_failure_blocks_task: true,
   public_token_leak: false,
   isolated_root: root,
