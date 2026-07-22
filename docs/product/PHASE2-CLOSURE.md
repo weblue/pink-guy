@@ -84,7 +84,11 @@ workspace, a candidate equal to that workspace's `HEAD`, and ancestry from the
 current authoritative task revision. The Denver DSA regression verified this
 recovery path end to end: revision `d57a221` was adopted, resumed, independently
 validated, independently approved, and locally integrated through Pink Guy as
-merge commit `2feb884` without direct SQLite edits or a remote push.
+merge commit `2feb884` without direct SQLite edits or a remote push. A browser
+smoke test then found the desktop-breakpoint navigation hidden; Pink Guy
+created and completed a separate focused task with deterministic responsive
+coverage, independent validation/review, and final local integration at
+`b75c464`.
 
 These are tracked as P2-4 lifecycle closure work because this run required a
 direct-client artifact repair. The Denver DSA task now supplies the live

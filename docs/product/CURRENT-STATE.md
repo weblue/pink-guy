@@ -136,7 +136,10 @@ The first substantial website dogfood task is delivered locally. Pink Guy
 adopted the host-preserved Denver DSA revision through its guarded recovery
 contract, automatically continued implementation to clean independent test
 and independent review, and integrated the approved revision into canonical
-`main` as `2feb884`. The run also exposed remaining lifecycle hardening work:
+`main` as `2feb884`. A browser smoke test then found a responsive-navigation
+gap; Pink Guy created a focused follow-up, added deterministic mobile/1028px
+coverage, repeated independent test/review, and integrated the repair as final
+local `main` revision `b75c464`. The run also exposed remaining lifecycle hardening work:
 current-run phase evidence, stale ownership/attention reconciliation,
 heartbeat independence, bounded Git diff results, and startup inventory that
 does not reject the state root solely because an inactive dependency tree
@@ -236,7 +239,8 @@ remains in [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
 1. **Harden the lifecycle defects exposed by website dogfood.** The retained
    Denver DSA task completed guarded revision adoption, automatic test/review,
-   and governed local integration at `2feb884`; retain that as the live
+   and governed local integration at `2feb884`; its independently gated
+   responsive follow-up completed at `b75c464`. Retain these as the live
    regression baseline. Require phase evidence
    to be newer than the current execution baseline; treat context-length or
    compaction settlement without a checkpoint as resumable/incomplete rather
