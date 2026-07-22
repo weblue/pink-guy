@@ -1,8 +1,8 @@
 # Repository intake and dogfood controls
 
-Status: Implemented Phase 1 slice
+Status: Implemented; Phase 2 Git and retention follow-up complete
 
-Last updated: 2026-07-17
+Last updated: 2026-07-22
 
 ## Summary
 
@@ -35,4 +35,6 @@ retry or reset a failed or uncertain orchestrator command.
   source snapshots.
 - Owner dependency editing, a consolidated attention queue, and richer
   diff/test/review/context/artifact inspectors.
-- Full merge/rebase/push and worktree cleanup, which remain Phase 2.
+- Governed merge/rebase/push/PR and settled worktree cleanup are now
+  implemented. Broader provider/repository-host integrations remain
+  needs-driven work after sustained dogfood.

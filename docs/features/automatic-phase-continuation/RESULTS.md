@@ -57,6 +57,8 @@ The Denver experiment ultimately recovered revision `d57a221`, passed
 automatic independent test and review, integrated through Pink Guy, and
 completed a second responsive-navigation task through the same automatic
 sequence. That proves the happy-path scheduler and guarded recovery adoption.
-It does not close the false-success regression above: current-run evidence
-fencing, stale ownership/attention reconciliation, and long-wait lease
-independence remain P2-4L requirements.
+The later P2-4L iteration closes the false-success regression above with
+current-run evidence fencing, stale ownership/attention reconciliation, and
+heartbeat independence during long task-agent waits. The deterministic core
+suite and live Denver follow-up both pass; see
+[`../denver-dsa-dogfood/RESULTS.md`](../denver-dsa-dogfood/RESULTS.md).

@@ -63,38 +63,44 @@ task.
    tightly scoped navigation follow-up. Pink Guy should preserve explicit
    per-task routing without silent fallback.
 9. **Integration and publication are distinct owner-visible states.** Governed
-   local integration worked, but the final remote publication still used an
-   owner-side Git push. Pink Guy's push/PR adapter needs a live acceptance
-   drill and clearer UI language.
+   local integration worked, but this experiment's final remote publication
+   used an owner-side Git push. The later P2-4 fixture closed Pink Guy's live
+   push/PR-adapter drill; clearer UI language remains a Phase 2U concern.
 10. **The cockpit needs outcome hierarchy.** The owner primarily needs the
     active task, current revision, gate results, actionable attention, and
     integration/publication state. Historical attempts remain available but
     must not dominate the working view.
 
-## Next Pink Guy iteration: P2-4L lifecycle hardening
+## P2-4L lifecycle hardening result
 
-Implement and verify this bounded slice before Phase 2D:
+Completed on 2026-07-22:
 
-1. Fence implementation/test/review evidence to the current execution
-   baseline and add context-exhaustion/dirty-workspace regressions.
-2. Reconcile stale worker ownership and superseded attention after a proven
-   retry while preserving immutable history.
-3. Decouple project-orchestrator heartbeats from long child waits and add
-   bounded expired-lease recovery or fail-stop behavior.
-4. Bound `boss_git_diff`, summarize binary changes, and retain full detail as
-   an artifact or paged read rather than transcript payload.
-5. Make state inventory classify generated dependency trees without relaxing
-   custody-path symlink checks.
-6. Re-run the Denver lifecycle fixtures plus the serialized two-project
-   long-turn benchmark. No direct SQLite edit or manual artifact reconstruction
-   is permitted.
+1. Implementation/test/review evidence is fenced to the current run; missing
+   same-run evidence settles as `phase_incomplete` with dirty/resumable detail.
+2. A proven successful replacement collapses superseded execution attention
+   while immutable history remains available; replacement scheduling assigns
+   the current worker.
+3. Project heartbeats run independently of command acceptance, and rejected
+   or expired leases fail-stop for supervised restart.
+4. `boss_git_diff` projects a bounded text preview plus bounded stat and
+   binary-path summaries; it never emits a binary patch into the transcript.
+5. State inventory classifies generated dependency symlinks without relaxing
+   custody-path checks.
+6. The core suite, retained recovery/continuation fixtures, and a new live
+   Denver implementation → test → review publication fixture passed without a
+   SQLite edit or manual artifact reconstruction. The sustained 10+ minute
+   workload remains an early Phase 2D observation rather than another
+   synthetic release blocker.
 
-After P2-4L passes, finish provider/model-switch, cleanup, storage-limit, and
-Pink-owned publication drills; then enter the three-repository/ten-task Phase
-2D window. UX interview and redesign remain Phase 2U, informed by that window.
+The follow-on provider/model-switch, cleanup, storage-limit, and Pink-owned
+publication drills also pass. The project may now enter the
+three-repository/ten-task Phase 2D window. UX interview and redesign remain
+Phase 2U, informed by that window.
 
 ## Known non-blocking website maintenance
 
-The prototype still reports an npm audit finding, deprecated `glob`, Hugo
-`.Site.Data` deprecation, and outdated Browserslist data. These are ordinary
-repository maintenance, not unfinished Pink Guy experiment work.
+The prototype still reports an npm audit finding, deprecated `glob`, and
+outdated Browserslist data. These are ordinary repository maintenance, not
+unfinished Pink Guy experiment work. The `.Site.Data` deprecation was removed
+by the independently gated P2-4 publication fixture in
+[Denver DSA PR #1](https://github.com/weblue/denver-dsa-test/pull/1).

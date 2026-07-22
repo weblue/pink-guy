@@ -1,6 +1,6 @@
 # Phase 2 closure and adoption plan
 
-Status: Active — P2-5 complete; P2-4 live closure remains before Phase 2D
+Status: Phase 2 complete — Phase 2D sustained dogfood is the active gate
 
 Last updated: 2026-07-22
 
@@ -13,20 +13,22 @@ order, evidence, and stop conditions for closure, dogfood, and UX acceptance.
 
 ## Current gate
 
-[PR #17](https://github.com/weblue/pink-guy/pull/17) is merged. P2-4 began from
-merge revision `760b43d`. Its first increment adds Pi-backed model discovery,
-provider/model selectors, non-secret authentication state, and a host-TTY
-`/login` handoff. Capacity/resource measurement and the remaining live
-side-effect drills are next.
+Phase 2 closed on 2026-07-22. P2-4L, provider/model recovery, settled
+cleanup, storage pressure, Pink-owned push/PR publication, and P2-5 isolated
+restore all pass. Begin Phase 2D; do not treat implementation closure alone as
+the full-time replacement decision.
+
+[PR #17](https://github.com/weblue/pink-guy/pull/17) began P2-4 from merge
+revision `760b43d` with Pi-backed model discovery, provider/model selectors,
+non-secret authentication state, and a host-TTY `/login` handoff.
 
 The first P2-4 lifecycle and the three-orchestrator idle window pass on the
 target Mac. A serialized two-project maintenance window kept one container at
 a time and healthy host pressure, but exposed two Phase 2 reliability gates:
 the fixed ten-minute hard deadline fenced active work while it was finishing,
 and tool-loop lifecycle snapshots amplified 3 MiB of final native sessions
-into about 79 MiB. Provider-failure/model-switch drills, corrected
-state-growth measurement, cleanup, and publication remain. The owner approved
-D-057/D-058; their implementation and deterministic regressions pass.
+into about 79 MiB. Those findings produced D-057/D-058 and the now-complete
+closure drills below.
 
 P2-5 is complete behind a short live export gate. Its standalone,
 model-less probe proves checksummed export, credential exclusion, corruption
@@ -35,8 +37,8 @@ restored-task scheduling. The live rehearsal passed with 3 projects, 3,603
 files, preserved audit/count evidence, zero source-path findings, and one
 retained task queued on the isolated API with no provider or container start.
 
-The first substantial website dogfood experiment is complete and exposed
-blocking lifecycle defects before Phase 2D can be credited. Its concise
+The first substantial website dogfood experiment exposed the following
+now-closed lifecycle defects. Its concise
 outcome and lessons are retained in
 [`../features/denver-dsa-dogfood/RESULTS.md`](../features/denver-dsa-dogfood/RESULTS.md):
 
@@ -93,49 +95,61 @@ coverage, independent validation/review, and final local integration at
 `b75c464`. The owner then enabled project push policy and published that final
 revision to `origin/main`. Because publication occurred through an owner-side
 Git push after the governed integration had completed, it proves credentials
-and remote reachability but does not close the Pink Guy push/PR-adapter drill.
+and remote reachability. The later bounded maintenance fixture closed the
+Pink-owned adapter drill through Denver DSA PR #1.
 
 These are tracked as the bounded **P2-4L lifecycle-hardening iteration** because
 the completed experiment required a direct-client artifact repair. Denver DSA
 now supplies retained recovery/integration and responsive-browser fixtures;
-defects 1-4, 6, and 7 remain platform work before Phase 2D entry is
-reconsidered. Defect 5's guarded recovery-revision adoption is implemented and
-live-verified.
+all seven defects are implemented and verified. Defect 5's guarded
+recovery-revision adoption also remains live-verified.
 
-## 1. Close P2-4 — measured operating policy
+## 1. P2-4 — measured operating policy (complete)
 
-Use the target 64 GB M1 Max and normal Docker/Pi authentication. Do not widen
-defaults before measurement.
+Closure evidence:
 
-1. Retain the measured three-idle-orchestrator envelope and serialized
-   OAuth-backed task capacity of one.
-2. Repeat the two-project serialized run against the accepted D-057/D-058
-   supervision and custody cadence. A task must safely pass
-   ten minutes and retained growth must no longer copy full JSONL on each
-   internal tool-loop turn.
-3. Keep OAuth-backed phase work globally serialized unless a controlled
-   overlapping two-run authentication/refresh test passes without shared
-   writable credentials or lost refresh state.
-4. Exercise a safe-boundary model switch, provider exhaustion, and—when the
-   owner configures one—a Pi-compatible local-model route. No silent fallback.
-5. Select warning/hard storage limits from corrected observed growth; hard pressure must
-   pause dispatch and preserve retained evidence.
-6. Perform one owner-authorized normal remote Git publication using either SSH
-   Git or `gh`, while prepare-only remains the default for other projects.
-7. Perform the pending live Docker cleanup drill against a settled disposable
-   task and verify its manifest, receipt, retry behavior, and retained audit.
-8. Complete P2-4L: fix current-run phase evidence fencing,
-   context-length/dirty-workspace
-   settlement, stale worker assignment, superseded execution attention,
-   long-command lease starvation, bounded Git-diff projection, and generated
-   dependency-tree inventory. Re-run the retained Denver fixtures and
-   serialized long-turn benchmark without direct SQLite repair or manual
-   artifact reconstruction.
+- All 20 deterministic probes pass, including current-run phase evidence,
+  superseded-attention filtering, independent daemon heartbeat/fail-stop,
+  bounded binary-safe diffs, generated-tree inventory, provider-failure model
+  recovery, and cleanup/storage pressure.
+- Pi 0.80.9 exposed seven authenticated `openai-codex` models. A live
+  `gpt-5.6-sol` → `gpt-5.5` → `gpt-5.6-sol` conversation switch used verified
+  custody snapshots and resumed without transcript resend. An unavailable
+  provider failed explicitly; the healthy route recovered the conversation
+  without fallback.
+- The OAuth task lane stays globally serialized at one; three idle project
+  orchestrators remain the measured envelope.
+- Live settled cleanup retired two separate three-phase task lifecycles,
+  retained receipts, replayed an identical cleanup request, and left no Pink
+  Guy task container. Inventory reports generated dependency symlinks without
+  following them.
+- Corrected retained state is 3.16 GiB. The selected warning/hard profile is
+  10/15 GiB. A temporary below-current profile proved visible hard pressure;
+  no pressure path deletes evidence.
+- Pink Guy implemented, tested, independently reviewed, and published the
+  bounded Denver maintenance fixture through its own adapter as
+  [Denver DSA PR #1](https://github.com/weblue/denver-dsa-test/pull/1).
+  The branch push was normal/non-force and the PR is mergeable.
 
-Exit evidence is a dated calibration record containing the selected
-orchestrator/task concurrency, OAuth lane size, allowed provider responses,
-storage thresholds, publication method, and any policy left deliberately
-conservative.
+The prior serialized 24-minute two-project measurement and live workflows
+establish the target-host envelope. The first sustained 10+ minute task under
+the closed code becomes an early Phase 2D confirmation, not another synthetic
+pre-dogfood gate.
+
+Final operating policy on the target 64 GB M1 Max:
+
+1. Retain the measured three-idle-orchestrator envelope and globally
+   serialized OAuth-backed task capacity of one.
+2. Use D-057 activity-aware supervision and D-058 bounded custody cadence;
+   confirm the first sustained 10+ minute closed-code run during Phase 2D.
+3. Pause visibly on provider failure and require an explicit custody-backed
+   route change or retry. Never fall back silently.
+4. Warn at 10 GiB retained state and pause dispatch at 15 GiB; never delete
+   evidence automatically.
+5. Keep prepare-only as the project default. The first authorized publication
+   method is normal Git push plus `gh` PR creation.
+6. Retire settled containers/worktrees only through previewed, audited,
+   replayable cleanup.
 
 ## 2. P2-5 — bounded continuity (complete)
 
@@ -220,15 +234,11 @@ broker, team accounts, and high availability.
 
 ## Pending owner decisions
 
-D-057 and D-058 are approved and no longer block implementation.
-
-The remaining P2-4 choices are:
-
-- measured concurrency and OAuth lane size;
-- allowed pause/retry/manual-route behavior per provider class;
-- useful restrictions for any configured local-model outage lane;
-- storage warning/hard limits;
-- SSH Git versus `gh` for the first remote publication.
+D-057 and D-058 are approved and verified. P2-4 keeps the conservative OAuth
+lane at one, explicit pause/switch rather than silent fallback, 10/15 GiB
+storage pressure, and normal Git push plus `gh` for the first Pink-owned PR.
+A useful local-model outage route remains conditional on the owner configuring
+one in Pi; it is not a Phase 2 blocker.
 
 Phase 2U later requires owner approval of the mockup and its hard-to-change
 interaction hierarchy. Docker engine replacement, remote authentication mode,

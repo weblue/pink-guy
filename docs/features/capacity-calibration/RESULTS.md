@@ -1,8 +1,8 @@
 # Host and provider capacity calibration results
 
-Status: Multi-project serialized calibration complete; remediation gates remain
+Status: Multi-project calibration and P2-4 operating policy complete
 
-Last updated: 2026-07-19
+Last updated: 2026-07-22
 
 ## Environment
 
@@ -147,14 +147,23 @@ growth.
 - No evidence yet supports silent fallback, local-model routing, OAuth
   concurrency above one, or automatic remote publication.
 
-## Next gates
+## P2-4 closure result
 
-1. Make execution supervision progress-aware in practice, not just in the
-   recovery specification, and prove a task can safely run beyond ten minutes.
-2. Replace tool-loop full-session copying with a custody cadence approved by
-   the owner while preserving native final and mandatory boundary snapshots.
-3. Repeat the same two-project serialized window and classify retained growth.
-4. Complete safe-boundary model-switch/provider-failure, settled cleanup, and
-   one owner-authorized publication drill.
-5. Select conservative storage limits. Keep OAuth task capacity at one; a
-   concurrent-provider experiment is optional and does not block P2-5.
+1. D-057 progress-aware supervision and D-058 owner/mandatory-boundary custody
+   pass deterministic regression. The earlier 24-minute serialized window
+   remains the host envelope; a sustained 10+ minute closed-code task is an
+   early Phase 2D confirmation.
+2. Safe-boundary `gpt-5.6-sol`/`gpt-5.5` switching, explicit unavailable-route
+   failure, and healthy-route recovery pass without transcript resend or silent
+   fallback.
+3. Two settled three-phase task lifecycles clean up with durable, replayable
+   receipts; no Pink Guy task container remains.
+4. Corrected retained state is 3.16 GiB after cleanup. Warning/hard thresholds
+   are selected at 10/15 GiB and a below-current live profile proved the hard
+   dispatch-pressure signal without deletion.
+5. Pink Guy's governed adapter opened mergeable
+   [Denver DSA PR #1](https://github.com/weblue/denver-dsa-test/pull/1) after
+   automatic test and independent review.
+
+Keep OAuth task capacity at one. A concurrent-provider experiment and a local
+model route are optional Phase 2D research, not Phase 2 closure requirements.

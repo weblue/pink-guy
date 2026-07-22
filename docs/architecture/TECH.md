@@ -1,9 +1,8 @@
 # Pink Guy v2 technical design
 
-Status: Current direct-Pi architecture; P2-1 through P2-3 and P2-5 complete;
-P2-4 live closure remains
+Status: Current direct-Pi architecture; Phase 2 complete and Phase 2D active
 
-Last updated: 2026-07-20
+Last updated: 2026-07-22
 
 Current implementation boundaries are described in the component and security
 sections below. Delivery and remote-access sections are target design, not a

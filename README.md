@@ -7,12 +7,11 @@ artifacts, retention, and audit history. The browser and `pink` terminal client
 are views of that same durable state.
 
 Pink Guy is usable today for **supervised local development**. Phase 1 and the
-P2-1, P2-2, P2-3, and P2-5 slices are complete. P2-4 still needs lifecycle
-regression closure from the first substantial website dogfood run, plus live
-provider, publication, cleanup, storage-limit, and corrected long-turn
-calibration before sustained dogfood begins. Authenticated remote access is
-planned for Phase 3; the current server is loopback-only and has no application
-authentication.
+Phase 2 implementation/closure gates are complete. Current work is the Phase
+2D sustained-dogfood window: long turns and routine work across several real
+repositories must prove that a direct coding client is an emergency fallback,
+not a repair path. Authenticated remote access is planned for Phase 3; the
+current server is loopback-only and has no application authentication.
 
 See [current state](docs/product/CURRENT-STATE.md) for the exact capability and
 readiness boundary, or use the [documentation index](docs/README.md).
@@ -55,6 +54,8 @@ There are no npm dependencies to install.
 From the repository root:
 
 ```sh
+PINK_GUY_STORAGE_WARN_BYTES=10737418240 \
+PINK_GUY_STORAGE_HARD_BYTES=16106127360 \
 npm start -- \
   --repo "$PWD" \
   --state "$HOME/.local/share/pink-guy/dev" \
@@ -209,8 +210,10 @@ curl --fail http://127.0.0.1:4310/api/health
 ```
 
 The core and workflow suites are deterministic, model-less, and make no
-provider request. See [testing and probes](docs/operations/testing.md) for
-focused, container-backed, and opt-in live checks.
+provider request. The selected 10/15 GiB storage profile pauses dispatch at
+hard pressure and never deletes retained evidence. See
+[testing and probes](docs/operations/testing.md) for focused,
+container-backed, and opt-in live checks.
 
 ## Project status and documentation
 
