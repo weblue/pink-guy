@@ -337,6 +337,67 @@ assert(
   "shared recovery attention projection omitted execution evidence",
 );
 
+const cancelledTask = authority.store.createOwnerTask({
+  projectId: "recovery-project",
+  title: "Reset a reconciled cancelled execution",
+  acceptanceCriteria: ["A cancelled execution can return its task to Ready."],
+  revision: authoritativeRevision,
+  idempotencyKey: "cancelled-reset-task-create",
+}).task;
+const cancelledScheduled = authority.store.scheduleOwnerTaskRun({
+  taskId: cancelledTask.id,
+  phase: "implementation",
+  idempotencyKey: "cancelled-reset-schedule",
+  modelRoute: {
+    provider: "boss-man-phase0",
+    model: "complete",
+    thinking: "medium",
+    billingClass: "local",
+  },
+});
+const cancelledCommand = authority.store.claimOrchestratorCommand(registration.token);
+assert(
+  cancelledCommand.id === cancelledScheduled.command.id,
+  "cancelled-reset fixture command was not claimed",
+);
+const cancelledExecution = authority.store.acceptCommandExecution({
+  token: registration.token,
+  commandId: cancelledCommand.id,
+  idempotencyKey: `execute-command:${cancelledCommand.id}`,
+}).execution;
+authority.store.fenceExecution({
+  executionId: cancelledExecution.id,
+  expectedVersion: cancelledExecution.version,
+  reason: "provider transport failed after stream start",
+  failureClass: "side_effect_uncertain",
+});
+authority.store.settleExecution({
+  executionId: cancelledExecution.id,
+  state: "reconciliation_required",
+  failureClass: "side_effect_uncertain",
+  failure: { trigger: "provider_transport_failure" },
+});
+const uncertainExecution = authority.store.commandExecution(cancelledExecution.id);
+authority.store.recordExecutionAction({
+  executionId: uncertainExecution.id,
+  action: "cancel",
+  expectedVersion: uncertainExecution.version,
+  reason: "verified no repository mutation",
+  idempotencyKey: "cancel-uncertain-reset-execution",
+  result: { requestedState: "cancelled" },
+});
+const reconciledReset = authority.store.reconcileOrchestratorCommand({
+  commandId: cancelledCommand.id,
+  action: "reset",
+  idempotencyKey: "reset-cancelled-execution-command",
+});
+assert(
+  reconciledReset.task.status === "ready"
+    && reconciledReset.task.assigned_worker === null
+    && authority.store.commandExecution(cancelledExecution.id).state === "cancelled",
+  "a reconciled cancelled execution did not clear stale task ownership",
+);
+
 releaseLaunch();
 await authority.close();
 
@@ -421,6 +482,7 @@ process.stdout.write(`${JSON.stringify({
   candidate_accept_requires_fresh_gates: true,
   candidate_rejection_retains_evidence: true,
   timeout_checkpoint_recoverable: true,
+  cancelled_execution_task_reset: true,
   owner_action_receipt_atomic: true,
   restart_automatic_replay: false,
   attention_projection: true,

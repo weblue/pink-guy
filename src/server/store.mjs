@@ -5904,7 +5904,11 @@ export class Phase0Store {
     }
     const command = this.orchestratorCommand(commandId);
     if (!command) throw codedError("not_found", `unknown command: ${commandId}`);
-    if (this.commandExecutionForCommand(commandId)) {
+    const managedExecution = this.commandExecutionForCommand(commandId);
+    const resolvedExecutionReset = action === "reset"
+      && managedExecution?.state === "cancelled"
+      && command.state === "cancelled";
+    if (managedExecution && !resolvedExecutionReset) {
       throw codedError(
         "execution_managed",
         "execution-backed commands require explicit execution recovery actions",
@@ -5928,7 +5932,7 @@ export class Phase0Store {
         command: this.orchestratorCommand(commandId),
       };
     }
-    if (!["failed", "reconciliation_required"].includes(command.state)) {
+    if (!["failed", "reconciliation_required"].includes(command.state) && !resolvedExecutionReset) {
       throw codedError("transition_denied", "only failed or uncertain commands require reconciliation");
     }
     const task = command.task_id ? this.getTask(command.task_id) : null;
