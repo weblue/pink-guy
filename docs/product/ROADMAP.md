@@ -115,7 +115,8 @@ direct coding client remains the emergency fallback.
 
 ## Phase 2 — autonomy, recovery, and portability
 
-Status: Active — P2-1 through P2-3 and P2-5 complete; P2-4 live closure remains
+Status: Active — P2-1 through P2-3 and P2-5 complete; P2-4L lifecycle hardening
+and remaining live calibration precede Phase 2D
 
 Purpose: make unattended local operation dependable before adding a public edge.
 
@@ -134,6 +135,13 @@ push, and retains conflicts or interrupted publication for attention. Holds,
 safe cleanup, deletion manifests/tombstones, storage inventory, and
 storage-pressure dispatch blocking are available through the cockpit and
 `pink` client.
+
+The completed Denver DSA website experiment is retained as the first
+substantial real-project Phase 2 result. Its lessons define P2-4L: current-run
+phase evidence, stale ownership/attention reconciliation, independent lease
+heartbeats, bounded Git inspection, and generated-tree-safe state inventory.
+See
+[`../features/denver-dsa-dogfood/RESULTS.md`](../features/denver-dsa-dogfood/RESULTS.md).
 
 Scope:
 

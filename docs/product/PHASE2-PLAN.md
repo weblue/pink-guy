@@ -215,6 +215,12 @@ lease heartbeats independent of child waits, bounded/binary-safe Git diff
 results, and startup inventory tolerant of generated dependency symlinks in
 inactive workspaces without relaxing custody validation.
 
+The experiment is complete at published Denver revision `b75c464`; results and
+lessons are retained in
+[`../features/denver-dsa-dogfood/RESULTS.md`](../features/denver-dsa-dogfood/RESULTS.md).
+Its remaining platform findings form the bounded P2-4L lifecycle-hardening
+iteration. The website repository itself is no longer an open Phase 2 task.
+
 Pink Guy already exposes storage totals and accepts explicit warning/hard
 limits through `PINK_GUY_STORAGE_WARN_BYTES` and
 `PINK_GUY_STORAGE_HARD_BYTES`. Resource concurrency defaults will not change

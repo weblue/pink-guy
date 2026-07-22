@@ -35,8 +35,10 @@ restored-task scheduling. The live rehearsal passed with 3 projects, 3,603
 files, preserved audit/count evidence, zero source-path findings, and one
 retained task queued on the isolated API with no provider or container start.
 
-The first substantial website dogfood run exposed blocking lifecycle
-defects before Phase 2D can be credited:
+The first substantial website dogfood experiment is complete and exposed
+blocking lifecycle defects before Phase 2D can be credited. Its concise
+outcome and lessons are retained in
+[`../features/denver-dsa-dogfood/RESULTS.md`](../features/denver-dsa-dogfood/RESULTS.md):
 
 1. An implementation session reached Pi's context-length stop after writing
    uncommitted files and compacted without recording a new fixed revision or
@@ -93,10 +95,12 @@ revision to `origin/main`. Because publication occurred through an owner-side
 Git push after the governed integration had completed, it proves credentials
 and remote reachability but does not close the Pink Guy push/PR-adapter drill.
 
-These are tracked as P2-4 lifecycle closure work because this run required a
-direct-client artifact repair. The Denver DSA task now supplies the live
-recovery/integration evidence; defects 1-4, 6, and 7 remain platform hardening
-work before Phase 2D entry is reconsidered.
+These are tracked as the bounded **P2-4L lifecycle-hardening iteration** because
+the completed experiment required a direct-client artifact repair. Denver DSA
+now supplies retained recovery/integration and responsive-browser fixtures;
+defects 1-4, 6, and 7 remain platform work before Phase 2D entry is
+reconsidered. Defect 5's guarded recovery-revision adoption is implemented and
+live-verified.
 
 ## 1. Close P2-4 — measured operating policy
 
@@ -120,12 +124,13 @@ defaults before measurement.
    Git or `gh`, while prepare-only remains the default for other projects.
 7. Perform the pending live Docker cleanup drill against a settled disposable
    task and verify its manifest, receipt, retry behavior, and retained audit.
-8. Fix current-run phase evidence fencing, context-length/dirty-workspace
+8. Complete P2-4L: fix current-run phase evidence fencing,
+   context-length/dirty-workspace
    settlement, stale worker assignment, superseded execution attention,
-   long-command lease starvation, bounded Git-diff projection, and governed
-   recovery-artifact handoff;
-   close the Denver DSA regression through implementation, test, review, and
-   governed local integration without direct SQLite repair.
+   long-command lease starvation, bounded Git-diff projection, and generated
+   dependency-tree inventory. Re-run the retained Denver fixtures and
+   serialized long-turn benchmark without direct SQLite repair or manual
+   artifact reconstruction.
 
 Exit evidence is a dated calibration record containing the selected
 orchestrator/task concurrency, OAuth lane size, allowed provider responses,

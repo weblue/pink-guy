@@ -1,6 +1,6 @@
 # Automatic phase continuation results
 
-Status: Regression found in live dogfood; current-run evidence fencing pending
+Status: Website experiment complete; current-run evidence fencing pending
 
 Last updated: 2026-07-22
 
@@ -52,3 +52,11 @@ the retained Ready queue and correctly selected no implementation. The
 follow-up task-lifecycle feature now classifies and archives the intake
 placeholder, completed-work umbrella, and superseded review-only child while
 retaining their history.
+
+The Denver experiment ultimately recovered revision `d57a221`, passed
+automatic independent test and review, integrated through Pink Guy, and
+completed a second responsive-navigation task through the same automatic
+sequence. That proves the happy-path scheduler and guarded recovery adoption.
+It does not close the false-success regression above: current-run evidence
+fencing, stale ownership/attention reconciliation, and long-wait lease
+independence remain P2-4L requirements.

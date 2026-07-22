@@ -132,7 +132,7 @@ rehearsal also passes: 3 projects, 3,603 files, preserved audit/count
 evidence, zero source-root path findings, and one retained task queued on the
 isolated API without a provider request or container.
 
-The first substantial website dogfood task is delivered locally. Pink Guy
+The first substantial website dogfood experiment is complete. Pink Guy
 adopted the host-preserved Denver DSA revision through its guarded recovery
 contract, automatically continued implementation to clean independent test
 and independent review, and integrated the approved revision into canonical
@@ -148,6 +148,8 @@ current-run phase evidence, stale ownership/attention reconciliation,
 heartbeat independence, bounded Git diff results, and startup inventory that
 does not reject the state root solely because an inactive dependency tree
 contains generated `node_modules/.bin` symlinks.
+The consolidated outcome and lessons are in
+[`../features/denver-dsa-dogfood/RESULTS.md`](../features/denver-dsa-dogfood/RESULTS.md).
 
 ## Capability map
 
@@ -241,7 +243,8 @@ The active delivery map is
 sequence is [`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md). Phase 1 dogfood evidence
 remains in [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
-1. **Harden the lifecycle defects exposed by website dogfood.** The retained
+1. **Implement P2-4L lifecycle hardening.** The Denver experiment is complete;
+   its retained
    Denver DSA task completed guarded revision adoption, automatic test/review,
    and governed local integration at `2feb884`; its independently gated
    responsive follow-up completed at `b75c464`. Retain these as the live

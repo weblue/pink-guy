@@ -60,13 +60,16 @@ Phase 2:
 
 P2-1, P2-2, P2-3, and P2-5 are complete. P2-4 has implemented catalog and
 measurement tooling plus an initial serialized calibration. Its remaining
-gates include the website-dogfood lifecycle regression recorded in the closure
-plan, plus live provider, long-turn, publication, cleanup, and storage policy.
+gates include the P2-4L lifecycle defects exposed by the completed Denver DSA
+experiment, plus live provider, long-turn, publication, cleanup, and storage
+policy.
 
 ## Adoption records
 
 - [Phase 1 dogfood record](product/DOGFOOD-PLAN.md) — completed historical
   acceptance for supervised local use.
+- [Denver DSA website dogfood results](features/denver-dsa-dogfood/RESULTS.md)
+  — completed real-project experiment, lessons, and the P2-4L hardening scope.
 - [Phase 2 closure and adoption plan](product/PHASE2-CLOSURE.md) — current
   P2-4, Phase 2D, and Phase 2U sequence.
 - [UI friction schema](product/UI.md#phase-2d-friction-evidence) — evidence to
