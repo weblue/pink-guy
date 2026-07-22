@@ -66,6 +66,19 @@ defects before Phase 2D can be credited:
    checksummed recovery artifact or host-owned revision-adoption path so
    resumable work does not require copying an ad-hoc patch into a live
    workspace or promoting an intermediate baseline manually.
+6. `boss_git_diff` returned the full binary deletion diff for the recovered
+   website workspace. The resulting 18 MB tool result exceeded the provider's
+   10 MB per-field limit, forced compaction, and ended a clean, passing
+   implementation without its required phase outcome. Governed Git inspection
+   must summarize binary changes and cap projected diff output before it enters
+   the Pi transcript.
+
+The current recovery branch adds audited reset of a task after a reconciled
+cancelled execution and guarded owner adoption of a clean retained workspace
+revision. Adoption requires the same terminal task execution, a clean retained
+workspace, a candidate equal to that workspace's `HEAD`, and ancestry from the
+current authoritative task revision. These mitigations remain provisional
+until the Denver DSA run completes automatic test, review, and integration.
 
 These are tracked as P2-4 lifecycle closure work because this run required a
 direct-client artifact repair. The Denver DSA task is the live regression: it
@@ -97,7 +110,8 @@ defaults before measurement.
    task and verify its manifest, receipt, retry behavior, and retained audit.
 8. Fix current-run phase evidence fencing, context-length/dirty-workspace
    settlement, stale worker assignment, superseded execution attention,
-   long-command lease starvation, and governed recovery-artifact handoff;
+   long-command lease starvation, bounded Git-diff projection, and governed
+   recovery-artifact handoff;
    close the Denver DSA regression through implementation, test, review, and
    governed local integration without direct SQLite repair.
 

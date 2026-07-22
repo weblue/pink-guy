@@ -230,7 +230,12 @@ remains in [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
    than success; clear stale worker ownership safely; and reconcile
    superseded attention. Keep lease heartbeats alive during long child runs,
    fail-stop or renew expired daemons, and add a governed way to adopt a
-   host-preserved recovery revision without exposing raw Git metadata.
+   host-preserved recovery revision without exposing raw Git metadata. Bound
+   binary Git-diff output before it reaches Pi; the Denver run produced an
+   18 MB tool result that exceeded the provider limit and erased an otherwise
+   passing implementation phase outcome. The current branch contains guarded
+   cancelled-execution reset and retained-workspace revision adoption, pending
+   live closure verification.
    Complete the retained Denver DSA task through a new
    fixed revision, clean validation, independent review, and governed local
    integration without editing SQLite.

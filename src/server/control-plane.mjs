@@ -488,6 +488,95 @@ export class DirectControlPlane {
     return this.gitServices.get(path);
   }
 
+  async adoptTaskRecoveryRevision({
+    taskId,
+    executionId,
+    revision,
+    expectedVersion,
+    reason,
+    idempotencyKey,
+  }) {
+    if (!idempotencyKey?.trim()) {
+      throw Object.assign(new Error("recovery adoption idempotency key is required"), {
+        code: "invalid_request",
+      });
+    }
+    if (!reason?.trim()) {
+      throw Object.assign(new Error("recovery adoption reason is required"), {
+        code: "invalid_request",
+      });
+    }
+    const task = this.store.getTask(taskId);
+    if (!task) throw Object.assign(new Error(`unknown task: ${taskId}`), { code: "not_found" });
+    const execution = this.store.commandExecution(executionId);
+    if (!execution || execution.task_id !== taskId) {
+      throw Object.assign(new Error("recovery execution is outside the selected task"), {
+        code: "execution_scope_conflict",
+      });
+    }
+    const workspace = execution.run_id ? this.store.workspaceForRun(execution.run_id) : null;
+    if (!workspace || workspace.task_id !== taskId) {
+      throw Object.assign(new Error("recovery execution has no retained task workspace"), {
+        code: "workspace_tampered",
+      });
+    }
+    const project = this.store.getProject(task.project_id);
+    if (!project || resolve(workspace.repository_path) !== resolve(project.repository_path)) {
+      throw Object.assign(new Error("recovery workspace repository is outside project custody"), {
+        code: "workspace_tampered",
+      });
+    }
+    let workspaceRevision;
+    let repositoryRevisionValue;
+    let workspaceStatus;
+    try {
+      const [workspaceHead, repositoryHead, status] = await Promise.all([
+        execFileAsync("git", ["-C", workspace.workspace_path, "rev-parse", "HEAD^{commit}"], {
+          encoding: "utf8",
+        }),
+        execFileAsync("git", ["-C", project.repository_path, "rev-parse", `${revision}^{commit}`], {
+          encoding: "utf8",
+        }),
+        execFileAsync("git", ["-C", workspace.workspace_path, "status", "--porcelain=v1"], {
+          encoding: "utf8",
+        }),
+      ]);
+      workspaceRevision = workspaceHead.stdout.trim();
+      repositoryRevisionValue = repositoryHead.stdout.trim();
+      workspaceStatus = status.stdout.trim();
+      await execFileAsync(
+        "git",
+        ["-C", project.repository_path, "merge-base", "--is-ancestor", task.revision, revision],
+        { encoding: "utf8" },
+      );
+    } catch (error) {
+      throw Object.assign(
+        new Error(`recovery revision failed Git custody checks: ${error.stderr ?? error.message}`),
+        { code: "revision_conflict" },
+      );
+    }
+    if (workspaceStatus) {
+      throw Object.assign(new Error("recovery workspace must be clean before revision adoption"), {
+        code: "workspace_tampered",
+      });
+    }
+    if (workspaceRevision !== revision || repositoryRevisionValue !== revision) {
+      throw Object.assign(
+        new Error("recovery revision must equal the retained workspace HEAD and canonical Git object"),
+        { code: "revision_conflict" },
+      );
+    }
+    return this.store.adoptTaskRecoveryRevision({
+      taskId,
+      executionId,
+      workspaceId: workspace.id,
+      revision,
+      expectedVersion,
+      reason,
+      idempotencyKey,
+    });
+  }
+
   async ensureProjectGitPolicy(projectId) {
     const project = this.store.getProject(projectId);
     if (!project) {
@@ -3070,6 +3159,25 @@ export class DirectControlPlane {
           idempotencyKey: request.headers["idempotency-key"],
         });
         result.task = { ...result.task, activity: this.store.taskAudit(taskLifecycle[1]) };
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const taskRecoveryRevision = url.pathname.match(/^\/api\/tasks\/([^/]+)\/recovery-revision$/);
+      if (request.method === "POST" && taskRecoveryRevision) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = await this.adoptTaskRecoveryRevision({
+          taskId: taskRecoveryRevision[1],
+          executionId: body.executionId,
+          revision: body.revision,
+          expectedVersion: body.expectedVersion,
+          reason: body.reason,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        result.task = {
+          ...result.task,
+          activity: this.store.taskAudit(taskRecoveryRevision[1]),
+        };
         return json(response, result.replayed ? 200 : 201, result);
       }
 
