@@ -1,8 +1,8 @@
 # Automatic phase continuation results
 
-Status: Model-less implementation and historical live acceptance verified
+Status: Regression found in live dogfood; current-run evidence fencing pending
 
-Last updated: 2026-07-18
+Last updated: 2026-07-22
 
 Pink Guy now derives successful test and review transitions from canonical
 SQLite task evidence after the first implementation schedule. Reconciliation
@@ -19,6 +19,24 @@ Missing output follows the existing failed-command path and blocks the task.
 Failed validation, non-approved review, open decisions, unresolved
 dependencies, blocked tasks, and active work do not advance automatically.
 Untouched Ready tasks are not selected.
+
+## Live dogfood regression
+
+The Denver DSA website run showed that the implemented predicate is necessary
+but not sufficient. A later implementation attempt inherited a task whose
+prior revision already had a review request and failed validation. The new Pi
+session stopped at context length after making uncommitted edits and emitted
+no authoritative transition. `taskPhaseOutcome` nevertheless returned
+`recorded: true` from the historical review request, so the command was marked
+successful while the task remained assigned and no test/review continuation
+was possible.
+
+Closure requires a per-execution phase-evidence baseline (event sequence,
+revision, or equivalent) and proof that the required transition was produced
+by the current run. Context-length/compaction settlement with a dirty
+workspace and no new checkpoint must be represented as incomplete/resumable,
+not successful. The regression must also prove that a successful retry
+supersedes earlier execution attention without deleting its audit history.
 
 Verification:
 

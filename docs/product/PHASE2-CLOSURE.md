@@ -2,7 +2,7 @@
 
 Status: Active — P2-5 complete; P2-4 live closure remains before Phase 2D
 
-Last updated: 2026-07-19
+Last updated: 2026-07-22
 
 ## Purpose
 
@@ -35,6 +35,32 @@ restored-task scheduling. The live rehearsal passed with 3 projects, 3,603
 files, preserved audit/count evidence, zero source-path findings, and one
 retained task queued on the isolated API with no provider or container start.
 
+The first substantial website dogfood run exposed three blocking lifecycle
+defects before Phase 2D can be credited:
+
+1. An implementation session reached Pi's context-length stop after writing
+   uncommitted files and compacted without recording a new fixed revision or
+   review request. The command still settled as `succeeded` because phase
+   settlement accepted matching implementation evidence left by an earlier
+   run. Phase success must require authoritative evidence created by the
+   current run after its execution baseline, not merely evidence that already
+   exists for the task.
+2. The false success left the task `in_progress`, assigned to a historical
+   worker, with no automatic test/review continuation. A stopped or compacted
+   implementation with a dirty workspace must remain resumable and visible,
+   but cannot be reported as a completed phase. Recovery must either resume
+   custody to a checkpoint or fail with a specific protocol outcome.
+3. Execution attention continued to foreground a superseded failed attempt
+   after its retry succeeded. Historical attempts remain auditable, but a
+   successful replacement must reconcile or collapse the older attention item
+   so the owner sees the current actionable state first.
+
+These are tracked as P2-4 lifecycle closure work because this run required a
+direct-client artifact repair. The Denver DSA task is the live regression: it
+must produce a new checkpoint, pass a clean build and automated validation,
+receive an independent approved review, and integrate through Pink Guy before
+Phase 2D entry is reconsidered.
+
 ## 1. Close P2-4 — measured operating policy
 
 Use the target 64 GB M1 Max and normal Docker/Pi authentication. Do not widen
@@ -57,6 +83,10 @@ defaults before measurement.
    Git or `gh`, while prepare-only remains the default for other projects.
 7. Perform the pending live Docker cleanup drill against a settled disposable
    task and verify its manifest, receipt, retry behavior, and retained audit.
+8. Fix current-run phase evidence fencing, context-length/dirty-workspace
+   settlement, stale worker assignment, and superseded execution attention;
+   close the Denver DSA regression through implementation, test, review, and
+   governed local integration without direct SQLite repair.
 
 Exit evidence is a dated calibration record containing the selected
 orchestrator/task concurrency, OAuth lane size, allowed provider responses,

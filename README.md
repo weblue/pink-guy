@@ -7,7 +7,8 @@ artifacts, retention, and audit history. The browser and `pink` terminal client
 are views of that same durable state.
 
 Pink Guy is usable today for **supervised local development**. Phase 1 and the
-P2-1, P2-2, P2-3, and P2-5 slices are complete. P2-4 still needs live
+P2-1, P2-2, P2-3, and P2-5 slices are complete. P2-4 still needs lifecycle
+regression closure from the first substantial website dogfood run, plus live
 provider, publication, cleanup, storage-limit, and corrected long-turn
 calibration before sustained dogfood begins. Authenticated remote access is
 planned for Phase 3; the current server is loopback-only and has no application

@@ -59,9 +59,9 @@ Phase 2:
 - [Continuity export and isolated restore](features/continuity-export/PRODUCT.md)
 
 P2-1, P2-2, P2-3, and P2-5 are complete. P2-4 has implemented catalog and
-measurement tooling plus an initial serialized calibration; its remaining
-live provider, long-turn, publication, cleanup, and storage-policy gates are
-not complete.
+measurement tooling plus an initial serialized calibration. Its remaining
+gates include the website-dogfood lifecycle regression recorded in the closure
+plan, plus live provider, long-turn, publication, cleanup, and storage policy.
 
 ## Adoption records
 
