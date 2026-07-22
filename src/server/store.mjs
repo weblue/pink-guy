@@ -4685,7 +4685,8 @@ export class Phase0Store {
       throw codedError("orchestrator_denied", "execution task is outside the command project");
     }
     if (!task.revision) throw codedError("revision_required", "execution requires an authoritative base revision");
-    const route = parseJson(command.payload_json)?.modelRoute ?? {};
+    const commandPayload = parseJson(command.payload_json) ?? {};
+    const route = commandPayload.modelRoute ?? {};
     validateModelRoute(route, "accepted command model route");
     const now = this.clock();
     const executionId = randomUUID();
@@ -4696,6 +4697,59 @@ export class Phase0Store {
       if (Number(stillClaimed.changes) !== 1) {
         throw codedError("command_conflict", "command changed before execution acceptance");
       }
+      let acceptedTask = task;
+      if (commandPayload.source === "local_owner_resume" && task.status === "blocked") {
+        const resumedStatus = command.phase === "implementation" ? "in_progress" : "review";
+        const priorTask = this.getTaskDetails(task.id);
+        const nextVersion = task.version + 1;
+        const resumed = this.database.prepare(`UPDATE tasks SET
+          status=?,version=?,updated_at=? WHERE id=? AND version=? AND status='blocked'`).run(
+          resumedStatus,
+          nextVersion,
+          now,
+          task.id,
+          task.version,
+        );
+        if (Number(resumed.changes) !== 1) {
+          throw codedError("version_conflict", "task changed before resume execution acceptance");
+        }
+        acceptedTask = this.getTask(task.id);
+        const currentTask = this.getTaskDetails(task.id);
+        const resumePayload = { commandId, phase: command.phase, source: commandPayload.source };
+        this.database.prepare(`INSERT INTO task_events(
+          task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+          actor_role,run_id,task_version
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+          task.id,
+          "task_resumed",
+          "local-owner",
+          task.status,
+          resumedStatus,
+          JSON.stringify(resumePayload),
+          `task-resumed:${commandId}`,
+          now,
+          "owner",
+          null,
+          nextVersion,
+        );
+        this.database.prepare(`INSERT INTO audit_events(
+          task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+          idempotency_key,request_sha256,created_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+          task.id,
+          "task_resumed",
+          "local-owner",
+          "owner",
+          null,
+          null,
+          JSON.stringify(priorTask),
+          JSON.stringify(currentTask),
+          JSON.stringify(resumePayload),
+          `task-resumed:${commandId}`,
+          sha256(JSON.stringify(resumePayload)),
+          now,
+        );
+      }
       this.database.prepare(`INSERT INTO command_executions(
         id,command_id,project_id,task_id,phase,state,version,generation,
         base_revision,model_route_json,last_activity_at,accepted_at,created_at,updated_at
@@ -4705,7 +4759,7 @@ export class Phase0Store {
         command.project_id,
         command.task_id,
         command.phase,
-        task.revision,
+        acceptedTask.revision,
         JSON.stringify(route),
         now,
         now,
@@ -4715,8 +4769,8 @@ export class Phase0Store {
       this.appendExecutionEvent(executionId, "accepted", {
         commandId,
         orchestratorId: orchestrator.id,
-        taskVersion: task.version,
-        baseRevision: task.revision,
+        taskVersion: acceptedTask.version,
+        baseRevision: acceptedTask.revision,
         modelRoute: route,
       }, now);
       this.appendOrchestratorCommandEvent(commandId, "execution_accepted", orchestrator.id, {
@@ -7149,11 +7203,16 @@ export class Phase0Store {
       eventType: `task_${action}`,
     };
     if (action === "claim") {
-      if (!["ready", "backlog"].includes(task.status) || (task.assigned_worker && task.assigned_worker !== capability.actor_id)) {
+      const freshClaim = ["ready", "backlog"].includes(task.status)
+        && (!task.assigned_worker || task.assigned_worker === capability.actor_id);
+      const assignedConfirmation = task.status === "in_progress"
+        && task.assigned_worker === capability.actor_id;
+      if (!freshClaim && !assignedConfirmation) {
         throw codedError("transition_denied", "task cannot be claimed by this worker");
       }
       next.status = "in_progress";
       next.assignedWorker = capability.actor_id;
+      if (assignedConfirmation) next.eventType = "task_claim_confirmed";
     } else if (action === "release") {
       if (capability.actor_id !== task.assigned_worker) throw codedError("capability_denied", "only the assigned worker may release the task");
       next.status = "ready";

@@ -227,6 +227,55 @@ assert(
   "owner reset did not close the failed command and restore schedulable task state",
 );
 
+authority.store.database.prepare(`UPDATE tasks SET
+  status='blocked',assigned_worker='task-agent:implementation:resume-probe',version=version+1
+  WHERE id='task-a'`).run();
+const resumed = await request("/api/tasks/task-a/resume", {
+  method: "POST",
+  idempotencyKey: "phase1-owner-resume-blocked",
+  body: { phase: "implementation" },
+});
+assert(
+  resumed.status === 201 && resumed.value.command.payload.source === "local_owner_resume",
+  "owner resume did not queue the blocked task phase",
+);
+const claimedResume = await request("/api/orchestrators/commands/claim", {
+  method: "POST", body: {}, token: replacementRegistration.value.token,
+});
+const acceptedResume = await request(
+  `/api/orchestrators/commands/${claimedResume.value.command.id}/executions`,
+  {
+    method: "POST",
+    body: {},
+    token: replacementRegistration.value.token,
+    idempotencyKey: `execute-command:${claimedResume.value.command.id}`,
+  },
+);
+assert(
+  acceptedResume.status === 202
+    && authority.store.getTask("task-a").status === "in_progress"
+    && authority.store.taskAudit("task-a").some((event) => event.type === "task_resumed"),
+  "blocked task resume did not atomically restore its active phase state before runtime startup",
+);
+const resumeWorker = authority.store.issueCapability({
+  role: "worker",
+  actorId: "task-agent:implementation:resume-probe",
+  taskId: "task-a",
+  runId: "resume-probe-run",
+  expiresAt: "2099-01-01T00:00:00.000Z",
+});
+const confirmedResumeClaim = await request("/api/tasks/task-a/actions/claim", {
+  method: "POST",
+  token: resumeWorker.token,
+  idempotencyKey: "phase1-resumed-worker-claim",
+  body: { expectedVersion: authority.store.getTask("task-a").version, payload: {} },
+});
+assert(
+  confirmedResumeClaim.status === 201
+    && confirmedResumeClaim.value.event.type === "task_claim_confirmed",
+  "scheduler-assigned resumed worker could not confirm its authoritative claim",
+);
+
 let clock = "2026-07-17T12:00:00.000Z";
 const expiryStore = new Phase0Store(join(root, "expiry", "boss-man.sqlite"), { clock: () => clock });
 expiryStore.seedProjectTask({
@@ -363,6 +412,8 @@ const result = {
   lease_expiry_reconciliation: true,
   explicit_owner_retry: true,
   explicit_owner_reset: true,
+  blocked_task_resume_atomic: true,
+  assigned_worker_claim_confirmation: true,
   automatic_replay: false,
   consumer_acceptance_only: true,
   terminal_failure_blocks_task: true,
