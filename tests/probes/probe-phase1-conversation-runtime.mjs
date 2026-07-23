@@ -183,12 +183,36 @@ assert(
 assert(
   events.value.events.some((event) => event.type === "pi_run_started")
     && events.value.events.some((event) => event.type === "pi_text_delta")
+    && events.value.events.some((event) => event.type === "pi_tool_end")
     && events.value.events.some((event) => event.type === "pi_agent_settled"),
   "sanitized Pi RPC lifecycle was not projected into durable conversation events",
 );
 assert(
-  events.value.events.every((event) => !JSON.stringify(event.payload).includes("thinking content")),
-  "private reasoning content leaked into projected conversation events",
+  events.value.events.every((event) => {
+    const payload = JSON.stringify(event.payload);
+    return !payload.includes("thinking content") && !payload.includes("PRIVATE-TOOL-RESULT");
+  }),
+  "private reasoning or oversized tool output leaked into projected conversation events",
+);
+
+authority.store.database.prepare(
+  "UPDATE orchestrator_conversations SET state='failed' WHERE id=?",
+).run(conversationId);
+const failureRecoverySwitch = await request(`/api/conversations/${conversationId}/model`, {
+  method: "POST",
+  idempotencyKey: "runtime-provider-failure-switch",
+  body: {
+    modelProvider: "openai",
+    modelId: "gpt-recovered",
+    thinkingLevel: "medium",
+    expectedVersion: 2,
+  },
+});
+assert(
+  failureRecoverySwitch.status === 201
+    && failureRecoverySwitch.value.change.conversation.state === "idle"
+    && failureRecoverySwitch.value.change.conversation.model_id === "gpt-recovered",
+  "custody-backed model switch did not recover a provider-failed conversation",
 );
 
 await runtime.close();
@@ -209,8 +233,10 @@ process.stdout.write(`${JSON.stringify({
   prompt_provenance_recorded: true,
   custody_snapshot: modelSwitch.value.custodySnapshot.snapshot_id,
   model_switch_restart: true,
+  provider_failure_switch_recovery: true,
   context_resend: false,
   sanitized_stream_events: true,
+  oversized_tool_results_projected_before_transport: true,
   browser_terminal_required: false,
   canonical_credential_unchanged: true,
   private_credential_removed: true,

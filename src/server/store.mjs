@@ -1734,6 +1734,145 @@ export class Phase0Store {
     return { replayed: false, task: this.getTaskDetails(taskId) };
   }
 
+  adoptTaskRecoveryRevision({
+    taskId,
+    executionId,
+    workspaceId,
+    revision,
+    expectedVersion,
+    reason,
+    idempotencyKey,
+    actor = "local-owner",
+  }) {
+    if (!idempotencyKey) throw codedError("invalid_request", "idempotency key is required");
+    if (!reason?.trim()) throw codedError("invalid_request", "recovery adoption reason is required");
+    if (!/^[0-9a-f]{40}$/.test(revision ?? "")) {
+      throw codedError("invalid_request", "recovery revision must be a full Git commit SHA");
+    }
+    const requestSha256 = sha256(JSON.stringify({
+      action: "adopt_task_recovery_revision",
+      taskId,
+      executionId,
+      workspaceId,
+      revision,
+      expectedVersion,
+      reason: reason.trim(),
+      actor,
+    }));
+    const priorEvent = this.database.prepare(
+      "SELECT * FROM audit_events WHERE idempotency_key=?",
+    ).get(idempotencyKey);
+    if (priorEvent) {
+      if (priorEvent.request_sha256 !== requestSha256) {
+        throw codedError("idempotency_conflict", "idempotency key was reused for a different request");
+      }
+      const event = this.parseAuditEvent(priorEvent);
+      return { replayed: true, event, task: event.current };
+    }
+    const task = this.getTask(taskId);
+    if (!task) throw codedError("not_found", `unknown task: ${taskId}`);
+    if (task.version !== expectedVersion) {
+      throw codedError(
+        "version_conflict",
+        `task version conflict: expected ${expectedVersion}, current ${task.version}`,
+      );
+    }
+    if (task.status !== "blocked" || !task.assigned_worker) {
+      throw codedError(
+        "transition_denied",
+        "recovery revision adoption requires a blocked task with retained worker ownership",
+      );
+    }
+    if (task.revision === revision) {
+      throw codedError("revision_conflict", "recovery revision must advance the task revision");
+    }
+    const execution = this.commandExecution(executionId);
+    if (!execution || execution.task_id !== taskId || !["failed", "cancelled"].includes(execution.state)) {
+      throw codedError(
+        "transition_denied",
+        "recovery revision requires a terminal failed or cancelled execution for the same task",
+      );
+    }
+    const workspace = this.getWorkspace(workspaceId);
+    if (!workspace || workspace.task_id !== taskId || workspace.run_id !== execution.run_id) {
+      throw codedError(
+        "workspace_tampered",
+        "recovery workspace does not belong to the selected task execution",
+      );
+    }
+    const now = this.clock();
+    const prior = this.getTaskDetails(taskId);
+    const nextVersion = task.version + 1;
+    const payload = {
+      executionId,
+      workspaceId,
+      priorRevision: task.revision,
+      revision,
+      reason: reason.trim(),
+    };
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const changed = this.database.prepare(`UPDATE tasks SET
+        revision=?,validation_passed=0,requested_review_revision=NULL,merge_requested=0,
+        version=?,updated_at=? WHERE id=? AND version=? AND status='blocked'`).run(
+        revision,
+        nextVersion,
+        now,
+        taskId,
+        task.version,
+      );
+      if (Number(changed.changes) !== 1) {
+        throw codedError("version_conflict", "task changed during recovery revision adoption");
+      }
+      const current = this.getTaskDetails(taskId);
+      this.database.prepare(`INSERT INTO task_events(
+        task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+        actor_role,run_id,task_version
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+        taskId,
+        "task_recovery_revision_adopted",
+        actor,
+        task.status,
+        task.status,
+        JSON.stringify(payload),
+        idempotencyKey,
+        now,
+        "owner",
+        execution.run_id,
+        nextVersion,
+      );
+      const auditResult = this.database.prepare(`INSERT INTO audit_events(
+        task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+        idempotency_key,request_sha256,created_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        taskId,
+        "task_recovery_revision_adopted",
+        actor,
+        "owner",
+        null,
+        execution.run_id,
+        JSON.stringify(prior),
+        JSON.stringify(current),
+        JSON.stringify(payload),
+        idempotencyKey,
+        requestSha256,
+        now,
+      );
+      this.database.exec("COMMIT");
+      return {
+        replayed: false,
+        event: this.parseAuditEvent(
+          this.database.prepare("SELECT * FROM audit_events WHERE sequence=?")
+            .get(auditResult.lastInsertRowid),
+        ),
+        task: this.getTaskDetails(taskId),
+      };
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   setTaskDispatch({
     taskId,
     operation,
@@ -3239,6 +3378,9 @@ export class Phase0Store {
     }
     const conversation = this.getConversation(conversationId);
     if (!conversation) throw codedError("not_found", `unknown conversation: ${conversationId}`);
+    if (conversation.state === "archived") {
+      throw codedError("transition_denied", "cannot switch model for an archived conversation");
+    }
     if (conversation.version !== expectedVersion) {
       throw codedError(
         "version_conflict",
@@ -3274,7 +3416,9 @@ export class Phase0Store {
     this.database.exec("BEGIN IMMEDIATE");
     try {
       const changed = this.database.prepare(`UPDATE orchestrator_conversations SET
-        model_provider=?,model_id=?,thinking_level=?,version=?,updated_at=?
+        model_provider=?,model_id=?,thinking_level=?,
+        state=CASE WHEN state='failed' THEN 'idle' ELSE state END,
+        version=?,updated_at=?
         WHERE id=? AND version=?`).run(
         provider,
         model,
@@ -3309,6 +3453,7 @@ export class Phase0Store {
         priorRoute,
         newRoute,
         custodySnapshotId,
+        recoveredFromState: conversation.state === "failed" ? "failed" : null,
       }, now);
       this.database.exec("COMMIT");
     } catch (error) {
@@ -4685,7 +4830,8 @@ export class Phase0Store {
       throw codedError("orchestrator_denied", "execution task is outside the command project");
     }
     if (!task.revision) throw codedError("revision_required", "execution requires an authoritative base revision");
-    const route = parseJson(command.payload_json)?.modelRoute ?? {};
+    const commandPayload = parseJson(command.payload_json) ?? {};
+    const route = commandPayload.modelRoute ?? {};
     validateModelRoute(route, "accepted command model route");
     const now = this.clock();
     const executionId = randomUUID();
@@ -4696,6 +4842,59 @@ export class Phase0Store {
       if (Number(stillClaimed.changes) !== 1) {
         throw codedError("command_conflict", "command changed before execution acceptance");
       }
+      let acceptedTask = task;
+      if (commandPayload.source === "local_owner_resume" && task.status === "blocked") {
+        const resumedStatus = command.phase === "implementation" ? "in_progress" : "review";
+        const priorTask = this.getTaskDetails(task.id);
+        const nextVersion = task.version + 1;
+        const resumed = this.database.prepare(`UPDATE tasks SET
+          status=?,version=?,updated_at=? WHERE id=? AND version=? AND status='blocked'`).run(
+          resumedStatus,
+          nextVersion,
+          now,
+          task.id,
+          task.version,
+        );
+        if (Number(resumed.changes) !== 1) {
+          throw codedError("version_conflict", "task changed before resume execution acceptance");
+        }
+        acceptedTask = this.getTask(task.id);
+        const currentTask = this.getTaskDetails(task.id);
+        const resumePayload = { commandId, phase: command.phase, source: commandPayload.source };
+        this.database.prepare(`INSERT INTO task_events(
+          task_id,kind,actor,prior_status,new_status,payload_json,idempotency_key,created_at,
+          actor_role,run_id,task_version
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(
+          task.id,
+          "task_resumed",
+          "local-owner",
+          task.status,
+          resumedStatus,
+          JSON.stringify(resumePayload),
+          `task-resumed:${commandId}`,
+          now,
+          "owner",
+          null,
+          nextVersion,
+        );
+        this.database.prepare(`INSERT INTO audit_events(
+          task_id,type,actor_id,actor_role,capability_id,run_id,prior_json,new_json,payload_json,
+          idempotency_key,request_sha256,created_at
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+          task.id,
+          "task_resumed",
+          "local-owner",
+          "owner",
+          null,
+          null,
+          JSON.stringify(priorTask),
+          JSON.stringify(currentTask),
+          JSON.stringify(resumePayload),
+          `task-resumed:${commandId}`,
+          sha256(JSON.stringify(resumePayload)),
+          now,
+        );
+      }
       this.database.prepare(`INSERT INTO command_executions(
         id,command_id,project_id,task_id,phase,state,version,generation,
         base_revision,model_route_json,last_activity_at,accepted_at,created_at,updated_at
@@ -4705,7 +4904,7 @@ export class Phase0Store {
         command.project_id,
         command.task_id,
         command.phase,
-        task.revision,
+        acceptedTask.revision,
         JSON.stringify(route),
         now,
         now,
@@ -4715,8 +4914,8 @@ export class Phase0Store {
       this.appendExecutionEvent(executionId, "accepted", {
         commandId,
         orchestratorId: orchestrator.id,
-        taskVersion: task.version,
-        baseRevision: task.revision,
+        taskVersion: acceptedTask.version,
+        baseRevision: acceptedTask.revision,
         modelRoute: route,
       }, now);
       this.appendOrchestratorCommandEvent(commandId, "execution_accepted", orchestrator.id, {
@@ -5799,10 +5998,27 @@ export class Phase0Store {
     };
   }
 
+  supersedingExecution(execution) {
+    if (!execution || !["paused", "failed", "reconciliation_required"].includes(execution.state)) {
+      return null;
+    }
+    return this.database.prepare(`SELECT * FROM command_executions
+      WHERE task_id=? AND phase=? AND state='succeeded'
+        AND (accepted_at>? OR (accepted_at=? AND id>?))
+      ORDER BY accepted_at DESC,id DESC LIMIT 1`).get(
+      execution.task_id,
+      execution.phase,
+      execution.accepted_at,
+      execution.accepted_at,
+      execution.id,
+    ) ?? null;
+  }
+
   recoveryAttention({ projectId = null } = {}) {
     const executions = this.commandExecutions({ projectId }).filter((execution) =>
       ["starting", "running", "stopping", "paused", "failed", "reconciliation_required"]
         .includes(execution.state)
+      && !this.supersedingExecution(execution)
     );
     return executions.map((execution) => {
       const task = this.getTaskDetails(execution.task_id);
@@ -5850,7 +6066,11 @@ export class Phase0Store {
     }
     const command = this.orchestratorCommand(commandId);
     if (!command) throw codedError("not_found", `unknown command: ${commandId}`);
-    if (this.commandExecutionForCommand(commandId)) {
+    const managedExecution = this.commandExecutionForCommand(commandId);
+    const resolvedExecutionReset = action === "reset"
+      && managedExecution?.state === "cancelled"
+      && command.state === "cancelled";
+    if (managedExecution && !resolvedExecutionReset) {
       throw codedError(
         "execution_managed",
         "execution-backed commands require explicit execution recovery actions",
@@ -5874,7 +6094,7 @@ export class Phase0Store {
         command: this.orchestratorCommand(commandId),
       };
     }
-    if (!["failed", "reconciliation_required"].includes(command.state)) {
+    if (!["failed", "reconciliation_required"].includes(command.state) && !resolvedExecutionReset) {
       throw codedError("transition_denied", "only failed or uncertain commands require reconciliation");
     }
     const task = command.task_id ? this.getTask(command.task_id) : null;
@@ -7149,11 +7369,16 @@ export class Phase0Store {
       eventType: `task_${action}`,
     };
     if (action === "claim") {
-      if (!["ready", "backlog"].includes(task.status) || (task.assigned_worker && task.assigned_worker !== capability.actor_id)) {
+      const freshClaim = ["ready", "backlog"].includes(task.status)
+        && (!task.assigned_worker || task.assigned_worker === capability.actor_id);
+      const assignedConfirmation = task.status === "in_progress"
+        && task.assigned_worker === capability.actor_id;
+      if (!freshClaim && !assignedConfirmation) {
         throw codedError("transition_denied", "task cannot be claimed by this worker");
       }
       next.status = "in_progress";
       next.assignedWorker = capability.actor_id;
+      if (assignedConfirmation) next.eventType = "task_claim_confirmed";
     } else if (action === "release") {
       if (capability.actor_id !== task.assigned_worker) throw codedError("capability_denied", "only the assigned worker may release the task");
       next.status = "ready";
@@ -7270,7 +7495,7 @@ export class Phase0Store {
     return { allowed: reasons.length === 0, reasons, reviewedRevision: latestReview?.disposition === "approve" ? latestReview.revision : null };
   }
 
-  taskPhaseOutcome(taskId, phase) {
+  taskPhaseOutcome(taskId, phase, { runId = null } = {}) {
     if (!RUN_PHASES.has(phase)) {
       throw codedError("invalid_request", `unsupported run phase: ${phase}`);
     }
@@ -7284,20 +7509,48 @@ export class Phase0Store {
       ) ?? null
       : null;
     const review = task.revision
-      ? this.database.prepare(`SELECT * FROM reviews
-        WHERE task_id=? AND revision=? ORDER BY created_at DESC,rowid DESC LIMIT 1`).get(
-        taskId,
-        task.revision,
-      ) ?? null
+      ? runId
+        ? this.database.prepare(`SELECT * FROM reviews
+          WHERE task_id=? AND revision=? AND run_id=?
+          ORDER BY created_at DESC,rowid DESC LIMIT 1`).get(
+          taskId,
+          task.revision,
+          runId,
+        ) ?? null
+        : this.database.prepare(`SELECT * FROM reviews
+          WHERE task_id=? AND revision=? ORDER BY created_at DESC,rowid DESC LIMIT 1`).get(
+          taskId,
+          task.revision,
+        ) ?? null
+      : null;
+    const implementationEvent = runId
+      ? this.database.prepare(`SELECT sequence FROM task_events
+        WHERE task_id=? AND kind='review_requested' AND run_id=?
+        ORDER BY sequence DESC LIMIT 1`).get(taskId, runId) ?? null
+      : null;
+    const validationEvent = runId
+      ? this.database.prepare(`SELECT sequence FROM audit_events
+        WHERE task_id=? AND type='validation_recorded' AND run_id=?
+        ORDER BY sequence DESC LIMIT 1`).get(taskId, runId) ?? null
       : null;
     const recorded = phase === "implementation"
-      ? Boolean(task.revision && task.requested_review_revision === task.revision)
-      : phase === "test" ? Boolean(validation) : Boolean(review);
+      ? Boolean(
+        task.revision
+        && task.requested_review_revision === task.revision
+        && (!runId || implementationEvent)
+      )
+      : phase === "test"
+        ? Boolean(validation && (!runId || validationEvent))
+        : Boolean(review);
     return {
       taskId,
       phase,
       revision: task.revision,
       recorded,
+      evidenceRunId: runId,
+      evidenceSequence: phase === "implementation"
+        ? implementationEvent?.sequence ?? null
+        : phase === "test" ? validationEvent?.sequence ?? null : null,
       requestedReviewRevision: task.requested_review_revision,
       validation: validation ? {
         id: validation.id,

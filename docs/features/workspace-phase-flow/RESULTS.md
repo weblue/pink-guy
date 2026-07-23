@@ -40,5 +40,7 @@ The workflow passed through the normal cockpit/project daemons on the local
 `doc-map` prototype and imported `inspector-gadget` maintenance repository.
 The final automatic-release run also proved model-less initial dispatch,
 fixed-revision validation, independent review, and completion without SQLite
-edits or probe helpers. Actual merge/rebase/push and settled worktree cleanup
-remain Phase 2.
+edits or probe helpers. The later Phase 2 work added governed
+merge/rebase/push/PR plus settled worktree cleanup; see
+[`../governed-git-integration/RESULTS.md`](../governed-git-integration/RESULTS.md)
+and [`../runtime-retention/RESULTS.md`](../runtime-retention/RESULTS.md).

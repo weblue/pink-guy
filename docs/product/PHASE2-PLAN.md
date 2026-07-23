@@ -1,8 +1,8 @@
 # Phase 2 delivery plan
 
-Status: Active — P2-1 through P2-3 and P2-5 complete; P2-4 live closure remains
+Status: Complete — Phase 2D sustained dogfood follows
 
-Last updated: 2026-07-19
+Last updated: 2026-07-22
 
 ## Objective
 
@@ -35,16 +35,14 @@ is [`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md).
 | Slice | Objective | Depends on | Exit evidence |
 |---|---|---|---|
 | **P2-1 Execution custody and recovery — complete** | Remove split command/run authority; add fencing, paused/reconciliation states, fast failure classification, restart reconciliation, and late-evidence actions. | Phase 1 | Model-less fault matrix plus two live failure/recovery drills completed without duplicate work or SQLite edits. |
-| **P2-2 Governed Git integration — implemented** | Prepare and optionally execute merge/rebase/push/PR under project/branch policy, with conflict and reconciliation attention. | P2-1 settlement/fencing | Model-less merge/squash/rebase and conflict probes pass. Remote push/PR remains an owner-credential live drill in P2-4. |
-| **P2-3 Runtime lifecycle and retention operations — implemented** | Retire settled worktrees/containers safely, implement explicit session artifact deletion, quotas, storage-pressure visibility, and restore-friendly manifests. | P2-1; coordinates with P2-2 worktree custody | Holds, cleanup, deletion manifests, idempotent retry, and storage-pressure dispatch blocking pass model-less acceptance. |
-| **P2-4 Capacity, credentials, and provider resilience** | Measure host/provider limits, widen concurrency only where safe, exercise model switching and local routes, and classify provider exhaustion/failure. | P2-1; P2-3 quotas useful | Sustained mixed-project run stays within measured CPU/RAM/Docker/provider budgets; provider loss pauses or reroutes only under explicit policy. |
+| **P2-2 Governed Git integration — complete** | Prepare and optionally execute merge/rebase/push/PR under project/branch policy, with conflict and reconciliation attention. | P2-1 settlement/fencing | Model-less merge/squash/rebase/conflict probes and one credentialed Pink-owned PR pass. |
+| **P2-3 Runtime lifecycle and retention operations — complete** | Retire settled worktrees/containers safely, implement explicit session artifact deletion, quotas, storage-pressure visibility, and restore-friendly manifests. | P2-1; coordinates with P2-2 worktree custody | Holds, cleanup, deletion manifests, idempotent retry, live cleanup, and storage-pressure dispatch blocking pass. |
+| **P2-4 Capacity, credentials, and provider resilience — complete** | Measure host/provider limits, widen concurrency only where safe, exercise model switching and local routes, and classify provider exhaustion/failure. | P2-1; P2-3 quotas useful | Serialized host policy, custody-backed switch/recovery, no-fallback failure, 10/15 GiB storage pressure, and lifecycle hardening pass. |
 | **P2-5 Continuity export and restore — complete** | Export canonical state/custody/artifacts without a model and restore into an isolated state root. | P2-1 through P2-4 storage/config contracts | Same-host isolated restore recovers tasks, native sessions, prompts/routes, artifacts, Git custody, and audit checksums; one retained task resumes. |
 
-P2-1 through P2-3 now fix the authority, Git, and retention contracts needed
-for measurement. P2-4 is deliberately collaborative: the owner selects the
-acceptable host/provider envelope from observed data instead of receiving an
-invented concurrency limit. P2-5 is then a bounded continuity proof rather
-than a general-purpose backup product.
+P2-1 through P2-5 now fix the authority, Git, retention, operating-policy, and
+continuity contracts needed for sustained dogfood. Phase 2D measures routine
+use rather than expanding the Phase 2 implementation scope.
 
 ## P2-1 — execution custody and recovery
 
@@ -147,11 +145,11 @@ Implemented behavior:
   limits are visible, and a hard limit pauses new dispatch rather than
   deleting retained evidence.
 
-## P2-4 — capacity, credentials, and providers
+## P2-4 — capacity, credentials, and providers (complete)
 
-Start with measurement, not optimistic limits:
+The completed policy began with measurement rather than optimistic limits:
 
-The first increment is implemented on the active P2-4 branch:
+The first increment implemented:
 
 - discover the authenticated model catalog through `pi --list-models`;
 - expose non-secret provider/authentication metadata;
@@ -169,9 +167,9 @@ comfortably, and serialized work across two projects kept one container at a
 time. The same run rejects the fixed ten-minute hard deadline and exposes
 full-session copying on every internal Pi tool-loop turn. Accepted D-057 and
 D-058 now replace that fixed supervision bound and internal-turn copy cadence;
-their targeted and core regressions pass. The serialized live benchmark must
-still confirm the corrected long-turn and storage behavior before widening the
-OAuth/task lane or selecting storage limits.
+their targeted and core regressions pass. P2-4L and the live provider,
+cleanup, pressure, and publication drills now pass. Keep the OAuth/task lane
+at one; the selected retained-state warning/hard limits are 10/15 GiB.
 
 - record per-run peak RSS/CPU, container count, disk growth, duration, model
   route, provider wait/failure class, and OAuth/API-key/local-route class;
@@ -185,32 +183,43 @@ OAuth/task lane or selecting storage limits.
 - add LiteLLM/OpenRouter only if a concrete Pi compatibility, accounting, or
   policy gap remains after direct-route drills.
 
-### Owner calibration worksheet
+### Resolved calibration worksheet
 
-The next session should answer these questions from measurements on the target
-M1 Max:
+The measurements on the target M1 Max resolve the worksheet as follows:
 
-1. How many simultaneous project orchestrators, task containers, and
-   host-managed Pi processes preserve comfortable interactive headroom?
-2. Should OAuth-backed runs remain globally serialized, or does a controlled
-   two-run refresh/auth test prove a safe higher limit?
-3. Which provider/model routes may pause, retry, or switch after exhaustion?
-   Silent fallback remains prohibited.
-4. Which local Pi-compatible model route is worth keeping as an outage lane,
-   and what quality/task restrictions should apply?
-5. What observed disk-growth rate justifies warning and hard storage limits?
-6. Should normal remote publication use SSH Git, `gh`, or remain prepare-only
-   until the post-Phase-2 dogfood gate?
+1. Three idle project orchestrators and one active task container preserve the
+   measured host/Docker envelope.
+2. OAuth-backed task work remains globally serialized at one.
+3. Provider loss fails visibly; the owner switches/retries from custody. There
+   is no silent fallback.
+4. A local route remains optional until configured in Pi.
+5. Retained state is 3.16 GiB after cleanup; warning/hard limits are 10/15 GiB.
+6. The first Pink-owned remote publication used normal Git push plus `gh` for
+   Denver DSA PR #1; other projects remain prepare-only by default.
 
 The owner approved D-057 and D-058 on 2026-07-19. Their progress-aware
 supervision, bounded final-settlement grace, timeout-checkpoint recovery, and
 owner-boundary custody regressions pass. A concurrent-provider benchmark is
 optional; reliable serialized execution is the Phase 2 requirement.
 
+The Denver DSA dogfood run also live-verified guarded recovery-revision
+adoption and automatic implementation-to-test-to-review continuation through
+governed local integration. It added explicit P2-4 lifecycle hardening work:
+current-run-only phase evidence, stale ownership and attention reconciliation,
+lease heartbeats independent of child waits, bounded/binary-safe Git diff
+results, and startup inventory tolerant of generated dependency symlinks in
+inactive workspaces without relaxing custody validation.
+
+The experiment is complete at published Denver revision `b75c464`; results and
+lessons are retained in
+[`../features/denver-dsa-dogfood/RESULTS.md`](../features/denver-dsa-dogfood/RESULTS.md).
+Its platform findings formed the completed P2-4L lifecycle-hardening
+iteration. The website repository itself is no longer an open Phase 2 task.
+
 Pink Guy already exposes storage totals and accepts explicit warning/hard
 limits through `PINK_GUY_STORAGE_WARN_BYTES` and
-`PINK_GUY_STORAGE_HARD_BYTES`. Resource concurrency defaults will not change
-until this worksheet has live evidence.
+`PINK_GUY_STORAGE_HARD_BYTES`. Resource concurrency defaults remain
+conservative after the live evidence.
 
 ## P2-5 — continuity export and restore
 
@@ -303,7 +312,7 @@ baseline.
 
 ## Phase 2 exit gate
 
-Phase 2 is complete only when:
+Phase 2 closed after satisfying:
 
 1. A command/request disconnect cannot create a failed-command/live-run split
    or duplicate execution.

@@ -21,6 +21,7 @@ import {
   resolveModelRoute,
 } from "./model-routes.mjs";
 import { composeAgentSystemPrompt, phaseKickoffPrompt } from "./prompt-profiles.mjs";
+import { clippedText, projectPiConversationEvent } from "./pi-event-projection.mjs";
 import { PiProviderCatalog } from "./provider-catalog.mjs";
 import { PiRpcProcess, piSupervisionPolicy, WorkspaceShell } from "./rpc.mjs";
 import {
@@ -73,90 +74,8 @@ function bearerToken(request) {
   return value?.startsWith("Bearer ") ? value.slice("Bearer ".length) : null;
 }
 
-function clippedText(value, limit = 16_000) {
-  if (typeof value !== "string") return null;
-  return value.length <= limit ? value : `${value.slice(0, limit)}…`;
-}
-
-function sanitizePiConversationEvent(event) {
-  if (!event || typeof event !== "object" || typeof event.type !== "string") return null;
-  if (event.type === "message_update") {
-    const update = event.assistantMessageEvent;
-    if (update?.type === "text_delta") {
-      return { type: "text_delta", payload: { delta: clippedText(update.delta) ?? "" } };
-    }
-    if (update?.type === "thinking_start" || update?.type === "thinking_end") {
-      return { type: update.type, payload: {} };
-    }
-    if (update?.type === "toolcall_end") {
-      return {
-        type: "tool_call",
-        payload: {
-          toolCallId: update.toolCall?.id ?? null,
-          toolName: update.toolCall?.name ?? null,
-        },
-      };
-    }
-    return null;
-  }
-  if (event.type === "tool_execution_start") {
-    return {
-      type: "tool_start",
-      payload: { toolCallId: event.toolCallId ?? null, toolName: event.toolName ?? null },
-    };
-  }
-  if (event.type === "tool_execution_end") {
-    return {
-      type: "tool_end",
-      payload: {
-        toolCallId: event.toolCallId ?? null,
-        toolName: event.toolName ?? null,
-        isError: Boolean(event.isError),
-      },
-    };
-  }
-  if (event.type === "compaction_start") {
-    return { type: "compaction_start", payload: { reason: event.reason ?? null } };
-  }
-  if (event.type === "compaction_end") {
-    return {
-      type: "compaction_end",
-      payload: {
-        reason: event.reason ?? null,
-        aborted: Boolean(event.aborted),
-        willRetry: Boolean(event.willRetry),
-        tokensBefore: event.result?.tokensBefore ?? null,
-        estimatedTokensAfter: event.result?.estimatedTokensAfter ?? null,
-      },
-    };
-  }
-  if (event.type === "auto_retry_start" || event.type === "auto_retry_end") {
-    return {
-      type: event.type,
-      payload: {
-        attempt: event.attempt ?? null,
-        maxAttempts: event.maxAttempts ?? null,
-        success: event.success ?? null,
-      },
-    };
-  }
-  if (["agent_start", "agent_end", "agent_settled", "turn_start", "turn_end"].includes(event.type)) {
-    return { type: event.type, payload: {} };
-  }
-  if (event.type === "extension_error") {
-    return {
-      type: "extension_error",
-      payload: {
-        event: event.event ?? null,
-        error: clippedText(event.error, 2_000),
-      },
-    };
-  }
-  return null;
-}
-
 export function sanitizePiTaskEvent(event) {
-  const projected = sanitizePiConversationEvent(event);
+  const projected = projectPiConversationEvent(event);
   if (projected) return projected;
   if (event?.type === "response") {
     return {
@@ -567,6 +486,95 @@ export class DirectControlPlane {
       }));
     }
     return this.gitServices.get(path);
+  }
+
+  async adoptTaskRecoveryRevision({
+    taskId,
+    executionId,
+    revision,
+    expectedVersion,
+    reason,
+    idempotencyKey,
+  }) {
+    if (!idempotencyKey?.trim()) {
+      throw Object.assign(new Error("recovery adoption idempotency key is required"), {
+        code: "invalid_request",
+      });
+    }
+    if (!reason?.trim()) {
+      throw Object.assign(new Error("recovery adoption reason is required"), {
+        code: "invalid_request",
+      });
+    }
+    const task = this.store.getTask(taskId);
+    if (!task) throw Object.assign(new Error(`unknown task: ${taskId}`), { code: "not_found" });
+    const execution = this.store.commandExecution(executionId);
+    if (!execution || execution.task_id !== taskId) {
+      throw Object.assign(new Error("recovery execution is outside the selected task"), {
+        code: "execution_scope_conflict",
+      });
+    }
+    const workspace = execution.run_id ? this.store.workspaceForRun(execution.run_id) : null;
+    if (!workspace || workspace.task_id !== taskId) {
+      throw Object.assign(new Error("recovery execution has no retained task workspace"), {
+        code: "workspace_tampered",
+      });
+    }
+    const project = this.store.getProject(task.project_id);
+    if (!project || resolve(workspace.repository_path) !== resolve(project.repository_path)) {
+      throw Object.assign(new Error("recovery workspace repository is outside project custody"), {
+        code: "workspace_tampered",
+      });
+    }
+    let workspaceRevision;
+    let repositoryRevisionValue;
+    let workspaceStatus;
+    try {
+      const [workspaceHead, repositoryHead, status] = await Promise.all([
+        execFileAsync("git", ["-C", workspace.workspace_path, "rev-parse", "HEAD^{commit}"], {
+          encoding: "utf8",
+        }),
+        execFileAsync("git", ["-C", project.repository_path, "rev-parse", `${revision}^{commit}`], {
+          encoding: "utf8",
+        }),
+        execFileAsync("git", ["-C", workspace.workspace_path, "status", "--porcelain=v1"], {
+          encoding: "utf8",
+        }),
+      ]);
+      workspaceRevision = workspaceHead.stdout.trim();
+      repositoryRevisionValue = repositoryHead.stdout.trim();
+      workspaceStatus = status.stdout.trim();
+      await execFileAsync(
+        "git",
+        ["-C", project.repository_path, "merge-base", "--is-ancestor", task.revision, revision],
+        { encoding: "utf8" },
+      );
+    } catch (error) {
+      throw Object.assign(
+        new Error(`recovery revision failed Git custody checks: ${error.stderr ?? error.message}`),
+        { code: "revision_conflict" },
+      );
+    }
+    if (workspaceStatus) {
+      throw Object.assign(new Error("recovery workspace must be clean before revision adoption"), {
+        code: "workspace_tampered",
+      });
+    }
+    if (workspaceRevision !== revision || repositoryRevisionValue !== revision) {
+      throw Object.assign(
+        new Error("recovery revision must equal the retained workspace HEAD and canonical Git object"),
+        { code: "revision_conflict" },
+      );
+    }
+    return this.store.adoptTaskRecoveryRevision({
+      taskId,
+      executionId,
+      workspaceId: workspace.id,
+      revision,
+      expectedVersion,
+      reason,
+      idempotencyKey,
+    });
   }
 
   async ensureProjectGitPolicy(projectId) {
@@ -1516,15 +1524,24 @@ export class DirectControlPlane {
     });
     try {
       const execution = await this.prompt(started.session.id, this.phaseKickoff(phase));
-      const phaseOutcome = this.store.taskPhaseOutcome(taskId, phase);
+      const phaseOutcome = this.store.taskPhaseOutcome(taskId, phase, {
+        runId: started.run.id,
+      });
       if (!phaseOutcome.recorded) {
+        const managed = this.sessions.get(started.session.id);
+        const workspaceStatus = managed
+          ? await managed.git.status(managed.workspace).catch(() => null)
+          : null;
         throw Object.assign(new Error(
-          `${phase} phase settled without recording its required authoritative outcome`,
+          `${phase} phase settled without recording a same-run authoritative outcome`,
         ), {
           code: "phase_protocol_violation",
           phase,
           taskId,
           revision: phaseOutcome.revision,
+          runId: started.run.id,
+          dirtyWorkspace: Boolean(workspaceStatus?.dirty),
+          resumable: phase === "implementation" && Boolean(workspaceStatus?.dirty),
         });
       }
       let completion = null;
@@ -1573,7 +1590,7 @@ export class DirectControlPlane {
   classifyExecutionFailure(error) {
     if (error?.code === "owner_stop") return "owner_stop";
     if (error?.code === "side_effect_uncertain") return "side_effect_uncertain";
-    if (error?.code === "phase_protocol_violation") return "phase_protocol_violation";
+    if (error?.code === "phase_protocol_violation") return "phase_incomplete";
     if (error?.code === "provider_rejected") return "provider_rejected";
     if (error?.code === "protocol_error") return "protocol_error";
     if (error?.code === "rpc_inactive") return "rpc_inactive";
@@ -1621,6 +1638,15 @@ export class DirectControlPlane {
 
     execution = this.store.commandExecution(executionId);
     const triggerFailureClass = failure ? this.classifyExecutionFailure(failure) : null;
+    const triggerFailureEvidence = failure ? {
+      code: failure.code ?? null,
+      message: clippedText(failure.message, 2_000),
+      ...(failure.runId ? { runId: failure.runId } : {}),
+      ...(failure.dirtyWorkspace !== undefined
+        ? { dirtyWorkspace: Boolean(failure.dirtyWorkspace) }
+        : {}),
+      ...(failure.resumable !== undefined ? { resumable: Boolean(failure.resumable) } : {}),
+    } : null;
     const priorAction = this.store.database.prepare(`SELECT action,reason FROM execution_action_receipts
       WHERE execution_id=? ORDER BY created_at DESC,id DESC LIMIT 1`).get(executionId);
     if (execution && ["starting", "running"].includes(execution.state)) {
@@ -1629,10 +1655,7 @@ export class DirectControlPlane {
         expectedVersion: execution.version,
         reason: failure ? "execution_failure" : "phase_outcome_recorded",
         failureClass: triggerFailureClass,
-        failure: failure ? {
-          code: failure.code ?? null,
-          message: clippedText(failure.message, 2_000),
-        } : null,
+        failure: triggerFailureEvidence,
       });
     }
     execution = this.store.commandExecution(executionId);
@@ -1687,14 +1710,20 @@ export class DirectControlPlane {
         ? "side_effect_uncertain"
         : this.classifyExecutionFailure(failure)
       : null;
+    const settlementFailureEvidence = failure ? {
+      code: failure.code ?? null,
+      message: clippedText(failure.message, 2_000),
+      ...(failure.runId ? { runId: failure.runId } : {}),
+      ...(failure.dirtyWorkspace !== undefined
+        ? { dirtyWorkspace: Boolean(failure.dirtyWorkspace) }
+        : {}),
+      ...(failure.resumable !== undefined ? { resumable: Boolean(failure.resumable) } : {}),
+    } : null;
     const settled = this.store.settleExecution({
       executionId,
       state: desiredState,
       failureClass,
-      failure: failure ? {
-        code: failure.code ?? null,
-        message: clippedText(failure.message, 2_000),
-      } : null,
+      failure: settlementFailureEvidence,
       result: result ? {
         sessionId: result.session.id,
         runId: result.run.id,
@@ -2618,7 +2647,7 @@ export class DirectControlPlane {
       const conversationRuntimeEvent = url.pathname.match(/^\/api\/orchestration\/turns\/([^/]+)\/events$/);
       if (request.method === "POST" && conversationRuntimeEvent) {
         const body = await readBody(request);
-        const event = sanitizePiConversationEvent(body.event);
+        const event = projectPiConversationEvent(body.event);
         if (!event) {
           return json(response, 202, { retained: false, reason: "event_not_projected" });
         }
@@ -3151,6 +3180,25 @@ export class DirectControlPlane {
           idempotencyKey: request.headers["idempotency-key"],
         });
         result.task = { ...result.task, activity: this.store.taskAudit(taskLifecycle[1]) };
+        return json(response, result.replayed ? 200 : 201, result);
+      }
+
+      const taskRecoveryRevision = url.pathname.match(/^\/api\/tasks\/([^/]+)\/recovery-revision$/);
+      if (request.method === "POST" && taskRecoveryRevision) {
+        this.assertLocalOwnerProfile();
+        const body = await readBody(request);
+        const result = await this.adoptTaskRecoveryRevision({
+          taskId: taskRecoveryRevision[1],
+          executionId: body.executionId,
+          revision: body.revision,
+          expectedVersion: body.expectedVersion,
+          reason: body.reason,
+          idempotencyKey: request.headers["idempotency-key"],
+        });
+        result.task = {
+          ...result.task,
+          activity: this.store.taskAudit(taskRecoveryRevision[1]),
+        };
         return json(response, result.replayed ? 200 : 201, result);
       }
 

@@ -15,8 +15,8 @@ evidence, and retained history.
    and opt-in live checks.
 
 For delivery status, use the [roadmap](product/ROADMAP.md). The
-[Phase 2 closure plan](product/PHASE2-CLOSURE.md) owns the remaining P2-4 live
-gates and the entry criteria for sustained dogfood. The more detailed
+[Phase 2 closure plan](product/PHASE2-CLOSURE.md) records the completed P2-4
+gates and owns the active sustained-dogfood criteria. The more detailed
 [Phase 2 plan](product/PHASE2-PLAN.md) is the implementation record.
 
 ## Current product and architecture
@@ -58,22 +58,23 @@ Phase 2:
 - [Host and provider capacity calibration](features/capacity-calibration/PRODUCT.md)
 - [Continuity export and isolated restore](features/continuity-export/PRODUCT.md)
 
-P2-1, P2-2, P2-3, and P2-5 are complete. P2-4 has implemented catalog and
-measurement tooling plus an initial serialized calibration; its remaining
-live provider, long-turn, publication, cleanup, and storage-policy gates are
-not complete.
+P2-1 through P2-5 are complete. P2-4L plus live provider recovery,
+publication, cleanup, and storage-pressure acceptance closed on 2026-07-22.
+Phase 2D is the active sustained-dogfood gate.
 
 ## Adoption records
 
 - [Phase 1 dogfood record](product/DOGFOOD-PLAN.md) — completed historical
   acceptance for supervised local use.
+- [Denver DSA website dogfood results](features/denver-dsa-dogfood/RESULTS.md)
+  — completed real-project experiment, lessons, and the P2-4L hardening scope.
 - [Phase 2 closure and adoption plan](product/PHASE2-CLOSURE.md) — current
   P2-4, Phase 2D, and Phase 2U sequence.
 - [UI friction schema](product/UI.md#phase-2d-friction-evidence) — evidence to
   capture during sustained dogfood.
 
-Pink Guy is ready for supervised local work. It is not yet the recommended
-full-time replacement for a direct coding client, and it must not be exposed
+Pink Guy is ready for sustained supervised dogfood. It is not yet the
+recommended full-time replacement for a direct coding client, and it must not be exposed
 remotely before the Phase 3 authentication profile exists.
 
 ## Research and retained history

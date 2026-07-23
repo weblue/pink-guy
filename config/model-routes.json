@@ -6,5 +6,12 @@
     "thinking": "medium",
     "billing_class": "subscription"
   },
-  "phases": {}
+  "phases": {
+    "orchestrator": {
+      "provider": "openai-codex",
+      "model": "gpt-5.6-sol",
+      "thinking": "medium",
+      "billing_class": "subscription"
+    }
+  }
 }

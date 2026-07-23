@@ -1,8 +1,8 @@
 # Pink Guy v2 product specification
 
-Status: Current product contract; Phase 1 accepted and Phase 2 active
+Status: Current product contract; Phase 2 complete and Phase 2D active
 
-Last updated: 2026-07-19
+Last updated: 2026-07-22
 
 This is the target product contract. It includes later-phase behavior; use
 [`CURRENT-STATE.md`](CURRENT-STATE.md) for implemented scope and
@@ -388,7 +388,8 @@ release boundary.
 independent review. After required validation, approval, and resolution of
 applicable human-decision gates, the orchestrator can mark the task Done and
 record a merge request without human acceptance. Merge/rebase/push execution
-is Phase 2.
+is governed by project policy, remains platform-owned, and defaults to
+prepare-only until the owner explicitly enables a publication mode.
 
 14.5 The owner can audit the result from the task description, diff, tests, reviewer report, and smoke-test instructions without reading the conversation.
 

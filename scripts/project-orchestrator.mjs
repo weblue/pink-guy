@@ -125,18 +125,41 @@ try {
 process.stdout.write("Conversation polling: persistent Pi RPC (same project daemon)\n");
 
 let stopping = false;
-const heartbeat = setInterval(async () => {
+let heartbeatInFlight = false;
+let lastHeartbeatSuccess = Date.now();
+const heartbeatIntervalMs = Math.max(5, Math.floor(leaseSeconds / 3)) * 1000;
+
+async function sendHeartbeat() {
+  if (stopping || heartbeatInFlight) return;
+  heartbeatInFlight = true;
   try {
     const response = await fetch(`${api}/api/orchestrators/heartbeat`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({ leaseSeconds }),
+      signal: AbortSignal.timeout(Math.min(5_000, heartbeatIntervalMs)),
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+      if ([401, 403, 409].includes(response.status)) {
+        process.stderr.write(`Project orchestrator lease is no longer active (HTTP ${response.status}); exiting for supervised restart.\n`);
+        void stop("LEASE_LOST", 1);
+        return;
+      }
+      throw new Error(`HTTP ${response.status}`);
+    }
+    lastHeartbeatSuccess = Date.now();
   } catch (error) {
     process.stderr.write(`orchestrator heartbeat failed: ${error.message}\n`);
+    if (Date.now() - lastHeartbeatSuccess >= leaseSeconds * 1000) {
+      process.stderr.write("Project orchestrator could not renew within its lease window; exiting for supervised restart.\n");
+      void stop("HEARTBEAT_DEADLINE", 1);
+    }
+  } finally {
+    heartbeatInFlight = false;
   }
-}, Math.max(5, Math.floor(leaseSeconds / 3)) * 1000);
+}
+
+const heartbeat = setInterval(() => void sendHeartbeat(), heartbeatIntervalMs);
 
 async function acceptCommandExecution(command) {
   if (command.kind !== "start_task") throw new Error(`unsupported command kind: ${command.kind}`);
@@ -218,7 +241,7 @@ async function pollConversations() {
 void pollCommands();
 void pollConversations();
 
-async function stop(signal) {
+async function stop(signal, exitCode = 0) {
   if (stopping) return;
   stopping = true;
   clearInterval(heartbeat);
@@ -228,7 +251,7 @@ async function stop(signal) {
     headers: { authorization: `Bearer ${token}` },
   }).catch(() => undefined);
   process.stdout.write(`Released project orchestrator lease after ${signal}.\n`);
-  process.exit(0);
+  process.exit(exitCode);
 }
-process.on("SIGINT", () => void stop("SIGINT"));
-process.on("SIGTERM", () => void stop("SIGTERM"));
+process.on("SIGINT", () => void stop("SIGINT", 0));
+process.on("SIGTERM", () => void stop("SIGTERM", 0));

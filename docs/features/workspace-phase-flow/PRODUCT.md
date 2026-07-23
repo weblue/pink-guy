@@ -53,7 +53,8 @@ by hand.
 7. When validation passed, review approved, dependencies are complete, and
    decision gates are resolved, the project orchestrator completes the task.
    The owner has the same explicit completion control as a recovery path.
-   Completion records a merge request; Phase 2 will own actual integration.
+   Completion records a merge request. The platform can now prepare or execute
+   integration under the project's governed Git publication policy.
 
 ## Inspector behavior
 

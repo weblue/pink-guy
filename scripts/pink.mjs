@@ -680,6 +680,9 @@ async function submitAndFollow(client, detail, message, options) {
       timeoutMs: options.timeoutMs,
     });
     writeJson({ turn: followed.turn, orchestratorOnline: true });
+    if (["failed", "reconciliation_required"].includes(followed.turn.state)) {
+      process.exitCode = 1;
+    }
     return followed.turn;
   }
   process.stdout.write(`owner [${submitted.turn.sequence}]> ${message}\n`);

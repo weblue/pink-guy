@@ -337,6 +337,170 @@ assert(
   "shared recovery attention projection omitted execution evidence",
 );
 
+const replacement = authority.store.queueExecutionReplacement({
+  executionId: acceptedExecution.id,
+  action: "retry",
+  expectedVersion: authority.store.commandExecution(acceptedExecution.id).version,
+  reason: "prove a successful replacement supersedes actionable attention",
+  idempotencyKey: "retry-superseded-attention",
+});
+const replacementCommand = authority.store.claimOrchestratorCommand(registration.token);
+assert(replacementCommand.id === replacement.command.id, "replacement command was not claimable");
+const replacementExecution = authority.store.acceptCommandExecution({
+  token: registration.token,
+  commandId: replacementCommand.id,
+  idempotencyKey: `execute-command:${replacementCommand.id}`,
+}).execution;
+authority.store.fenceExecution({
+  executionId: replacementExecution.id,
+  expectedVersion: replacementExecution.version,
+  reason: "replacement phase outcome recorded",
+});
+authority.store.settleExecution({
+  executionId: replacementExecution.id,
+  state: "succeeded",
+  result: { probe: "replacement succeeded" },
+});
+const reconciledAttention = await request("/api/recovery/attention");
+assert(
+  !reconciledAttention.value.attention.some((item) => item.execution.id === acceptedExecution.id),
+  "successful replacement left the superseded failure in actionable attention",
+);
+
+const cancelledTask = authority.store.createOwnerTask({
+  projectId: "recovery-project",
+  title: "Reset a reconciled cancelled execution",
+  acceptanceCriteria: ["A cancelled execution can return its task to Ready."],
+  revision: authoritativeRevision,
+  idempotencyKey: "cancelled-reset-task-create",
+}).task;
+const cancelledScheduled = authority.store.scheduleOwnerTaskRun({
+  taskId: cancelledTask.id,
+  phase: "implementation",
+  idempotencyKey: "cancelled-reset-schedule",
+  modelRoute: {
+    provider: "boss-man-phase0",
+    model: "complete",
+    thinking: "medium",
+    billingClass: "local",
+  },
+});
+const cancelledCommand = authority.store.claimOrchestratorCommand(registration.token);
+assert(
+  cancelledCommand.id === cancelledScheduled.command.id,
+  "cancelled-reset fixture command was not claimed",
+);
+const cancelledExecution = authority.store.acceptCommandExecution({
+  token: registration.token,
+  commandId: cancelledCommand.id,
+  idempotencyKey: `execute-command:${cancelledCommand.id}`,
+}).execution;
+authority.store.fenceExecution({
+  executionId: cancelledExecution.id,
+  expectedVersion: cancelledExecution.version,
+  reason: "provider transport failed after stream start",
+  failureClass: "side_effect_uncertain",
+});
+authority.store.settleExecution({
+  executionId: cancelledExecution.id,
+  state: "reconciliation_required",
+  failureClass: "side_effect_uncertain",
+  failure: { trigger: "provider_transport_failure" },
+});
+const uncertainExecution = authority.store.commandExecution(cancelledExecution.id);
+authority.store.recordExecutionAction({
+  executionId: uncertainExecution.id,
+  action: "cancel",
+  expectedVersion: uncertainExecution.version,
+  reason: "verified no repository mutation",
+  idempotencyKey: "cancel-uncertain-reset-execution",
+  result: { requestedState: "cancelled" },
+});
+const reconciledReset = authority.store.reconcileOrchestratorCommand({
+  commandId: cancelledCommand.id,
+  action: "reset",
+  idempotencyKey: "reset-cancelled-execution-command",
+});
+assert(
+  reconciledReset.task.status === "ready"
+    && reconciledReset.task.assigned_worker === null
+    && authority.store.commandExecution(cancelledExecution.id).state === "cancelled",
+  "a reconciled cancelled execution did not clear stale task ownership",
+);
+
+const adoptionTask = authority.store.createOwnerTask({
+  projectId: "recovery-project",
+  title: "Adopt a clean retained recovery revision",
+  acceptanceCriteria: ["A proven retained workspace revision becomes authoritative."],
+  revision: authoritativeRevision,
+  idempotencyKey: "recovery-adoption-task-create",
+}).task;
+const adoptionScheduled = authority.store.scheduleOwnerTaskRun({
+  taskId: adoptionTask.id,
+  phase: "implementation",
+  idempotencyKey: "recovery-adoption-schedule",
+  modelRoute: {
+    provider: "boss-man-phase0",
+    model: "complete",
+    thinking: "medium",
+    billingClass: "local",
+  },
+});
+const adoptionCommand = authority.store.claimOrchestratorCommand(registration.token);
+assert(adoptionCommand.id === adoptionScheduled.command.id, "adoption fixture command was not claimed");
+const adoptionExecution = authority.store.acceptCommandExecution({
+  token: registration.token,
+  commandId: adoptionCommand.id,
+  idempotencyKey: `execute-command:${adoptionCommand.id}`,
+}).execution;
+authority.store.recordWorkspace({
+  id: "recovery-adoption-workspace",
+  taskId: adoptionTask.id,
+  runId: "recovery-adoption-run",
+  repositoryPath: fixture,
+  workspacePath: fixture,
+  branch: "pink-guy/recovery-adoption",
+  baseRevision: authoritativeRevision,
+  gitMarkerSha256: "recovery-adoption-marker",
+});
+authority.store.bindExecutionResources({
+  executionId: adoptionExecution.id,
+  generation: adoptionExecution.generation,
+  runId: "recovery-adoption-run",
+  sessionId: "recovery-adoption-session",
+  workspaceId: "recovery-adoption-workspace",
+});
+const adoptionBound = authority.store.commandExecution(adoptionExecution.id);
+authority.store.fenceExecution({
+  executionId: adoptionBound.id,
+  expectedVersion: adoptionBound.version,
+  reason: "provider failed after a host-preserved checkpoint",
+  failureClass: "phase_protocol_violation",
+});
+authority.store.settleExecution({
+  executionId: adoptionBound.id,
+  state: "failed",
+  failureClass: "phase_protocol_violation",
+  failure: { trigger: "oversized_tool_result" },
+});
+const adoptedRevision = "5555555555555555555555555555555555555555";
+const adoptedRecovery = authority.store.adoptTaskRecoveryRevision({
+  taskId: adoptionTask.id,
+  executionId: adoptionBound.id,
+  workspaceId: "recovery-adoption-workspace",
+  revision: adoptedRevision,
+  expectedVersion: authority.store.getTask(adoptionTask.id).version,
+  reason: "verified retained workspace checkpoint",
+  idempotencyKey: "adopt-retained-recovery-revision",
+});
+assert(
+  adoptedRecovery.task.status === "blocked"
+    && adoptedRecovery.task.assigned_worker
+    && adoptedRecovery.task.revision === adoptedRevision
+    && adoptedRecovery.task.validation_passed === false,
+  "recovery revision adoption did not preserve blocked ownership and require fresh gates",
+);
+
 releaseLaunch();
 await authority.close();
 
@@ -421,6 +585,8 @@ process.stdout.write(`${JSON.stringify({
   candidate_accept_requires_fresh_gates: true,
   candidate_rejection_retains_evidence: true,
   timeout_checkpoint_recoverable: true,
+  cancelled_execution_task_reset: true,
+  retained_recovery_revision_adoption: true,
   owner_action_receipt_atomic: true,
   restart_automatic_replay: false,
   attention_projection: true,

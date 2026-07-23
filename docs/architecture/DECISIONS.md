@@ -2,7 +2,7 @@
 
 Status: Active decision log
 
-Last updated: 2026-07-19
+Last updated: 2026-07-22
 
 This file separates owner direction, accepted working decisions, technical hypotheses that require spikes, and the remaining implementation questions.
 
@@ -109,9 +109,10 @@ Agents may produce alternatives, prototypes, migration plans, threat models, and
 
 ## Remaining decision gates
 
-- P2-4 measured orchestrator/container/provider concurrency, OAuth lane size,
-  local-model outage route, storage thresholds, first remote Git publication
-  method, and confirmation of D-057/D-058 under the repeated live benchmark.
+- A useful local-model outage route if the owner configures one in Pi. P2-4
+  otherwise closed with one OAuth-backed task at a time, three measured idle
+  orchestrators, 10/15 GiB storage thresholds, explicit no-fallback recovery,
+  and normal Git push plus `gh` for the first Pink-owned PR.
 - Phase 2U visual hierarchy and interaction choices after the Phase 2D
   evidence log and owner interview identify concrete scrolling, navigation,
   comprehension, and evidence-density failures.

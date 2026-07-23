@@ -1,7 +1,6 @@
 # Pink Guy local development runbook
 
-Status: Current local cockpit and shared terminal client; P2-4 live closure in
-progress
+Status: Current Phase 2D local cockpit and shared terminal client
 
 The current application can be served locally for multi-project observability
 and durable project-orchestrator command delivery. The local-smoke profile
@@ -110,8 +109,9 @@ The owner-managed Pi login file is copied into private runtime-owned
 configuration; Pi never writes the canonical source. Do not put credentials
 in topic/task text or pass them through the browser. OAuth-backed task-agent
 runs are serialized by the configured task credential profile. Orchestrator
-processes use private copies of the same owner-managed source; provider-turn
-concurrency remains a measured Phase 2 policy question.
+processes use private copies of the same owner-managed source. The calibrated
+dogfood policy keeps OAuth-backed provider execution serialized; widening it
+requires new measured evidence rather than an operator-side override.
 
 To process pre-project topics instead, run the system-intake orchestrator
 while no other OAuth-backed provider run is active:
@@ -323,17 +323,17 @@ Session artifact deletion is separate from runtime cleanup and requires a
 fresh preview, explicit execution flag, exact session ID, and reason. It
 retains a deletion manifest, receipt, and session tombstone.
 
-Optional storage thresholds are environment configuration:
+The selected target-Mac dogfood thresholds are environment configuration:
 
 ```sh
-PINK_GUY_STORAGE_WARN_BYTES=107374182400 \
-PINK_GUY_STORAGE_HARD_BYTES=118111600640 \
+PINK_GUY_STORAGE_WARN_BYTES=10737418240 \
+PINK_GUY_STORAGE_HARD_BYTES=16106127360 \
 npm start -- --repo "$PWD"
 ```
 
-These values are examples, not current recommendations. P2-4 will select
-limits from measured disk growth. A configured hard threshold pauses automatic
-dispatch and never deletes evidence.
+These are 10 GiB warning and 15 GiB hard limits. Hard pressure pauses new
+dispatch; it does not delete sessions, artifacts, or workspaces. Change them
+only as an explicit operator policy for a host with different capacity.
 
 ## Export and restore continuity
 

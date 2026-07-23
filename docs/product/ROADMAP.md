@@ -115,7 +115,7 @@ direct coding client remains the emergency fallback.
 
 ## Phase 2 — autonomy, recovery, and portability
 
-Status: Active — P2-1 through P2-3 and P2-5 complete; P2-4 live closure remains
+Status: Phase 2 complete — Phase 2D sustained dogfood active
 
 Purpose: make unattended local operation dependable before adding a public edge.
 
@@ -134,6 +134,16 @@ push, and retains conflicts or interrupted publication for attention. Holds,
 safe cleanup, deletion manifests/tombstones, storage inventory, and
 storage-pressure dispatch blocking are available through the cockpit and
 `pink` client.
+
+The completed Denver DSA website experiment is retained as the first
+substantial real-project Phase 2 result. Its lessons define P2-4L: current-run
+phase evidence, stale ownership/attention reconciliation, independent lease
+heartbeats, bounded Git inspection, and generated-tree-safe state inventory.
+See
+[`../features/denver-dsa-dogfood/RESULTS.md`](../features/denver-dsa-dogfood/RESULTS.md).
+P2-4L and the follow-on model/provider, cleanup, storage-pressure, and
+Pink-owned PR drills passed on 2026-07-22. P2-4 keeps one OAuth-backed task at
+a time and selects 10/15 GiB warning/hard retained-state thresholds.
 
 Scope:
 
@@ -158,7 +168,7 @@ itself authorize the full switch from Codex.
 
 ## Phase 2D — sustained dogfood and long-turn parity
 
-Status: Planned after P2-4 closes
+Status: Active
 
 Purpose: prove the completed local platform through meaningful work before
 making it the default coding environment.

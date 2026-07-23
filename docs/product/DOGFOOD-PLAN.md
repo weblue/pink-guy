@@ -118,9 +118,9 @@ After applying the bounded recovery fixes, the same live task completed:
 
 The source revision is retained by its task branch, recorded checkpoint, and
 artifact provenance. Completed run worktrees are disposable and may be removed
-after settlement; automatic worktree retirement remains Phase 2. Phase 1
-records the merge request but does not yet push or merge it, so external
-integration remains an owner action until Phase 2 policy is implemented.
+after settlement. At Phase 1 acceptance, automatic retirement and external
+integration were intentionally deferred. Phase 2 subsequently implemented
+safe settled cleanup and policy-governed merge/rebase/push/PR.
 
 ## New-project scenario result
 
@@ -253,5 +253,6 @@ recovery fallback until Phase 2 closes.
 - External work enters through immutable generic source snapshots with no
   synchronization contract.
 - Loopback is the only Phase 1 listener.
-- Completion and merge-request creation may be automatic after independent
-  review; merge/rebase/push remains Phase 2.
+- At this Phase 1 boundary, completion and merge-request creation could be
+  automatic after independent review while merge/rebase/push remained
+  deferred. Phase 2 later closed that boundary under project policy.

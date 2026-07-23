@@ -1,8 +1,8 @@
 # Pink Guy v2 current state
 
-Status: Phase 2 active — P2-5 complete; P2-4 live closure remains
+Status: Phase 2 complete — Phase 2D sustained dogfood is next
 
-Last updated: 2026-07-20
+Last updated: 2026-07-22
 
 ## Current position
 
@@ -110,7 +110,7 @@ under `scripts/`, and current documentation is indexed from `docs/`. Completed
 feasibility plans and evidence remain available as history without defining
 the runtime structure.
 
-P2-4 now has clean target-host evidence for three simultaneous idle project
+P2-4 has clean target-host evidence for three simultaneous idle project
 orchestrators and serialized maintenance work across Pink Guy and
 inspector-gadget. Host/Docker capacity remained healthy and only one task
 container ran at a time. The workload also found two pre-dogfood reliability
@@ -119,6 +119,15 @@ internal Pi tool-loop snapshots copied growing native sessions 188 times. The
 owner approved D-057/D-058. Configurable progress-aware supervision, bounded
 final settlement, proven timeout-checkpoint recovery, and full custody at
 owner/mandatory boundaries now pass targeted and core regressions.
+
+The bounded P2-4L follow-up is also complete. Phase outcomes require evidence
+from the current run; missing implementation evidence becomes visible
+`phase_incomplete` attention with dirty/resumable detail. Successful
+replacement runs collapse superseded attention without deleting history.
+Project heartbeats remain independent of long acceptance and reject an expired
+lease by fail-stopping. Git diff projection is bounded and binary-safe, and
+inventory classifies generated dependency symlinks while rejecting unexpected
+ones. All 20 deterministic core probes pass.
 
 P2-5 now has an implemented `pink-guy-continuity-v1` format and operator
 command. Export establishes a short central dispatch/claim gate, takes a
@@ -132,14 +141,31 @@ rehearsal also passes: 3 projects, 3,603 files, preserved audit/count
 evidence, zero source-root path findings, and one retained task queued on the
 isolated API without a provider request or container.
 
+The first substantial website dogfood experiment is complete. Pink Guy
+adopted the host-preserved Denver DSA revision through its guarded recovery
+contract, automatically continued implementation to clean independent test
+and independent review, and integrated the approved revision into canonical
+`main` as `2feb884`. A browser smoke test then found a responsive-navigation
+gap; Pink Guy created a focused follow-up, added deterministic mobile/1028px
+coverage, repeated independent test/review, and integrated the repair as final
+local `main` revision `b75c464`. After the owner enabled push in project policy,
+that final canonical revision was published to `origin/main`. Its lifecycle
+findings are now closed. A separate bounded maintenance fixture completed
+automatic implementation, fresh test, and independent review at `1610973`.
+Pink Guy's adapter then simulated integration, pushed a normal branch, and
+opened [Denver DSA PR #1](https://github.com/weblue/denver-dsa-test/pull/1)
+with a durable publication receipt; GitHub reports it mergeable.
+The consolidated outcome and lessons are in
+[`../features/denver-dsa-dogfood/RESULTS.md`](../features/denver-dsa-dogfood/RESULTS.md).
+
 ## Capability map
 
 | Area | Current capability | Remaining boundary |
 |---|---|---|
-| Authority and tasks | One central Node API owns the SQLite task projection and every accepted task execution. Short idempotent acceptance, central asynchronous settlement, execution generations, explicit stop/pause/resume/retry/cancel, and shared recovery/Git attention remove daemon transport from completion authority. Model-less and live observer-loss/late-checkpoint acceptance pass. | Capacity/provider calibration and sustained dogfood remain. |
+| Authority and tasks | One central Node API owns the SQLite task projection and every accepted task execution. Short idempotent acceptance, central asynchronous settlement, execution generations, explicit stop/pause/resume/retry/cancel, current-run phase evidence, and shared recovery/Git attention remove daemon transport from completion authority. Model-less and live observer-loss/late-checkpoint acceptance pass. | Sustained dogfood remains. |
 | Pi sessions | Upstream Pi runs in RPC mode inside recorded task containers and as a host-managed persistent orchestrator session. Native JSONL lifecycle, model-less resume/import, child provenance, task and conversation custody, custody-backed model switching, blocking orchestrator pre-compaction export, safe intake transfer, and C0-04 bundle-child consumption pass. Runs pin provider/model/thinking and prompt key/version/checksum; deterministic transfer and route-restart coverage proves no transcript resend. | True in-flight RPC reattachment and production session controls remain. |
-| Containers | The daemon creates, inspects, stops, and removes pinned Linux/ARM64 containers with a non-root user, read-only root, resource limits, minimal mounts, and no Docker socket. Restart reconciliation proves recorded identity/liveness; settled resources have previewed, held, audited, idempotent cleanup. | Measured capacity and explicit production egress policy remain. Containers are damage containment, not a malicious-code boundary. |
-| Git and workspaces | Every phase worktree starts from the task revision. Host checkpoints carry provenance and invalidate stale validation/review. Project policy defaults to prepare-only and supports merge/squash/rebase, guarded local integration, optional normal push/PR, deterministic conflicts, compare-and-swap publication, and no force push. | Live credentialed remote push/PR acceptance and dogfood policy calibration remain. |
+| Containers | The daemon creates, inspects, stops, and removes pinned Linux/ARM64 containers with a non-root user, read-only root, resource limits, minimal mounts, and no Docker socket. Restart reconciliation proves recorded identity/liveness; settled resources have previewed, held, audited, idempotent live cleanup. | Explicit production egress policy remains. Containers are damage containment, not a malicious-code boundary. |
+| Git and workspaces | Every phase worktree starts from the task revision. Host checkpoints carry provenance and invalidate stale validation/review. Project policy defaults to prepare-only and supports merge/squash/rebase, guarded local integration, optional normal push/PR, deterministic conflicts, compare-and-swap publication, and no force push. A credentialed Pink-owned PR publication passes. | Wider project policy remains a dogfood choice; prepare-only stays the default. |
 | Credentials | A human-owned auth file is materialized read-only per run, copied into private writable Pi state, checksum-verified, concurrency-limited to one for OAuth, and both run copies are deleted on a normal stop. Synthetic canaries and one owner-authorized OpenAI Codex turn pass without changing the canonical source. Reconciliation deletes known per-run copies. | Parallel OAuth-backed execution remains disabled until a simpler independently verifiable refresh strategy is proven. API-key and local-model routes may use separate explicit limits. |
 | RTK and command evidence | RTK 0.42.3 is pinned with telemetry disabled. Supervisor-managed commands and an actual Pi Bash tool call execute once and produce filtered output, redacted raw output, indexed artifacts, and receipts. | Production quotas, savings presentation, and operator bypass UX remain. |
 | Context custody | Task bundles retain native Pi bytes, branch, task/audit/context, decisions, memory/retrieval, artifacts, Git, manifest, and checksums. Conversation bundles retain topic, turns/events/runs, tasks/origins, prompts, and native bytes. Retention holds, explicit session deletion manifests/tombstones, storage inventory, and the checksummed model-less continuity export/verify/isolated-restore path pass deterministic and live acceptance. | Later backup destinations, encryption, and rotation remain needs-driven rather than Phase 2 work. |
@@ -156,15 +182,15 @@ full-time replacement for a direct Codex or Pi coding session.
 
 | Checkpoint | Required capability | Recommended use |
 |---|---|---|
-| Phase 1 (current) | Complete implementation → fixed checkpoint → test → review flow across multiple real repositories, with deterministic initial dispatch, context custody, and inspectable evidence | Prefer Pink Guy for supervised local development; retain a direct client as recovery fallback |
-| Phase 2 exit | Dependable recovery/Git/cleanup, measured host/provider limits, failure drills, and an isolated-root continuity restore | Enter sustained long-turn dogfood |
+| Phase 1 | Complete implementation → fixed checkpoint → test → review flow across multiple real repositories, with deterministic initial dispatch, context custody, and inspectable evidence | Prefer Pink Guy for supervised local development; retain a direct client as recovery fallback |
+| Phase 2 exit (current) | Dependable recovery/Git/cleanup, measured host/provider limits, failure drills, and an isolated-root continuity restore | Enter sustained long-turn dogfood |
 | Phase 2D exit | Multiple real repositories and long conversations complete without routine direct-client repair; journey/friction evidence is retained | Enter the owner UX interview and mockup review |
 | Phase 2U exit | Owner-approved cockpit mockup and high-frequency usability fixes, including stable scrolling and clearer information hierarchy | Prefer Pink Guy as the full-time local coding environment |
 | Phase 3 exit | Authenticated SWAG deployment with proxy, session/key, streaming, reconnect, rate-limit, and recovery controls | Use the intended remote-first experience |
 
-Phase 1 completion is the earliest reasonable point to prefer Pink Guy for
-ordinary supervised work. Phase 2 closes the remaining implementation and
-continuity gates. Phase 2D proves Codex-like long turns and recovery through
+Phase 1 completion was the earliest reasonable point to prefer Pink Guy for
+ordinary supervised work. Phase 2 has closed the remaining implementation and
+continuity gates. Phase 2D now proves Codex-like long turns and recovery through
 sustained real work; Phase 2U then turns that evidence into an owner-reviewed
 usability baseline before the full-time switch.
 
@@ -224,19 +250,15 @@ The active delivery map is
 sequence is [`PHASE2-CLOSURE.md`](PHASE2-CLOSURE.md). Phase 1 dogfood evidence
 remains in [`DOGFOOD-PLAN.md`](DOGFOOD-PLAN.md).
 
-1. **Close P2-4.** Repeat the serialized two-project benchmark against
-   D-057/D-058, exercise safe model switching and provider failure, perform one
-   explicitly authorized normal push or pull-request publication, verify
-   cleanup against a settled disposable Docker task, and select storage limits
-   from corrected growth.
-2. **Enter Phase 2D dogfood after P2-4 closes.** Exercise long conversations
+1. **Enter Phase 2D dogfood.** Exercise long conversations
    and at least ten
    tasks across multiple repositories while logging every direct-client exit
-   and recurring UX friction.
-3. **Run Phase 2U UX review.** Interview the owner, mock up changes from the
+   and recurring UX friction. Treat the first sustained 10+ minute workload as
+   confirmation of the accepted progress-aware supervision policy.
+2. **Run Phase 2U UX review.** Interview the owner, mock up changes from the
    existing cockpit, and fix accepted high-frequency scrolling,
    comprehension, and navigation problems.
-4. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
+3. **Phase 3 — authenticated remote access.** Add the SWAG path and a locally
    configured password verifier or API-key hash after the local product is
    mature.
 
@@ -286,8 +308,9 @@ Still open, but assigned to explicit gates rather than blocking current work:
 - **Optional workspace shell:** D-043 rejects a browser PTY as a Phase 1
   requirement. Add a durable interactive shell only if dogfooding exposes work
   that cannot be performed through Pi RPC, cockpit controls, or tmux/SSH.
-- **Git rollout:** which projects may move beyond prepare-only, and whether the
-  first live remote publication uses SSH Git or `gh`.
+- **Git rollout:** which additional projects may move beyond prepare-only. The
+  first live Pink-owned remote publication used normal Git push plus `gh` and
+  opened Denver DSA PR #1.
 - **Network policy:** which provider/control-plane destinations are allowed and how egress is enforced and displayed.
 - **Continuity scope:** same-host isolated restore is the P2-5 minimum; cloud
   destination, encryption, scheduled retention, and a second physical Mac
@@ -302,6 +325,7 @@ Still open, but assigned to explicit gates rather than blocking current work:
 - **Project orchestration:** durable model-less initial dispatch and successful
   phase continuation are implemented with explicit policy, bounded priority,
   stable ordering, lease checks, and conservative one-command global/project
-  capacity. Wider concurrency, richer recovery diagnosis, and host-pressure
-  limits are Phase 2 measurement work.
+  capacity. The OAuth task lane remains one; wider concurrency is optional
+  dogfood research rather than a Phase 2 blocker. Storage warning/hard limits
+  are selected at 10/15 GiB.
 - **Remote credential UX:** Phase 3 must choose password-session mode, API-key mode, or both. Browser `localStorage` persistence remains an explicit convenience/security decision, not the default.

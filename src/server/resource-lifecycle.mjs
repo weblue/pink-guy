@@ -38,15 +38,29 @@ export function assertStatePath(stateRoot, path) {
   return target;
 }
 
-async function walk(root, path, files) {
+const GENERATED_DEPENDENCY_DIRECTORIES = new Set(["node_modules", ".pnpm", ".yarn"]);
+
+function isGeneratedDependencyPath(root, path) {
+  return relative(root, path).split(sep).some((segment) =>
+    GENERATED_DEPENDENCY_DIRECTORIES.has(segment)
+  );
+}
+
+async function walk(root, path, files, generatedSymlinks) {
   const info = await lstat(path);
   if (info.isSymbolicLink()) {
+    if (isGeneratedDependencyPath(root, path)) {
+      generatedSymlinks.push(relative(root, path));
+      return;
+    }
     throw Object.assign(new Error(`state inventory refuses symbolic link: ${path}`), {
       code: "unsafe_symlink",
     });
   }
   if (info.isDirectory()) {
-    for (const entry of await readdir(path)) await walk(root, join(path, entry), files);
+    for (const entry of await readdir(path)) {
+      await walk(root, join(path, entry), files, generatedSymlinks);
+    }
     return;
   }
   if (!info.isFile()) return;
@@ -64,7 +78,8 @@ export async function inventoryStateRoot({
 }) {
   const root = resolve(stateRoot);
   const files = [];
-  if (await exists(root)) await walk(root, root, files);
+  const generatedSymlinks = [];
+  if (await exists(root)) await walk(root, root, files, generatedSymlinks);
   const categoryNames = new Map([
     ["repositories", "repositories"],
     ["workspaces", "workspaces"],
@@ -96,6 +111,8 @@ export async function inventoryStateRoot({
     },
     warning: Boolean(warning && totalBytes >= warning),
     hardBlocked: Boolean(hard && totalBytes >= hard),
+    skippedGeneratedSymlinkCount: generatedSymlinks.length,
+    skippedGeneratedSymlinks: generatedSymlinks.slice(0, 100),
     generatedAt: new Date().toISOString(),
   };
 }
