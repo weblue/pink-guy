@@ -61,6 +61,7 @@ if (!stateExplicit) {
 api = api.replace(/\/$/, "");
 
 const sleep = (duration) => new Promise((resolvePromise) => setTimeout(resolvePromise, duration));
+const maxAcceptanceAttempts = 8;
 
 async function responseJson(response) {
   const text = await response.text();
@@ -199,6 +200,7 @@ async function pollCommands() {
       if (!response.ok) throw new Error(`${body?.error ?? `HTTP ${response.status}`}: ${body?.message ?? "claim failed"}`);
       const command = body.command;
       process.stdout.write(`Claimed command ${command.id}: ${command.kind} ${command.task_id} (${command.phase})\n`);
+      let acceptanceAttempts = 0;
       while (!stopping) {
         try {
           const accepted = await acceptCommandExecution(command);
@@ -208,11 +210,22 @@ async function pollCommands() {
           );
           break;
         } catch (error) {
+          acceptanceAttempts += 1;
           process.stderr.write(
-            `Command ${command.id} acceptance uncertain: ${String(error.message ?? error).slice(0, 2048)}; `
+            `Command ${command.id} acceptance uncertain (attempt ${acceptanceAttempts}/${maxAcceptanceAttempts}): `
+            + `${String(error.message ?? error).slice(0, 2048)}; `
             + "the central API remains settlement authority and the same acceptance key will be retried.\n",
           );
-          await sleep(pollMs);
+          if (acceptanceAttempts >= maxAcceptanceAttempts) {
+            process.stderr.write(
+              `Command ${command.id} could not be accepted after ${acceptanceAttempts} attempts; `
+              + "releasing the lease so the central API can mark it reconciliation-required for owner recovery "
+              + "(D-037) instead of retrying indefinitely.\n",
+            );
+            void stop("COMMAND_ACCEPTANCE_FAILED", 1);
+            return;
+          }
+          await sleep(Math.min(pollMs * acceptanceAttempts, 15_000));
         }
       }
     } catch (error) {

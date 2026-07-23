@@ -122,14 +122,6 @@ The direct candidate runs one daemon-owned SQLite store, task API and minimal bo
 node ./tests/probes/probe-direct-foundation.mjs /absolute/path/to/disposable/task-repo
 ```
 
-## Run the task policy contract
-
-```sh
-node ./tests/probes/probe-task-policy.mjs
-```
-
-This retains the original in-memory policy baseline for comparison. The integrated direct-store proof is the next command.
-
 ## Run the integrated direct task-policy boundary
 
 ```sh

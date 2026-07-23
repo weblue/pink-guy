@@ -201,12 +201,11 @@ src/
   server/                          API, SQLite authority, runtime, Git, credentials, context
   ui/                              browser developer cockpit
   pi/                              Pi orchestration, custody, task, and RTK extensions
-  policy/                          isolated task-policy reference
 
 scripts/                           stable server and orchestrator entry points
 config/                            model routes, plain-text prompts, schemas, RTK, provider example
 infra/
-  container/                       pinned task-agent image and policy
+  container/                       pinned task-agent image
   edge/                            inert SWAG example and disposable edge test
 tests/
   run-core.mjs                     deterministic core regression entry point
@@ -220,7 +219,7 @@ docs/
   features/                        implemented feature contracts and results
   operations/                      local run and testing instructions
   research/                        provider, ecosystem, and memory assessments
-  history/phase0/                  completed plans, closure, and 21 evidence manifests
+  history/phase0/                  completed plans, closure, and 19 evidence manifests
 ```
 
 The repository holds small reviewed specifications, schemas, deterministic fixtures, executable probes, redacted configuration examples, and evidence manifests with SHA-256 references. It intentionally does not hold real credentials, SSH keys, provider responses, native user sessions, runtime databases, unredacted command logs, temporary worktrees, or container filesystems.

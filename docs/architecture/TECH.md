@@ -105,11 +105,13 @@ The supervisor creates one managed Pi process per active session/run inside a co
 
 A browser reconnect only resubscribes to control-plane events. It has no ownership of the underlying process.
 
-### Pink Guy Pi extension
+### Pink Guy Pi extensions
 
-The extension is deliberately small and installed into every managed Pi runtime. It should use Pi's documented extension APIs rather than patching Pi internals.
+Two deliberately small extensions are installed into managed Pi runtimes. Both
+use Pi's documented extension APIs rather than patching Pi internals. Tool names
+keep the `boss_` prefix as a D-050 compatibility identifier.
 
-It provides:
+The task-agent extension provides:
 
 - `boss_task_get`
 - `boss_task_claim`
@@ -117,19 +119,29 @@ It provides:
 - `boss_task_block`
 - `boss_task_create_child`
 - `boss_task_request_review`
+- `boss_task_propose_complete`
 - `boss_review_submit`
-- `boss_context_snapshot`
-- `boss_context_spawn_child`
-- `boss_memory_search`
-- `boss_memory_propose`
+- `boss_test_record_validation`
 - `boss_git_status`
 - `boss_git_diff`
 - `boss_git_checkpoint_request`
 - `boss_git_commit_request`
 
+The orchestrator extension provides the scoped task-graph tools
+`boss_orchestrator_context`, `_create_task`, `_update_task`, `_split_task`,
+`_add_dependency`, `_record_assumption`, `_require_decision`, `_archive_task`,
+`_restore_task`, `_release_task`, `_update_dispatch`, and `_schedule_task`.
+
 Every mutating call carries a short-lived run capability. The server derives project, task, agent role, and permitted transitions from that capability; it never trusts IDs or roles supplied by the model.
 
-The extension listens to `session_before_compact` and blocks automatic compaction until a pre-compaction snapshot succeeds. It also asks for snapshots at turn end, fork/handoff, model switch, provider failure, and manual export. Where a Pi hook cannot safely perform filesystem coordination, it sends a blocking request to the supervisor and waits for acknowledgement.
+Context snapshots are host-triggered rather than an agent tool. The orchestrator
+extension listens to `session_before_compact` and blocks automatic compaction
+until the supervisor confirms a pre-compaction custody export; the supervisor
+also snapshots at turn end, fork/handoff, model switch, provider failure, and
+manual export. Where a Pi hook cannot safely perform filesystem coordination, it
+sends a blocking request to the supervisor and waits for acknowledgement.
+Governed memory and FTS retrieval remain host-side and are not yet exposed as
+agent tools.
 
 ### RTK output layer
 

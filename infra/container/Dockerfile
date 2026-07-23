@@ -19,7 +19,7 @@ RUN curl --fail --location --silent --show-error \
     && rm /tmp/rtk.tar.gz
 
 RUN groupadd --gid 65532 bossman \
-    && useradd --uid 65532 --gid 65532 --no-create-home --home-dir /tmp/home --shell /usr/sbin/nologin bossman
+    && useradd --uid 65532 --gid 65532 --no-create-home --home-dir /home/bossman --shell /usr/sbin/nologin bossman
 
 WORKDIR /workspace
 USER 65532:65532
